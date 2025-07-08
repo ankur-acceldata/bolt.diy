@@ -50,7 +50,9 @@ const BETA_TABS = new Set<TabType>(['task-manager', 'service-status', 'update', 
 
 // Beta label component
 const BetaLabel = () => (
-  <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-purple-500/10 text-purple-500 font-medium">BETA</span>
+  <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent font-medium">
+    BETA
+  </span>
 );
 
 export const TabManagement = () => {
@@ -214,7 +216,7 @@ export const TabManagement = () => {
               >
                 {/* Status Badges */}
                 <div className="absolute top-1 right-1.5 flex gap-1">
-                  <span className="px-1.5 py-0.25 text-xs rounded-full bg-purple-500/10 text-purple-500 font-medium mr-2">
+                  <span className="px-1.5 py-0.25 text-xs rounded-full bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent font-medium mr-2">
                     Default
                   </span>
                 </div>
@@ -260,7 +262,7 @@ export const TabManagement = () => {
                             handleTabVisibilityChange(tab.id, checked);
                           }
                         }}
-                        className={classNames('data-[state=checked]:bg-purple-500 ml-4', {
+                        className={classNames('data-[state=checked]:bg-bolt-elements-item-contentAccent ml-4', {
                           'opacity-50 pointer-events-none':
                             !DEFAULT_USER_TABS.includes(tab.id) && !OPTIONAL_USER_TABS.includes(tab.id),
                         })}
@@ -354,7 +356,7 @@ export const TabManagement = () => {
                             handleTabVisibilityChange(tab.id, checked);
                           }
                         }}
-                        className={classNames('data-[state=checked]:bg-purple-500 ml-4', {
+                        className={classNames('data-[state=checked]:bg-bolt-elements-item-contentAccent ml-4', {
                           'opacity-50 pointer-events-none':
                             !DEFAULT_USER_TABS.includes(tab.id) && !OPTIONAL_USER_TABS.includes(tab.id),
                         })}

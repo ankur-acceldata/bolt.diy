@@ -437,7 +437,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
                             <span>{isSyncing ? 'Syncing...' : 'Sync Files'}</span>
                           </div>
                         </DropdownMenu.Item>
-                        <DropdownMenu.Item
+                        {/* <DropdownMenu.Item
                           className={classNames(
                             'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
                           )}
@@ -447,7 +447,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
                             <div className="i-ph:git-branch" />
                             Push to GitHub
                           </div>
-                        </DropdownMenu.Item>
+                        </DropdownMenu.Item> */}
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>
                   </div>

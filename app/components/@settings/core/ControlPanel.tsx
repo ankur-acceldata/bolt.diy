@@ -103,8 +103,8 @@ const AnimatedSwitch = ({ checked, onCheckedChange, id, label }: AnimatedSwitchP
           'relative inline-flex h-6 w-11 items-center rounded-full',
           'transition-all duration-300 ease-[cubic-bezier(0.87,_0,_0.13,_1)]',
           'bg-gray-200 dark:bg-gray-700',
-          'data-[state=checked]:bg-purple-500',
-          'focus:outline-none focus:ring-2 focus:ring-purple-500/20',
+          'data-[state=checked]:bg-bolt-elements-item-contentAccent',
+          'focus:outline-none focus:ring-2 focus:ring-bolt-elements-borderColorActive/20',
           'cursor-pointer',
           'group',
         )}

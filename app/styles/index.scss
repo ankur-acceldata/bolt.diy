@@ -15,10 +15,10 @@ body {
 }
 
 :root {
-  --gradient-opacity: 0.8;
-  --primary-color: rgba(158, 117, 240, var(--gradient-opacity));
-  --secondary-color: rgba(138, 43, 226, var(--gradient-opacity));
-  --accent-color: rgba(128, 59, 239, var(--gradient-opacity));
+  --gradient-opacity: 0.85;
+  --primary-color: rgba(120, 180, 255, var(--gradient-opacity)); // Softer blue for dark
+  --secondary-color: rgba(30, 40, 60, var(--gradient-opacity)); // Deep blue-gray (not pure black)
+  --accent-color: rgba(80, 140, 255, var(--gradient-opacity)); // Vibrant blue accent
   // --primary-color: rgba(147, 112, 219, var(--gradient-opacity));
   // --secondary-color: rgba(138, 43, 226, var(--gradient-opacity));
   // --accent-color: rgba(180, 170, 220, var(--gradient-opacity));

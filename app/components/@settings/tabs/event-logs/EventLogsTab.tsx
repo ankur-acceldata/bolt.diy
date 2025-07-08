@@ -912,7 +912,7 @@ export function EventLogsTab() {
             <Switch
               checked={showTimestamps}
               onCheckedChange={(value) => handlePreferenceChange('timestamps', value)}
-              className="data-[state=checked]:bg-purple-500"
+              className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
             />
             <span className="text-sm text-gray-500 dark:text-gray-400">Show Timestamps</span>
           </div>
@@ -921,7 +921,7 @@ export function EventLogsTab() {
             <Switch
               checked={use24Hour}
               onCheckedChange={(value) => handlePreferenceChange('24hour', value)}
-              className="data-[state=checked]:bg-purple-500"
+              className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
             />
             <span className="text-sm text-gray-500 dark:text-gray-400">24h Time</span>
           </div>
@@ -930,7 +930,7 @@ export function EventLogsTab() {
             <Switch
               checked={autoExpand}
               onCheckedChange={(value) => handlePreferenceChange('autoExpand', value)}
-              className="data-[state=checked]:bg-purple-500"
+              className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
             />
             <span className="text-sm text-gray-500 dark:text-gray-400">Auto Expand</span>
           </div>

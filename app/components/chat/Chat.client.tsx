@@ -286,18 +286,47 @@ export const ChatImpl = memo(
     }, [input, textareaRef]);
 
     const runAnimation = async () => {
+      console.log('runAnimation called, chatStarted:', chatStarted);
+
       if (chatStarted) {
+        console.log('Animation skipped - chat already started');
         return;
       }
 
-      await Promise.all([
-        animate('#examples', { opacity: 0, display: 'none' }, { duration: 0.1 }),
-        animate('#intro', { opacity: 0, flex: 1 }, { duration: 0.2, ease: cubicEasingFn }),
-      ]);
+      // Check which elements exist before trying to animate them
+      const examplesEl = document.getElementById('examples');
+      const introEl = document.getElementById('intro');
+
+      console.log('Elements found:', { examplesEl, introEl });
+
+      const animations = [];
+
+      // Only animate #examples if it exists (currently removed/commented out)
+      if (examplesEl) {
+        animations.push(animate('#examples', { opacity: 0, display: 'none' }, { duration: 0.1 }));
+      } else {
+        console.log('Skipping #examples animation - element not found');
+      }
+
+      // Only animate #intro if it exists
+      if (introEl) {
+        animations.push(animate('#intro', { opacity: 0, flex: 1 }, { duration: 0.2, ease: cubicEasingFn }));
+      } else {
+        console.log('Skipping #intro animation - element not found');
+      }
+
+      // If no elements to animate, just proceed with setting the state
+      if (animations.length > 0) {
+        console.log('Running animations for', animations.length, 'elements');
+        await Promise.all(animations);
+      } else {
+        console.log('No elements to animate, proceeding to set chat started');
+      }
 
       chatStore.setKey('started', true);
-
       setChatStarted(true);
+
+      console.log('Animation completed, chatStarted set to true');
     };
 
     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
@@ -321,7 +350,12 @@ export const ChatImpl = memo(
         finalMessageContent = messageContent + elementInfo;
       }
 
-      runAnimation();
+      console.log('About to run animation, chatStarted:', chatStarted);
+
+      // Make runAnimation awaitable to ensure it completes before proceeding
+      await runAnimation();
+
+      console.log('Animation completed, proceeding with message processing');
 
       if (!chatStarted) {
         setFakeLoading(true);

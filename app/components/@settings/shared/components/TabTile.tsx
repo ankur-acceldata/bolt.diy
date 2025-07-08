@@ -36,12 +36,14 @@ export const TabTile: React.FC<TabTileProps> = ({
             className={classNames(
               'relative flex flex-col items-center p-6 rounded-xl',
               'w-full h-full min-h-[160px]',
-              'bg-white dark:bg-[#141414]',
-              'border border-[#E5E5E5] dark:border-[#333333]',
+              'bg-bolt-elements-background-depth-1',
+              'border border-bolt-elements-borderColor',
               'group',
-              'hover:bg-purple-50 dark:hover:bg-[#1a1a1a]',
-              'hover:border-purple-200 dark:hover:border-purple-900/30',
-              isActive ? 'border-purple-500 dark:border-purple-500/50 bg-purple-500/5 dark:bg-purple-500/10' : '',
+              'hover:bg-bolt-elements-item-backgroundAccent',
+              'hover:border-bolt-elements-borderColorActive/30',
+              isActive
+                ? 'border-bolt-elements-borderColorActive dark:border-bolt-elements-borderColorActive/50 bg-bolt-elements-item-backgroundAccent'
+                : '',
               isLoading ? 'cursor-wait opacity-70' : '',
               className || '',
             )}
@@ -55,20 +57,24 @@ export const TabTile: React.FC<TabTileProps> = ({
                   'w-14 h-14',
                   'flex items-center justify-center',
                   'rounded-xl',
-                  'bg-gray-100 dark:bg-gray-800',
-                  'ring-1 ring-gray-200 dark:ring-gray-700',
-                  'group-hover:bg-purple-100 dark:group-hover:bg-gray-700/80',
-                  'group-hover:ring-purple-200 dark:group-hover:ring-purple-800/30',
-                  isActive ? 'bg-purple-500/10 dark:bg-purple-500/10 ring-purple-500/30 dark:ring-purple-500/20' : '',
+                  'bg-bolt-elements-background-depth-2',
+                  'ring-1 ring-bolt-elements-borderColor',
+                  'group-hover:bg-bolt-elements-item-backgroundAccent dark:group-hover:bg-gray-700/80',
+                  'group-hover:ring-bolt-elements-borderColorActive/30',
+                  isActive
+                    ? 'bg-bolt-elements-item-backgroundAccent dark:bg-bolt-elements-item-backgroundAccent ring-bolt-elements-borderColorActive/30'
+                    : '',
                 )}
               >
                 <motion.div
                   className={classNames(
                     TAB_ICONS[tab.id],
                     'w-8 h-8',
-                    'text-gray-600 dark:text-gray-300',
-                    'group-hover:text-purple-500 dark:group-hover:text-purple-400/80',
-                    isActive ? 'text-purple-500 dark:text-purple-400/90' : '',
+                    'text-bolt-elements-textSecondary',
+                    'group-hover:text-bolt-elements-item-contentAccent dark:opacity-80',
+                    isActive
+                      ? 'text-bolt-elements-item-contentAccent dark:text-bolt-elements-item-contentAccent dark:opacity-90'
+                      : '',
                   )}
                 />
               </motion.div>
@@ -78,9 +84,9 @@ export const TabTile: React.FC<TabTileProps> = ({
                 <h3
                   className={classNames(
                     'text-[15px] font-medium leading-snug mb-2',
-                    'text-gray-700 dark:text-gray-200',
-                    'group-hover:text-purple-600 dark:group-hover:text-purple-300/90',
-                    isActive ? 'text-purple-500 dark:text-purple-400/90' : '',
+                    'text-bolt-elements-textPrimary',
+                    'group-hover:text-bolt-elements-item-contentAccent dark:opacity-90',
+                    isActive ? 'text-bolt-elements-item-contentAccent dark:opacity-90' : '',
                   )}
                 >
                   {TAB_LABELS[tab.id]}
@@ -89,11 +95,11 @@ export const TabTile: React.FC<TabTileProps> = ({
                   <p
                     className={classNames(
                       'text-[13px] leading-relaxed',
-                      'text-gray-500 dark:text-gray-400',
+                      'text-bolt-elements-textTertiary',
                       'max-w-[85%]',
                       'text-center',
-                      'group-hover:text-purple-500 dark:group-hover:text-purple-400/70',
-                      isActive ? 'text-purple-400 dark:text-purple-400/80' : '',
+                      'group-hover:text-bolt-elements-item-contentAccent dark:opacity-70',
+                      isActive ? 'text-bolt-elements-item-contentAccent dark:opacity-80' : '',
                     )}
                   >
                     {description}
@@ -105,12 +111,12 @@ export const TabTile: React.FC<TabTileProps> = ({
             {/* Update Indicator with Tooltip */}
             {hasUpdate && (
               <>
-                <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-pulse" />
+                <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-bolt-elements-item-contentAccent dark:bg-bolt-elements-item-contentAccent animate-pulse" />
                 <Tooltip.Portal>
                   <Tooltip.Content
                     className={classNames(
                       'px-3 py-1.5 rounded-lg',
-                      'bg-[#18181B] text-white',
+                      'bg-bolt-elements-background-depth-3 text-bolt-elements-textPrimary',
                       'text-sm font-medium',
                       'select-none',
                       'z-[100]',
@@ -119,7 +125,7 @@ export const TabTile: React.FC<TabTileProps> = ({
                     sideOffset={5}
                   >
                     {statusMessage}
-                    <Tooltip.Arrow className="fill-[#18181B]" />
+                    <Tooltip.Arrow className="fill-bolt-elements-background-depth-3" />
                   </Tooltip.Content>
                 </Tooltip.Portal>
               </>
