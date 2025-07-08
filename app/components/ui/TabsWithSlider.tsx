@@ -99,7 +99,10 @@ export function TabsWithSlider({
 
       {/* Animated slider */}
       <motion.div
-        className={classNames('absolute bottom-0 left-0 h-10 rounded-lg bg-purple-500 -z-10', sliderClassName)}
+        className={classNames(
+          'absolute bottom-0 left-0 h-10 rounded-lg bg-bolt-elements-item-contentAccent -z-10',
+          sliderClassName,
+        )}
         initial={false}
         animate={{
           width: sliderDimensions.width,
