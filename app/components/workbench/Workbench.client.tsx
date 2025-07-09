@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
-import { computed } from 'nanostores';
+
+// import { computed } from 'nanostores';
 import { memo, useCallback, useEffect, useState, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { Popover, Transition } from '@headlessui/react';
@@ -289,7 +290,8 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
 
   // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
 
-  const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
+  // const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
+  const hasPreview = false;
   const showWorkbench = useStore(workbenchStore.showWorkbench);
   const selectedFile = useStore(workbenchStore.selectedFile);
   const currentDocument = useStore(workbenchStore.currentDocument);
@@ -310,6 +312,14 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
       setSelectedView('preview');
     }
   }, [hasPreview]);
+
+  // Add an effect to set default view to code on init
+  useEffect(() => {
+    // Only set to code if no preview and not already set to something else
+    if (!hasPreview) {
+      setSelectedView('code');
+    }
+  }, []); // Empty dependency array to run once on mount
 
   useEffect(() => {
     workbenchStore.setDocuments(files);
@@ -359,7 +369,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
     }
   }, []);
 
-  const handleSelectFile = useCallback((filePath: string) => {
+  const handleDiffFileSelect = useCallback((filePath: string) => {
     workbenchStore.setSelectedFile(filePath);
     workbenchStore.currentView.set('diff');
   }, []);
@@ -454,7 +464,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
                 )}
 
                 {selectedView === 'diff' && (
-                  <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleSelectFile} />
+                  <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleDiffFileSelect} />
                 )}
                 <IconButton
                   icon="i-ph:x-circle"
