@@ -156,8 +156,9 @@ export class ActionRunner {
     try {
       switch (action.type) {
         case 'shell': {
-          await this.#runShellAction(action);
-          break;
+          // Don't automatically execute shell commands, just mark as pending for user interaction
+          this.#updateAction(actionId, { status: 'pending', executed: false });
+          return;
         }
         case 'file': {
           await this.#runFileAction(action);
@@ -179,43 +180,13 @@ export class ActionRunner {
           break;
         }
         case 'build': {
-          const buildOutput = await this.#runBuildAction(action);
-
-          // Store build output for deployment
-          this.buildOutput = buildOutput;
-          break;
+          // Don't automatically execute build commands, just mark as pending for user interaction
+          this.#updateAction(actionId, { status: 'pending', executed: false });
+          return;
         }
         case 'start': {
-          // making the start app non blocking
-
-          this.#runStartAction(action)
-            .then(() => this.#updateAction(actionId, { status: 'complete' }))
-            .catch((err: Error) => {
-              if (action.abortSignal.aborted) {
-                return;
-              }
-
-              this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
-              logger.error(`[${action.type}]:Action failed\n\n`, err);
-
-              if (!(err instanceof ActionCommandError)) {
-                return;
-              }
-
-              this.onAlert?.({
-                type: 'error',
-                title: 'Dev Server Failed',
-                description: err.header,
-                content: err.output,
-              });
-            });
-
-          /*
-           * adding a delay to avoid any race condition between 2 start actions
-           * i am up for a better approach
-           */
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-
+          // Don't automatically execute start commands, just mark as pending for user interaction
+          this.#updateAction(actionId, { status: 'pending', executed: false });
           return;
         }
       }
@@ -551,5 +522,65 @@ export class ActionRunner {
       deployStatus: deployStatus as any,
       source: details?.source || 'netlify',
     });
+  }
+
+  async executeUserAction(actionId: string) {
+    const action = this.actions.get()[actionId];
+
+    if (!action) {
+      logger.error(`Action ${actionId} not found`);
+      return;
+    }
+
+    if (action.executed) {
+      logger.debug(`Action ${actionId} already executed`);
+      return;
+    }
+
+    this.#updateAction(actionId, { status: 'running' });
+
+    try {
+      switch (action.type) {
+        case 'shell': {
+          await this.#runShellAction(action);
+          break;
+        }
+        case 'start': {
+          await this.#runStartAction(action);
+          break;
+        }
+        case 'build': {
+          const buildOutput = await this.#runBuildAction(action);
+          this.buildOutput = buildOutput;
+          break;
+        }
+        default: {
+          logger.error(`Action type ${action.type} not supported for manual execution`);
+          return;
+        }
+      }
+
+      this.#updateAction(actionId, { status: 'complete', executed: true });
+    } catch (error) {
+      if (action.abortSignal.aborted) {
+        return;
+      }
+
+      this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
+      logger.error(`[${action.type}]:Action failed\n\n`, error);
+
+      if (!(error instanceof ActionCommandError)) {
+        return;
+      }
+
+      this.onAlert?.({
+        type: 'error',
+        title: 'Command Failed',
+        description: error.header,
+        content: error.output,
+      });
+
+      throw error;
+    }
   }
 }

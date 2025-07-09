@@ -83,6 +83,7 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
   const files = useStore(workbenchStore.files) as FileMap;
   const selectedFile = useStore(workbenchStore.selectedFile);
   const currentDocument = useStore(workbenchStore.currentDocument) as EditorDocument;
+  const currentView = useStore(workbenchStore.currentView); // Get current tab view
 
   // Create filtered file map with only changed files and their parent folders
   const filteredFiles = useMemo(() => {
@@ -94,11 +95,12 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
     workbenchStore.setSelectedFile(filePath);
   }, []);
 
-  // Auto-select first file if none is selected
+  // Auto-select first file if none is selected - only when in diff tab
   useEffect(() => {
     if (
-      !selectedFile ||
-      (!fileHistory[selectedFile] && Object.keys(fileHistory).length > 0 && Object.keys(filteredFiles).length > 0)
+      currentView === 'diff' && // Only run auto-selection when in diff view
+      (!selectedFile ||
+        (!fileHistory[selectedFile] && Object.keys(fileHistory).length > 0 && Object.keys(filteredFiles).length > 0))
     ) {
       // Find the first valid file entry (not folder)
       const firstModifiedFile = Object.keys(fileHistory).find((path) => {
@@ -109,7 +111,7 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
         workbenchStore.setSelectedFile(firstModifiedFile);
       }
     }
-  }, [selectedFile, fileHistory, files, filteredFiles]);
+  }, [selectedFile, fileHistory, files, filteredFiles, currentView]);
 
   // If there are no modified files
   if (Object.keys(fileHistory).length === 0) {

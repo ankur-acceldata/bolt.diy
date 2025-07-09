@@ -868,6 +868,21 @@ export class WorkbenchStore {
       throw error; // Rethrow the error for further handling
     }
   }
+
+  async executeUserAction(messageId: string, actionId: string) {
+    const artifact = this.#getArtifact(messageId);
+
+    if (!artifact) {
+      console.error('Artifact not found');
+      return;
+    }
+
+    try {
+      await artifact.runner.executeUserAction(actionId);
+    } catch (error) {
+      console.error('Failed to execute action:', error);
+    }
+  }
 }
 
 export const workbenchStore = new WorkbenchStore();

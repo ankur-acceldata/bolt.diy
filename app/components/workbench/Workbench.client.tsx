@@ -307,11 +307,13 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
     workbenchStore.currentView.set(view);
   };
 
-  useEffect(() => {
-    if (hasPreview) {
-      setSelectedView('preview');
-    }
-  }, [hasPreview]);
+  /*
+   * useEffect(() => {
+   *   if (hasPreview) {
+   *     setSelectedView('preview');
+   *   }
+   * }, [hasPreview]);
+   */
 
   // Add an effect to set default view to code on init
   useEffect(() => {
