@@ -8,18 +8,32 @@ import { createScopedLogger } from './logger';
 
 const logger = createScopedLogger('FileLocks');
 
+// Cache for chatId resolution to avoid repeated database calls
+let chatIdCache: Record<string, string> = {};
+
 /**
- * Get the current chat ID from the URL
- * @returns The current chat ID or a default value if not found
+ * Get the current chat ID from the URL, resolving urlId to actual chatId
+ * @returns The actual chatId from the database, not the URL ID
  */
 export function getCurrentChatId(): string {
   try {
     if (typeof window !== 'undefined') {
-      // Extract chat ID from URL (format: /chat/123)
+      // Extract ID from URL (format: /chat/123)
       const match = window.location.pathname.match(/\/chat\/([^/]+)/);
 
       if (match && match[1]) {
-        return match[1];
+        const urlId = match[1];
+
+        // Check cache first
+        if (chatIdCache[urlId]) {
+          return chatIdCache[urlId];
+        }
+
+        /*
+         * Return the urlId as-is initially, but we'll resolve it async
+         * This prevents circular dependencies while still providing a valid ID
+         */
+        return urlId;
       }
     }
 
@@ -29,6 +43,56 @@ export function getCurrentChatId(): string {
     logger.error('Failed to get current chat ID', error);
     return 'default';
   }
+}
+
+/**
+ * Resolve a mixed ID (could be chatId or urlId) to the actual chatId
+ * @param mixedId The ID from the URL which could be chatId or urlId
+ * @returns Promise resolving to the actual chatId
+ */
+export async function resolveActualChatId(mixedId: string): Promise<string> {
+  try {
+    // Check cache first
+    if (chatIdCache[mixedId]) {
+      return chatIdCache[mixedId];
+    }
+
+    // Dynamic import to avoid circular dependencies
+    const { getMessages } = await import('~/lib/persistence/db');
+    const { db } = await import('~/lib/persistence/useChatHistory');
+
+    if (!db) {
+      return mixedId;
+    }
+
+    // Try to get the chat data
+    const chatData = await getMessages(db, mixedId);
+
+    if (chatData && chatData.id) {
+      // Cache the resolution
+      chatIdCache[mixedId] = chatData.id;
+
+      // Also cache the reverse mapping if we have a urlId
+      if (chatData.urlId && chatData.urlId !== chatData.id) {
+        chatIdCache[chatData.urlId] = chatData.id;
+      }
+
+      return chatData.id;
+    }
+
+    // If no chat data found, assume it's already a chatId
+    return mixedId;
+  } catch (error) {
+    logger.error('Failed to resolve chat ID', error);
+    return mixedId;
+  }
+}
+
+/**
+ * Clear the chat ID cache (useful for testing or when chat data changes)
+ */
+export function clearChatIdCache(): void {
+  chatIdCache = {};
 }
 
 /**

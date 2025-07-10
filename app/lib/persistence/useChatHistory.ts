@@ -15,13 +15,18 @@ import {
   createChatFromMessages,
   getSnapshot,
   setSnapshot,
+  setVersionedSnapshot,
+  getLatestVersionedSnapshot,
+  getNextSnapshotVersion,
   type IChatMetadata,
 } from './db';
 import type { FileMap } from '~/lib/stores/files';
-import type { Snapshot } from './types';
+import type { Snapshot, ChangeType } from './types';
+import { createVersionedSnapshot, hasFilesChanged, createInitialSnapshot, hasExistingSnapshots } from './snapshotUtils';
 import { webcontainer } from '~/lib/webcontainer';
 import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
+import { resolveActualChatId } from '~/utils/fileLocks';
 
 export interface ChatHistoryItem {
   id: string;
@@ -199,24 +204,77 @@ ${value.content}
 
   const takeSnapshot = useCallback(
     async (chatIdx: string, files: FileMap, _chatId?: string | undefined, chatSummary?: string) => {
-      const id = chatId.get();
+      const currentChatId = chatId.get();
 
-      if (!id || !db) {
+      if (!currentChatId || !db) {
         return;
       }
 
-      const snapshot: Snapshot = {
-        chatIndex: chatIdx,
-        files,
-        summary: chatSummary,
-      };
-
-      // localStorage.setItem(`snapshot:${id}`, JSON.stringify(snapshot)); // Remove localStorage usage
       try {
-        await setSnapshot(db, id, snapshot);
+        // Resolve the mixed chatId to the actual chatId to prevent duplicate snapshots
+        const actualChatId = await resolveActualChatId(currentChatId);
+
+        // Check if files have actually changed to avoid unnecessary snapshots
+        const filesChanged = await hasFilesChanged(db, actualChatId, files);
+
+        if (!filesChanged) {
+          console.log(`No file changes detected for chat ${actualChatId}, skipping snapshot`);
+          return;
+        }
+
+        // Determine change type based on context
+        let changeType: ChangeType = 'ai-response'; // Default to AI response
+
+        // Check if this is an initial snapshot (no previous snapshots)
+        const latestSnapshot = await getLatestVersionedSnapshot(db, actualChatId);
+
+        if (!latestSnapshot) {
+          changeType = 'initial';
+        }
+
+        // Create the versioned snapshot
+        const versionedSnapshot = await createVersionedSnapshot(
+          db,
+          actualChatId,
+          files,
+          chatIdx,
+          changeType,
+          chatSummary,
+        );
+
+        // Get the next version number
+        const version = await getNextSnapshotVersion(db, actualChatId);
+
+        // Store the versioned snapshot
+        await setVersionedSnapshot(db, actualChatId, versionedSnapshot, version, changeType);
+
+        // Also maintain backward compatibility with the old snapshot system
+        const legacySnapshot: Snapshot = {
+          chatIndex: chatIdx,
+          files,
+          summary: chatSummary,
+        };
+
+        await setSnapshot(db, actualChatId, legacySnapshot);
+
+        console.log(`Created ${changeType} snapshot version ${version} for chat ${actualChatId}`);
       } catch (error) {
-        console.error('Failed to save snapshot:', error);
-        toast.error('Failed to save chat snapshot.');
+        console.error('Failed to save versioned snapshot:', error);
+
+        // Fallback to the old snapshot system
+        const legacySnapshot: Snapshot = {
+          chatIndex: chatIdx,
+          files,
+          summary: chatSummary,
+        };
+
+        try {
+          await setSnapshot(db, currentChatId, legacySnapshot);
+          console.log('Fallback to legacy snapshot system successful');
+        } catch (fallbackError) {
+          console.error('Failed to save fallback snapshot:', fallbackError);
+          toast.error('Failed to save chat snapshot.');
+        }
       }
     },
     [db],
@@ -266,7 +324,9 @@ ${value.content}
       }
 
       try {
-        await setMessages(db, id, initialMessages, urlId, description.get(), undefined, metadata);
+        // Resolve the actual chatId before saving
+        const actualChatId = await resolveActualChatId(id);
+        await setMessages(db, actualChatId, initialMessages, urlId, description.get(), undefined, metadata);
         chatMetadata.set(metadata);
       } catch (error) {
         toast.error('Failed to update chat metadata');
@@ -305,25 +365,41 @@ ${value.content}
         }
       }
 
-      takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
-
-      if (!description.get() && firstArtifact?.title) {
-        description.set(firstArtifact?.title);
-      }
-
       // Ensure chatId.get() is used here as well
-      if (initialMessages.length === 0 && !chatId.get()) {
+      let finalChatId = chatId.get();
+
+      if (initialMessages.length === 0 && !finalChatId) {
         const nextId = await getNextId(db);
 
         chatId.set(nextId);
+        finalChatId = nextId;
 
         if (!urlId) {
           navigateChat(nextId);
         }
+
+        // Create an initial empty snapshot for the new chat
+        try {
+          const actualChatId = await resolveActualChatId(finalChatId);
+          const hasSnapshots = await hasExistingSnapshots(db, actualChatId);
+
+          if (!hasSnapshots) {
+            await createInitialSnapshot(db, actualChatId, `chat-${actualChatId}-initial`, 'Initial chat state');
+            console.log(`Created initial empty snapshot for new chat ${actualChatId}`);
+          }
+        } catch (error) {
+          console.error('Failed to create initial snapshot for new chat:', error);
+        }
       }
 
-      // Ensure chatId.get() is used for the final setMessages call
-      const finalChatId = chatId.get();
+      // Only take snapshot if this is a new message being added, not during page load
+      if (messages.length > initialMessages.length) {
+        takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+      }
+
+      if (!description.get() && firstArtifact?.title) {
+        description.set(firstArtifact?.title);
+      }
 
       if (!finalChatId) {
         console.error('Cannot save messages, chat ID is not set.');
@@ -332,9 +408,12 @@ ${value.content}
         return;
       }
 
+      // Resolve the actual chatId before saving
+      const actualChatId = await resolveActualChatId(finalChatId);
+
       await setMessages(
         db,
-        finalChatId, // Use the potentially updated chatId
+        actualChatId, // Use the resolved chatId
         [...archivedMessages, ...messages],
         urlId,
         description.get(),
@@ -349,6 +428,25 @@ ${value.content}
 
       try {
         const newId = await duplicateChat(db, mixedId || listItemId);
+
+        // Create an initial empty snapshot for the duplicated chat
+        try {
+          const actualChatId = await resolveActualChatId(newId);
+          const hasSnapshots = await hasExistingSnapshots(db, actualChatId);
+
+          if (!hasSnapshots) {
+            await createInitialSnapshot(
+              db,
+              actualChatId,
+              `chat-${actualChatId}-initial`,
+              'Duplicated chat initial state',
+            );
+            console.log(`Created initial empty snapshot for duplicated chat ${actualChatId}`);
+          }
+        } catch (error) {
+          console.error('Failed to create initial snapshot for duplicated chat:', error);
+        }
+
         navigate(`/chat/${newId}`);
         toast.success('Chat duplicated successfully');
       } catch (error) {
@@ -363,6 +461,13 @@ ${value.content}
 
       try {
         const newId = await createChatFromMessages(db, description, messages, metadata);
+
+        /*
+         * For imported chats, we don't create an initial empty snapshot
+         * since they may already have content from the imported messages
+         * The snapshot will be created when files are uploaded or created
+         */
+
         window.location.href = `/chat/${newId}`;
         toast.success('Chat imported successfully');
       } catch (error) {

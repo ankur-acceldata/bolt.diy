@@ -18,6 +18,9 @@ import { description } from '~/lib/persistence';
 import Cookies from 'js-cookie';
 import { createSampler } from '~/utils/sampler';
 import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
+import { getCurrentChatId, resolveActualChatId } from '~/utils/fileLocks';
+import { triggerSnapshot } from '~/lib/persistence/snapshotUtils';
+import { db } from '~/lib/persistence/useChatHistory';
 
 const { saveAs } = fileSaver;
 
@@ -242,6 +245,19 @@ export class WorkbenchStore {
     newUnsavedFiles.delete(filePath);
 
     this.unsavedFiles.set(newUnsavedFiles);
+
+    // Trigger a snapshot for user edits
+    if (db) {
+      try {
+        const mixedChatId = getCurrentChatId();
+        const actualChatId = await resolveActualChatId(mixedChatId);
+        const files = this.files.get();
+        console.log('DEBUG: saveFile - triggering snapshot with', Object.keys(files).length, 'files');
+        triggerSnapshot(db, actualChatId, files, 'user-edit');
+      } catch (error) {
+        console.error('Failed to trigger snapshot after file save:', error);
+      }
+    }
   }
 
   async saveCurrentDocument() {
@@ -358,6 +374,21 @@ export class WorkbenchStore {
           const newUnsavedFiles = new Set(this.unsavedFiles.get());
           newUnsavedFiles.delete(filePath);
           this.unsavedFiles.set(newUnsavedFiles);
+        }
+
+        // Trigger a snapshot for file uploads/creation
+        if (db) {
+          try {
+            const mixedChatId = getCurrentChatId();
+            const actualChatId = await resolveActualChatId(mixedChatId);
+            const files = this.files.get();
+            console.log('DEBUG: createFile - triggering snapshot with', Object.keys(files).length, 'files');
+
+            // Use 'upload' type for file creation, which could be from upload or manual creation
+            triggerSnapshot(db, actualChatId, files, 'upload');
+          } catch (error) {
+            console.error('Failed to trigger snapshot after file creation:', error);
+          }
         }
       }
 
@@ -581,15 +612,42 @@ export class WorkbenchStore {
         await artifact.runner.runAction(data, isStreaming);
       }
 
+      console.log('DEBUG: _runAction - Before updateFile, current files:', Object.keys(this.files.get()).length);
       this.#editorStore.updateFile(fullPath, data.action.content);
 
       if (!isStreaming && data.action.content) {
+        console.log('DEBUG: _runAction - Before saveFile, current files:', Object.keys(this.files.get()).length);
         await this.saveFile(fullPath);
+        console.log('DEBUG: _runAction - After saveFile, current files:', Object.keys(this.files.get()).length);
       }
 
       if (!isStreaming) {
         await artifact.runner.runAction(data);
         this.resetAllFileModifications();
+
+        console.log(
+          'DEBUG: _runAction - Before snapshot trigger, current files:',
+          Object.keys(this.files.get()).length,
+        );
+
+        // Add a small delay to ensure file system events are processed
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        console.log('DEBUG: _runAction - After 500ms delay, current files:', Object.keys(this.files.get()).length);
+
+        // Trigger a snapshot for AI-generated changes
+        if (db) {
+          try {
+            const mixedChatId = getCurrentChatId();
+            const actualChatId = await resolveActualChatId(mixedChatId);
+            const files = this.files.get();
+            console.log('DEBUG: _runAction - Final files before snapshot:', Object.keys(files).length, 'files');
+            console.log('DEBUG: _runAction - Final files preview:', Object.keys(files).slice(0, 5));
+            triggerSnapshot(db, actualChatId, files, 'ai-response', messageId);
+          } catch (error) {
+            console.error('Failed to trigger snapshot after AI action:', error);
+          }
+        }
       }
     } else {
       await artifact.runner.runAction(data);

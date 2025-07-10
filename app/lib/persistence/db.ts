@@ -1,7 +1,7 @@
 import type { Message } from 'ai';
 import { createScopedLogger } from '~/utils/logger';
 import type { ChatHistoryItem } from './useChatHistory';
-import type { Snapshot } from './types'; // Import Snapshot type
+import type { Snapshot, VersionedSnapshot, SnapshotVersionIndex, SnapshotVersion, ChangeType } from './types'; // Import all snapshot types
 
 export interface IChatMetadata {
   gitUrl: string;
@@ -19,7 +19,7 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
   }
 
   return new Promise((resolve) => {
-    const request = indexedDB.open('boltHistory', 2);
+    const request = indexedDB.open('boltHistory', 3);
 
     request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
       const db = (event.target as IDBOpenDBRequest).result;
@@ -36,6 +36,21 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
       if (oldVersion < 2) {
         if (!db.objectStoreNames.contains('snapshots')) {
           db.createObjectStore('snapshots', { keyPath: 'chatId' });
+        }
+      }
+
+      if (oldVersion < 3) {
+        // Add versioned snapshots object store
+        if (!db.objectStoreNames.contains('versioned_snapshots')) {
+          const versionedStore = db.createObjectStore('versioned_snapshots', { keyPath: 'id' });
+          versionedStore.createIndex('chatId', 'chatId', { unique: false });
+          versionedStore.createIndex('version', 'version', { unique: false });
+          versionedStore.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+
+        // Add snapshot version index object store
+        if (!db.objectStoreNames.contains('snapshot_versions')) {
+          db.createObjectStore('snapshot_versions', { keyPath: 'chatId' });
         }
       }
     };
@@ -340,4 +355,187 @@ export async function deleteSnapshot(db: IDBDatabase, chatId: string): Promise<v
       }
     };
   });
+}
+
+// Versioned Snapshot Functions
+
+export async function setVersionedSnapshot(
+  db: IDBDatabase,
+  chatId: string,
+  snapshot: VersionedSnapshot,
+  version: number,
+  changeType: ChangeType,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['versioned_snapshots', 'snapshot_versions'], 'readwrite');
+    const snapshotStore = transaction.objectStore('versioned_snapshots');
+    const versionStore = transaction.objectStore('snapshot_versions');
+
+    const snapshotId = `${chatId}-${version}`;
+    const versionedSnapshot: VersionedSnapshot = {
+      ...snapshot,
+      version,
+      changeType,
+      timestamp: Date.now(),
+    };
+
+    // Store the versioned snapshot
+    const snapshotRequest = snapshotStore.put({
+      id: snapshotId,
+      chatId,
+      version,
+      timestamp: versionedSnapshot.timestamp,
+      changeType,
+      snapshot: versionedSnapshot,
+    });
+
+    snapshotRequest.onsuccess = () => {
+      // Update the version index
+      const versionRequest = versionStore.get(chatId);
+
+      versionRequest.onsuccess = () => {
+        const versionIndex: SnapshotVersionIndex = versionRequest.result || {
+          chatId,
+          versions: [],
+          latestVersion: 0,
+        };
+
+        const newVersionEntry: SnapshotVersion = {
+          chatId,
+          version,
+          timestamp: versionedSnapshot.timestamp,
+          changeType,
+          isFullSnapshot: versionedSnapshot.isFullSnapshot,
+          snapshotId,
+        };
+
+        // Update version index
+        versionIndex.versions.push(newVersionEntry);
+        versionIndex.latestVersion = Math.max(versionIndex.latestVersion, version);
+
+        // Sort versions by version number
+        versionIndex.versions.sort((a, b) => a.version - b.version);
+
+        const updateVersionRequest = versionStore.put(versionIndex);
+        updateVersionRequest.onsuccess = () => resolve();
+        updateVersionRequest.onerror = () => reject(updateVersionRequest.error);
+      };
+
+      versionRequest.onerror = () => reject(versionRequest.error);
+    };
+
+    snapshotRequest.onerror = () => reject(snapshotRequest.error);
+  });
+}
+
+export async function getSnapshotVersions(db: IDBDatabase, chatId: string): Promise<SnapshotVersionIndex | undefined> {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('snapshot_versions', 'readonly');
+    const store = transaction.objectStore('snapshot_versions');
+    const request = store.get(chatId);
+
+    request.onsuccess = () => resolve(request.result as SnapshotVersionIndex | undefined);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getVersionedSnapshot(
+  db: IDBDatabase,
+  chatId: string,
+  version: number,
+): Promise<VersionedSnapshot | undefined> {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('versioned_snapshots', 'readonly');
+    const store = transaction.objectStore('versioned_snapshots');
+    const snapshotId = `${chatId}-${version}`;
+    const request = store.get(snapshotId);
+
+    request.onsuccess = () => resolve(request.result?.snapshot as VersionedSnapshot | undefined);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getLatestVersionedSnapshot(
+  db: IDBDatabase,
+  chatId: string,
+): Promise<VersionedSnapshot | undefined> {
+  const versionIndex = await getSnapshotVersions(db, chatId);
+
+  if (!versionIndex || versionIndex.versions.length === 0) {
+    return undefined;
+  }
+
+  const latestVersion = versionIndex.latestVersion;
+
+  return getVersionedSnapshot(db, chatId, latestVersion);
+}
+
+export async function deleteVersionedSnapshots(db: IDBDatabase, chatId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['versioned_snapshots', 'snapshot_versions'], 'readwrite');
+    const snapshotStore = transaction.objectStore('versioned_snapshots');
+    const versionStore = transaction.objectStore('snapshot_versions');
+
+    // Get all versions for this chat
+    const versionRequest = versionStore.get(chatId);
+
+    versionRequest.onsuccess = () => {
+      const versionIndex: SnapshotVersionIndex = versionRequest.result;
+
+      if (!versionIndex) {
+        resolve();
+
+        return;
+      }
+
+      let deletedCount = 0;
+      const totalToDelete = versionIndex.versions.length;
+
+      if (totalToDelete === 0) {
+        // Delete version index
+        const deleteVersionRequest = versionStore.delete(chatId);
+        deleteVersionRequest.onsuccess = () => resolve();
+        deleteVersionRequest.onerror = () => reject(deleteVersionRequest.error);
+
+        return;
+      }
+
+      const checkCompletion = () => {
+        if (deletedCount === totalToDelete) {
+          // Delete version index
+          const deleteVersionRequest = versionStore.delete(chatId);
+          deleteVersionRequest.onsuccess = () => resolve();
+          deleteVersionRequest.onerror = () => reject(deleteVersionRequest.error);
+        }
+      };
+
+      // Delete all snapshots for this chat
+      for (const versionEntry of versionIndex.versions) {
+        const deleteSnapshotRequest = snapshotStore.delete(versionEntry.snapshotId);
+
+        deleteSnapshotRequest.onsuccess = () => {
+          deletedCount++;
+          checkCompletion();
+        };
+
+        deleteSnapshotRequest.onerror = () => {
+          // Continue even if deletion fails
+          deletedCount++;
+          checkCompletion();
+        };
+      }
+    };
+
+    versionRequest.onerror = () => reject(versionRequest.error);
+  });
+}
+
+export async function getNextSnapshotVersion(db: IDBDatabase, chatId: string): Promise<number> {
+  const versionIndex = await getSnapshotVersions(db, chatId);
+
+  if (!versionIndex) {
+    return 1;
+  }
+
+  return versionIndex.latestVersion + 1;
 }
