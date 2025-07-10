@@ -8,6 +8,7 @@ import { diffLines, type Change } from 'diff';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { toast } from 'react-toastify';
 import { path } from '~/utils/path';
+import { useFileSnapshotDiff, useFileHasSnapshotChanges } from '~/lib/hooks/useSnapshotFileDiff';
 
 const logger = createScopedLogger('FileTree');
 
@@ -644,11 +645,53 @@ function File({
   // Check if the file is locked
   const { locked } = workbenchStore.isFileLocked(fullPath);
 
+  // Use the new snapshot diff hook for better diff detection
+  const snapshotDiff = useFileSnapshotDiff(fullPath);
+  const hasSnapshotChanges = useFileHasSnapshotChanges(fullPath);
+
+  // Legacy fileHistory support (for backwards compatibility)
   const fileModifications = fileHistory[fullPath];
 
-  const { additions, deletions } = useMemo(() => {
+  const { additions, deletions, changeType } = useMemo(() => {
+    // Prefer snapshot diff over fileHistory
+    if (snapshotDiff) {
+      if (snapshotDiff.changeType === 'added') {
+        return { additions: 1, deletions: 0, changeType: 'added' };
+      } else if (snapshotDiff.changeType === 'deleted') {
+        return { additions: 0, deletions: 1, changeType: 'deleted' };
+      } else if (
+        snapshotDiff.changeType === 'modified' &&
+        snapshotDiff.originalContent &&
+        snapshotDiff.currentContent
+      ) {
+        const changes = diffLines(snapshotDiff.originalContent, snapshotDiff.currentContent, {
+          newlineIsToken: false,
+          ignoreWhitespace: true,
+          ignoreCase: false,
+        });
+
+        const stats = changes.reduce(
+          (acc: { additions: number; deletions: number }, change: Change) => {
+            if (change.added) {
+              acc.additions += change.value.split('\n').length;
+            }
+
+            if (change.removed) {
+              acc.deletions += change.value.split('\n').length;
+            }
+
+            return acc;
+          },
+          { additions: 0, deletions: 0 },
+        );
+
+        return { ...stats, changeType: 'modified' };
+      }
+    }
+
+    // Fallback to legacy fileHistory
     if (!fileModifications?.originalContent) {
-      return { additions: 0, deletions: 0 };
+      return { additions: 0, deletions: 0, changeType: null };
     }
 
     const normalizedOriginal = fileModifications.originalContent.replace(/\r\n/g, '\n');
@@ -656,7 +699,7 @@ function File({
       fileModifications.versions[fileModifications.versions.length - 1]?.content.replace(/\r\n/g, '\n') || '';
 
     if (normalizedOriginal === normalizedCurrent) {
-      return { additions: 0, deletions: 0 };
+      return { additions: 0, deletions: 0, changeType: null };
     }
 
     const changes = diffLines(normalizedOriginal, normalizedCurrent, {
@@ -665,7 +708,7 @@ function File({
       ignoreCase: false,
     });
 
-    return changes.reduce(
+    const stats = changes.reduce(
       (acc: { additions: number; deletions: number }, change: Change) => {
         if (change.added) {
           acc.additions += change.value.split('\n').length;
@@ -679,9 +722,26 @@ function File({
       },
       { additions: 0, deletions: 0 },
     );
-  }, [fileModifications]);
 
-  const showStats = additions > 0 || deletions > 0;
+    return { ...stats, changeType: 'modified' };
+  }, [snapshotDiff, fileModifications]);
+
+  const showStats = additions > 0 || deletions > 0 || hasSnapshotChanges;
+
+  // Determine file name color based on change type
+  const getFileNameColorClass = () => {
+    if (changeType === 'added') {
+      return 'text-green-500 dark:text-green-400';
+    } else if (changeType === 'deleted') {
+      return 'text-red-500 dark:text-red-400';
+    } else if (changeType === 'modified' || hasSnapshotChanges) {
+      return 'text-yellow-500 dark:text-yellow-400';
+    }
+
+    return '';
+  };
+
+  const fileNameColorClass = getFileNameColorClass();
 
   return (
     <FileContextMenu onCopyPath={onCopyPath} onCopyRelativePath={onCopyRelativePath} fullPath={fullPath}>
@@ -699,10 +759,19 @@ function File({
       >
         <div
           className={classNames('flex items-center', {
-            'group-hover:text-bolt-elements-item-contentActive': !selected,
+            'group-hover:text-bolt-elements-item-contentActive': !selected && !fileNameColorClass,
           })}
         >
-          <div className="flex-1 truncate pr-2">{name}</div>
+          <div
+            className={classNames(
+              'flex-1 truncate pr-2',
+              fileNameColorClass || {
+                'group-hover:text-bolt-elements-item-contentActive': !selected,
+              },
+            )}
+          >
+            {name}
+          </div>
           <div className="flex items-center gap-1">
             {showStats && (
               <div className="flex items-center gap-1 text-xs">

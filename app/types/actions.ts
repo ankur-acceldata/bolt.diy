@@ -72,5 +72,5 @@ export interface FileHistory {
   }[];
 
   // Novo campo para rastrear a origem das mudanças
-  changeSource?: 'user' | 'auto-save' | 'external';
+  changeSource?: 'user' | 'auto-save' | 'external' | 'snapshot';
 }

@@ -53,6 +53,7 @@ export function useChatHistory() {
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
 
   useEffect(() => {
     if (!db) {
@@ -189,6 +190,7 @@ ${value.content}
           }
 
           setReady(true);
+          setIsInitialLoad(false);
         })
         .catch((error) => {
           console.error(error);
@@ -199,6 +201,7 @@ ${value.content}
     } else {
       // Handle case where there is no mixedId (e.g., new chat)
       setReady(true);
+      setIsInitialLoad(false);
     }
   }, [mixedId, db, navigate, searchParams]); // Added db, navigate, searchParams dependencies
 
@@ -393,7 +396,7 @@ ${value.content}
       }
 
       // Only take snapshot if this is a new message being added, not during page load
-      if (messages.length > initialMessages.length) {
+      if (!isInitialLoad && messages.length > initialMessages.length) {
         takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
       }
 

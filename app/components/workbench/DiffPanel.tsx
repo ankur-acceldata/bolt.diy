@@ -9,6 +9,7 @@ import FileTree from './FileTree';
 import { InlineDiffComparison } from './DiffView';
 import { WORK_DIR } from '~/utils/constants';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { useSnapshotFileDiff } from '~/lib/hooks/useSnapshotFileDiff';
 
 interface DiffPanelProps {
   fileHistory: Record<string, FileHistory>;
@@ -85,10 +86,39 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
   const currentDocument = useStore(workbenchStore.currentDocument) as EditorDocument;
   const currentView = useStore(workbenchStore.currentView); // Get current tab view
 
-  // Create filtered file map with only changed files and their parent folders
+  // Use snapshot diff for complete comparison
+  const { fileChanges } = useSnapshotFileDiff();
+
+  // Create combined file history that includes both legacy fileHistory and snapshot changes
+  const combinedFileHistory = useMemo(() => {
+    const combined: Record<string, FileHistory> = { ...fileHistory };
+
+    // Add snapshot changes to the combined history
+    Object.entries(fileChanges).forEach(([filePath, snapshotDiff]) => {
+      if (!combined[filePath] && snapshotDiff.hasChanges) {
+        // Create a pseudo FileHistory entry for snapshot-only changes
+        combined[filePath] = {
+          originalContent: snapshotDiff.originalContent || '',
+          lastModified: Date.now(),
+          changes: [],
+          versions: [
+            {
+              timestamp: Date.now(),
+              content: snapshotDiff.currentContent || '',
+            },
+          ],
+          changeSource: 'snapshot',
+        };
+      }
+    });
+
+    return combined;
+  }, [fileHistory, fileChanges]);
+
+  // Create filtered file map with all changed files (both legacy and snapshot)
   const filteredFiles = useMemo(() => {
-    return createFilteredFileMap(files, fileHistory);
-  }, [files, fileHistory]);
+    return createFilteredFileMap(files, combinedFileHistory);
+  }, [files, combinedFileHistory]);
 
   // Handle file selection from the file tree
   const handleFileSelect = useCallback((filePath: string) => {
@@ -100,10 +130,12 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
     if (
       currentView === 'diff' && // Only run auto-selection when in diff view
       (!selectedFile ||
-        (!fileHistory[selectedFile] && Object.keys(fileHistory).length > 0 && Object.keys(filteredFiles).length > 0))
+        (!combinedFileHistory[selectedFile] &&
+          Object.keys(combinedFileHistory).length > 0 &&
+          Object.keys(filteredFiles).length > 0))
     ) {
       // Find the first valid file entry (not folder)
-      const firstModifiedFile = Object.keys(fileHistory).find((path) => {
+      const firstModifiedFile = Object.keys(combinedFileHistory).find((path) => {
         return files[path] && files[path].type === 'file';
       });
 
@@ -111,10 +143,10 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
         workbenchStore.setSelectedFile(firstModifiedFile);
       }
     }
-  }, [selectedFile, fileHistory, files, filteredFiles, currentView]);
+  }, [selectedFile, combinedFileHistory, files, filteredFiles, currentView]);
 
   // If there are no modified files
-  if (Object.keys(fileHistory).length === 0) {
+  if (Object.keys(combinedFileHistory).length === 0) {
     return (
       <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
         <div className="text-center">
@@ -127,7 +159,7 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
   }
 
   // If no file is selected or document is not available
-  if (!selectedFile || !currentDocument || !fileHistory[selectedFile]) {
+  if (!selectedFile || !currentDocument || !combinedFileHistory[selectedFile]) {
     return (
       <div className="h-full w-full flex overflow-hidden">
         {/* Left Panel - Modified Files Tree */}
@@ -176,7 +208,7 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
   const currentContent = currentDocument.value;
 
   // Get history for the selected file
-  const history = fileHistory[selectedFile];
+  const history = combinedFileHistory[selectedFile];
   const effectiveOriginalContent = history?.originalContent || originalContent;
 
   // Get language for syntax highlighting
@@ -193,7 +225,7 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
                 <div className="flex items-center gap-1.5">
                   <div className="i-ph:git-diff text-bolt-elements-textSecondary" />
                   <span className="text-bolt-elements-textPrimary">
-                    Modified Files ({Object.keys(fileHistory).length})
+                    Modified Files ({Object.keys(combinedFileHistory).length})
                   </span>
                 </div>
               </div>
@@ -203,7 +235,7 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
                   hideRoot={false}
                   rootFolder={WORK_DIR}
                   selectedFile={selectedFile}
-                  fileHistory={fileHistory}
+                  fileHistory={combinedFileHistory}
                   onFileSelect={handleFileSelect}
                   className="h-full"
                 />

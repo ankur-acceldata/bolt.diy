@@ -353,7 +353,19 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   }, []);
 
   const onFileReset = useCallback(() => {
+    const currentDocument = workbenchStore.currentDocument.get();
+
     workbenchStore.resetCurrentDocument();
+
+    // Clear the file history for the reset file to sync with diff state
+    if (currentDocument?.filePath) {
+      setFileHistory((prev) => {
+        const newHistory = { ...prev };
+        delete newHistory[currentDocument.filePath];
+
+        return newHistory;
+      });
+    }
   }, []);
 
   const handleSyncFiles = useCallback(async () => {

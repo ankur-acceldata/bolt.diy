@@ -239,13 +239,12 @@ export async function reconstructFullSnapshot(
         }
       }
 
-      // Handle deleted files (they won't be in the differential snapshot)
+      // Handle deleted files: only delete files explicitly marked as deleted in the diff
       if (diffSnapshot.modifiedFiles) {
-        const changes = calculateChangedFiles(reconstructedFiles, diffSnapshot.files);
-
-        for (const change of changes) {
-          if (change.type === 'deleted') {
-            delete reconstructedFiles[change.path];
+        for (const deletedPath of diffSnapshot.modifiedFiles) {
+          // If the file is not present in diffSnapshot.files and was present before, it is deleted
+          if (!diffSnapshot.files[deletedPath] && reconstructedFiles[deletedPath]) {
+            delete reconstructedFiles[deletedPath];
           }
         }
       }
