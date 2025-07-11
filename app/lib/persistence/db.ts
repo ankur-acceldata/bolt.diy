@@ -138,45 +138,133 @@ export async function getMessagesById(db: IDBDatabase, id: string): Promise<Chat
 
 export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(['chats', 'snapshots'], 'readwrite'); // Add snapshots store to transaction
+    const transaction = db.transaction(['chats', 'snapshots', 'versioned_snapshots', 'snapshot_versions'], 'readwrite');
     const chatStore = transaction.objectStore('chats');
     const snapshotStore = transaction.objectStore('snapshots');
+    const versionedSnapshotStore = transaction.objectStore('versioned_snapshots');
+    const versionStore = transaction.objectStore('snapshot_versions');
 
-    const deleteChatRequest = chatStore.delete(id);
-    const deleteSnapshotRequest = snapshotStore.delete(id); // Also delete snapshot
-
-    let chatDeleted = false;
-    let snapshotDeleted = false;
+    let completedOperations = 0;
+    const totalOperations = 4;
 
     const checkCompletion = () => {
-      if (chatDeleted && snapshotDeleted) {
+      completedOperations++;
+
+      if (completedOperations === totalOperations) {
         resolve(undefined);
       }
     };
 
-    deleteChatRequest.onsuccess = () => {
-      chatDeleted = true;
-      checkCompletion();
-    };
-    deleteChatRequest.onerror = () => reject(deleteChatRequest.error);
-
-    deleteSnapshotRequest.onsuccess = () => {
-      snapshotDeleted = true;
-      checkCompletion();
+    const handleError = (error: any) => {
+      reject(error);
     };
 
-    deleteSnapshotRequest.onerror = (event) => {
-      if ((event.target as IDBRequest).error?.name === 'NotFoundError') {
-        snapshotDeleted = true;
+    /*
+     * First get the version index to find all snapshot IDs before deleting anything
+     */
+    const getVersionRequest = versionStore.get(id);
+
+    getVersionRequest.onsuccess = () => {
+      const versionIndex = getVersionRequest.result;
+
+      // Delete chat
+      const deleteChatRequest = chatStore.delete(id);
+      deleteChatRequest.onsuccess = () => checkCompletion();
+      deleteChatRequest.onerror = () => handleError(deleteChatRequest.error);
+
+      // Delete regular snapshot
+      const deleteSnapshotRequest = snapshotStore.delete(id);
+      deleteSnapshotRequest.onsuccess = () => checkCompletion();
+
+      deleteSnapshotRequest.onerror = (event) => {
+        if ((event.target as IDBRequest).error?.name === 'NotFoundError') {
+          checkCompletion();
+        } else {
+          handleError(deleteSnapshotRequest.error);
+        }
+      };
+
+      // Delete version index
+      const deleteVersionRequest = versionStore.delete(id);
+      deleteVersionRequest.onsuccess = () => checkCompletion();
+
+      deleteVersionRequest.onerror = (event) => {
+        if ((event.target as IDBRequest).error?.name === 'NotFoundError') {
+          checkCompletion();
+        } else {
+          handleError(deleteVersionRequest.error);
+        }
+      };
+
+      // Delete all versioned snapshots for this chat
+      if (!versionIndex || !versionIndex.versions || versionIndex.versions.length === 0) {
+        // No versioned snapshots to delete
         checkCompletion();
-      } else {
-        reject(deleteSnapshotRequest.error);
+        return;
+      }
+
+      let deletedSnapshots = 0;
+      const totalSnapshots = versionIndex.versions.length;
+
+      for (const versionEntry of versionIndex.versions) {
+        const deleteVersionedSnapshotRequest = versionedSnapshotStore.delete(versionEntry.snapshotId);
+
+        deleteVersionedSnapshotRequest.onsuccess = () => {
+          deletedSnapshots++;
+
+          if (deletedSnapshots === totalSnapshots) {
+            checkCompletion();
+          }
+        };
+
+        deleteVersionedSnapshotRequest.onerror = () => {
+          // Continue even if snapshot deletion fails
+          deletedSnapshots++;
+
+          if (deletedSnapshots === totalSnapshots) {
+            checkCompletion();
+          }
+        };
       }
     };
 
-    transaction.oncomplete = () => {
-      // This might resolve before checkCompletion if one operation finishes much faster
+    getVersionRequest.onerror = () => {
+      /*
+       * If we can't get the version index, still delete the other stores
+       * Delete chat
+       */
+      const deleteChatRequest = chatStore.delete(id);
+      deleteChatRequest.onsuccess = () => checkCompletion();
+      deleteChatRequest.onerror = () => handleError(deleteChatRequest.error);
+
+      // Delete regular snapshot
+      const deleteSnapshotRequest = snapshotStore.delete(id);
+      deleteSnapshotRequest.onsuccess = () => checkCompletion();
+
+      deleteSnapshotRequest.onerror = (event) => {
+        if ((event.target as IDBRequest).error?.name === 'NotFoundError') {
+          checkCompletion();
+        } else {
+          handleError(deleteSnapshotRequest.error);
+        }
+      };
+
+      // Delete version index (even though get failed, try delete)
+      const deleteVersionRequest = versionStore.delete(id);
+      deleteVersionRequest.onsuccess = () => checkCompletion();
+
+      deleteVersionRequest.onerror = (event) => {
+        if ((event.target as IDBRequest).error?.name === 'NotFoundError') {
+          checkCompletion();
+        } else {
+          handleError(deleteVersionRequest.error);
+        }
+      };
+
+      // No versioned snapshots to delete since we couldn't get the index
+      checkCompletion();
     };
+
     transaction.onerror = () => reject(transaction.error);
   });
 }
