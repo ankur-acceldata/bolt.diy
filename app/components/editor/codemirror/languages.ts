@@ -99,14 +99,54 @@ export const supportedLanguages = [
       return import('@codemirror/lang-cpp').then((module) => module.cpp());
     },
   }),
+  LanguageDescription.of({
+    name: 'C',
+    extensions: ['c', 'h'],
+    async load() {
+      return import('@codemirror/lang-cpp').then((module) => module.cpp());
+    },
+  }),
+  LanguageDescription.of({
+    name: 'Java',
+    extensions: ['java'],
+    async load() {
+      return import('@codemirror/lang-java').then((module) => module.java());
+    },
+  }),
+  LanguageDescription.of({
+    name: 'XML',
+    extensions: ['xml', 'svg', 'pom'],
+    async load() {
+      return import('@codemirror/lang-xml').then((module) => module.xml());
+    },
+  }),
+  LanguageDescription.of({
+    name: 'YAML',
+    extensions: ['yaml', 'yml'],
+    async load() {
+      return import('@codemirror/lang-yaml').then((module) => module.yaml());
+    },
+  }),
+  LanguageDescription.of({
+    name: 'TOML',
+    extensions: ['toml'],
+    async load() {
+      return import('@codemirror/lang-yaml').then((module) => module.yaml());
+    },
+  }),
 ];
 
 export async function getLanguage(fileName: string) {
   const languageDescription = LanguageDescription.matchFilename(supportedLanguages, fileName);
 
   if (languageDescription) {
-    return await languageDescription.load();
+    try {
+      return await languageDescription.load();
+    } catch (error) {
+      console.warn(`Failed to load language for ${fileName}:`, error);
+    }
   }
 
+  // Fall back to plain editor without syntax highlighting for unsupported languages
   return undefined;
 }

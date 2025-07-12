@@ -574,6 +574,16 @@ const getSharedHighlighter = async () => {
       'ruby',
       'rust',
       'plaintext',
+      'xml',
+      'yaml',
+      'toml',
+      'ini',
+      'bash',
+      'shell',
+      'properties',
+      'markdown',
+      'dockerfile',
+      'gradle',
     ],
   });
 
