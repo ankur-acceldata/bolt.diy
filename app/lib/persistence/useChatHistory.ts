@@ -5,6 +5,7 @@ import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
+import { streamingState } from '~/lib/stores/streaming';
 import {
   getMessages,
   getNextId,
@@ -225,8 +226,11 @@ ${value.content}
           return;
         }
 
-        // Determine change type based on context
-        let changeType: ChangeType = 'ai-response'; // Default to AI response
+        /*
+         * Determine change type based on context
+         * Since AI responses are now handled in Chat.client.tsx, this defaults to user-edit
+         */
+        let changeType: ChangeType = 'user-edit';
 
         // Check if this is an initial snapshot (no previous snapshots)
         const latestSnapshot = await getLatestVersionedSnapshot(db, actualChatId);
@@ -395,9 +399,21 @@ ${value.content}
         }
       }
 
-      // Only take snapshot if this is a new message being added, not during page load
+      /*
+       * Only take snapshot if this is a new message being added, not during page load
+       * Skip ALL snapshots during AI streaming since AI response snapshots are now handled in Chat.client.tsx onFinish
+       */
       if (!isInitialLoad && messages.length > initialMessages.length) {
-        takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+        const isCurrentlyStreaming = streamingState.get();
+
+        /*
+         * Skip snapshot creation only during active AI streaming
+         * AI response snapshots are now centralized to Chat.client.tsx onFinish callback
+         * But allow snapshots for user imports (like folder uploads) even if they create assistant messages
+         */
+        if (!isCurrentlyStreaming) {
+          takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+        }
       }
 
       if (!description.get() && firstArtifact?.title) {
@@ -463,6 +479,10 @@ ${value.content}
       }
 
       try {
+        // Set user upload state to indicate import is in progress
+        workbenchStore.setUserUploadInProgress(true);
+        console.log('DEBUG: importChat - Starting user upload, setting upload state to true');
+
         const newId = await createChatFromMessages(db, description, messages, metadata);
 
         /*
@@ -473,7 +493,19 @@ ${value.content}
 
         window.location.href = `/chat/${newId}`;
         toast.success('Chat imported successfully');
+
+        // Set a timeout to clear upload state as fallback (in case AI doesn't complete)
+        setTimeout(() => {
+          if (workbenchStore.isUserUploadInProgress()) {
+            workbenchStore.setUserUploadInProgress(false);
+            console.log('DEBUG: importChat - Timeout fallback: clearing upload state');
+          }
+        }, 30000); // 30 second timeout
       } catch (error) {
+        // Clear upload state on error
+        workbenchStore.setUserUploadInProgress(false);
+        console.log('DEBUG: importChat - Error during import, clearing upload state');
+
         if (error instanceof Error) {
           toast.error('Failed to import chat: ' + error.message);
         } else {

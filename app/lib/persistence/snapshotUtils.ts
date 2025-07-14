@@ -292,6 +292,7 @@ export async function hasFilesChanged(db: IDBDatabase, chatId: string, currentFi
   const lastSnapshot = await getLatestVersionedSnapshot(db, chatId);
 
   if (!lastSnapshot) {
+    console.log('DEBUG: hasFilesChanged - No previous snapshot exists, allowing change');
     return true; // No previous snapshot, so files have "changed"
   }
 
@@ -299,17 +300,36 @@ export async function hasFilesChanged(db: IDBDatabase, chatId: string, currentFi
 
   if (lastSnapshot.isFullSnapshot) {
     lastFiles = lastSnapshot.files;
+    console.log('DEBUG: hasFilesChanged - Using full snapshot as baseline, files:', Object.keys(lastFiles).length);
   } else {
     const reconstructed = await reconstructFullSnapshot(db, chatId, lastSnapshot.version);
 
     if (!reconstructed) {
+      console.log('DEBUG: hasFilesChanged - Reconstruction failed, allowing change');
       return true; // Error reconstructing, assume changes
     }
 
     lastFiles = reconstructed.files;
+    console.log(
+      'DEBUG: hasFilesChanged - Using reconstructed snapshot as baseline, files:',
+      Object.keys(lastFiles).length,
+    );
   }
 
   const changes = calculateChangedFiles(lastFiles, currentFiles);
+
+  console.log('DEBUG: hasFilesChanged - Change detection:', {
+    lastFilesCount: Object.keys(lastFiles).length,
+    currentFilesCount: Object.keys(currentFiles).length,
+    changesDetected: changes.length,
+    changeTypes: changes.map((c) => `${c.path}: ${c.type}`).slice(0, 5), // Show first 5 changes
+  });
+
+  // Additional check: if we detect changes but current files is empty, something is wrong
+  if (changes.length > 0 && Object.keys(currentFiles).length === 0) {
+    console.log('DEBUG: hasFilesChanged - Detected changes but current files empty, blocking snapshot');
+    return false;
+  }
 
   return changes.length > 0;
 }
@@ -534,6 +554,12 @@ export function triggerSnapshot(
         console.log('DEBUG: No file changes detected, skipping snapshot');
         logger.info(`No file changes detected for chat ${effectiveChatId}, skipping snapshot`);
 
+        return;
+      }
+
+      // Additional check: Don't create snapshots if we have 0 files
+      if (Object.keys(files).length === 0) {
+        console.log('DEBUG: Skipping snapshot creation - no files to snapshot');
         return;
       }
 
