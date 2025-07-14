@@ -92,69 +92,6 @@ export function areSnapshotsIdentical(snapshot1: VersionedSnapshot, snapshot2: V
 }
 
 /**
- * Determine if a snapshot should be a full snapshot or differential
- */
-export function shouldBeFullSnapshot(version: number, changeType: ChangeType, fileCount: number): boolean {
-  // Always make initial snapshots full
-  if (changeType === 'initial' || version === 1) {
-    return true;
-  }
-
-  // Make every 10th snapshot a full snapshot for easy reconstruction
-  if (version % 10 === 0) {
-    return true;
-  }
-
-  // If there are too many files, make it a full snapshot for performance
-  if (fileCount > 100) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Create a differential snapshot containing only changed files
- */
-export function createDifferentialSnapshot(
-  baseSnapshot: VersionedSnapshot,
-  newFiles: FileMap,
-  changeType: ChangeType,
-  version: number,
-): VersionedSnapshot {
-  const changes = calculateChangedFiles(baseSnapshot.files, newFiles);
-  const modifiedFiles = changes.map((change) => change.path);
-
-  // Create a differential snapshot with only changed files
-  const differentialFiles: FileMap = {};
-
-  for (const change of changes) {
-    if (change.type === 'added' || change.type === 'modified') {
-      const newFile = newFiles[change.path];
-
-      if (newFile) {
-        differentialFiles[change.path] = newFile;
-      }
-    }
-
-    // For deleted files, we don't include them in the differential snapshot
-  }
-
-  return {
-    chatIndex: baseSnapshot.chatIndex,
-    files: differentialFiles,
-    summary: baseSnapshot.summary,
-    version,
-    timestamp: Date.now(),
-    changeType,
-    previousSnapshotId: `${baseSnapshot.chatIndex}-${baseSnapshot.version}`,
-    isFullSnapshot: false,
-    modifiedFiles,
-    fullSnapshotRef: baseSnapshot.fullSnapshotRef || `${baseSnapshot.chatIndex}-${baseSnapshot.version}`,
-  };
-}
-
-/**
  * Create a full snapshot
  */
 export function createFullSnapshot(
@@ -173,116 +110,8 @@ export function createFullSnapshot(
     timestamp: Date.now(),
     changeType,
     previousSnapshotId,
-    isFullSnapshot: true,
     modifiedFiles: Object.keys(files),
   };
-}
-
-/**
- * Reconstruct a full snapshot from a differential snapshot
- */
-export async function reconstructFullSnapshot(
-  db: IDBDatabase,
-  chatId: string,
-  version: number,
-): Promise<VersionedSnapshot | undefined> {
-  const snapshot = await getVersionedSnapshot(db, chatId, version);
-
-  if (!snapshot) {
-    return undefined;
-  }
-
-  // If it's already a full snapshot, return it
-  if (snapshot.isFullSnapshot) {
-    return snapshot;
-  }
-
-  // Find the base full snapshot
-  const fullSnapshotRef = snapshot.fullSnapshotRef;
-
-  if (!fullSnapshotRef) {
-    logger.error('No full snapshot reference found for differential snapshot');
-    return undefined;
-  }
-
-  const baseVersion = parseInt(fullSnapshotRef.split('-').pop() || '0');
-  const baseSnapshot = await getVersionedSnapshot(db, chatId, baseVersion);
-
-  if (!baseSnapshot || !baseSnapshot.isFullSnapshot) {
-    logger.error('Base full snapshot not found for reconstruction');
-    return undefined;
-  }
-
-  // Get all snapshots between the base and target version
-  const versionIndex = await getSnapshotVersions(db, chatId);
-
-  if (!versionIndex) {
-    return undefined;
-  }
-
-  const versionsToApply = versionIndex.versions
-    .filter((v) => v.version > baseVersion && v.version <= version)
-    .sort((a, b) => a.version - b.version);
-
-  // Start with base snapshot files
-  const reconstructedFiles: FileMap = { ...baseSnapshot.files };
-
-  // Apply each differential snapshot in order
-  for (const versionInfo of versionsToApply) {
-    const diffSnapshot = await getVersionedSnapshot(db, chatId, versionInfo.version);
-
-    if (diffSnapshot) {
-      // Apply the changes from this differential snapshot
-      for (const [path, file] of Object.entries(diffSnapshot.files)) {
-        if (file) {
-          reconstructedFiles[path] = file;
-        }
-      }
-
-      // Handle deleted files: only delete files explicitly marked as deleted in the diff
-      if (diffSnapshot.modifiedFiles) {
-        for (const deletedPath of diffSnapshot.modifiedFiles) {
-          // If the file is not present in diffSnapshot.files and was present before, it is deleted
-          if (!diffSnapshot.files[deletedPath] && reconstructedFiles[deletedPath]) {
-            delete reconstructedFiles[deletedPath];
-          }
-        }
-      }
-    }
-  }
-
-  // Return the reconstructed snapshot
-  return {
-    ...snapshot,
-    files: reconstructedFiles,
-    isFullSnapshot: true,
-  };
-}
-
-/**
- * Get the most recent full snapshot before a given version
- */
-export async function getLastFullSnapshot(
-  db: IDBDatabase,
-  chatId: string,
-  beforeVersion: number,
-): Promise<VersionedSnapshot | undefined> {
-  const versionIndex = await getSnapshotVersions(db, chatId);
-
-  if (!versionIndex) {
-    return undefined;
-  }
-
-  // Find the most recent full snapshot before the given version
-  const fullSnapshots = versionIndex.versions
-    .filter((v) => v.version < beforeVersion && v.isFullSnapshot)
-    .sort((a, b) => b.version - a.version);
-
-  if (fullSnapshots.length === 0) {
-    return undefined;
-  }
-
-  return getVersionedSnapshot(db, chatId, fullSnapshots[0].version);
 }
 
 /**
@@ -296,25 +125,9 @@ export async function hasFilesChanged(db: IDBDatabase, chatId: string, currentFi
     return true; // No previous snapshot, so files have "changed"
   }
 
-  let lastFiles: FileMap;
-
-  if (lastSnapshot.isFullSnapshot) {
-    lastFiles = lastSnapshot.files;
-    console.log('DEBUG: hasFilesChanged - Using full snapshot as baseline, files:', Object.keys(lastFiles).length);
-  } else {
-    const reconstructed = await reconstructFullSnapshot(db, chatId, lastSnapshot.version);
-
-    if (!reconstructed) {
-      console.log('DEBUG: hasFilesChanged - Reconstruction failed, allowing change');
-      return true; // Error reconstructing, assume changes
-    }
-
-    lastFiles = reconstructed.files;
-    console.log(
-      'DEBUG: hasFilesChanged - Using reconstructed snapshot as baseline, files:',
-      Object.keys(lastFiles).length,
-    );
-  }
+  // Since all snapshots are now full snapshots, we can directly use the files
+  const lastFiles = lastSnapshot.files;
+  console.log('DEBUG: hasFilesChanged - Using full snapshot as baseline, files:', Object.keys(lastFiles).length);
 
   const changes = calculateChangedFiles(lastFiles, currentFiles);
 
@@ -353,7 +166,7 @@ export async function getLatestVersionedSnapshot(
 }
 
 /**
- * Create a versioned snapshot with automatic decision on full vs differential
+ * Create a versioned snapshot (always full snapshot)
  */
 export async function createVersionedSnapshot(
   db: IDBDatabase,
@@ -372,59 +185,33 @@ export async function createVersionedSnapshot(
   const versionIndex = await getSnapshotVersions(db, chatId);
   const version = versionIndex ? versionIndex.latestVersion + 1 : 1;
 
-  const shouldBeFull = shouldBeFullSnapshot(version, changeType, Object.keys(files).length);
+  // Calculate modified files by comparing with the previous snapshot
+  let modifiedFiles: string[] = Object.keys(files);
 
-  console.log('DEBUG: createVersionedSnapshot decision:', {
-    version,
-    shouldBeFull,
-    filesCount: Object.keys(files).length,
-  });
-
-  if (shouldBeFull || !versionIndex || versionIndex.versions.length === 0) {
-    // Create a full snapshot
-    const previousSnapshotId =
-      versionIndex && versionIndex.versions.length > 0 ? `${chatId}-${versionIndex.latestVersion}` : undefined;
-
-    console.log('DEBUG: Creating full snapshot with', Object.keys(files).length, 'files');
-
-    return createFullSnapshot(files, chatIndex, changeType, version, summary, previousSnapshotId);
-  } else {
-    // Create a differential snapshot
+  if (versionIndex && versionIndex.versions.length > 0) {
     const lastSnapshot = await getVersionedSnapshot(db, chatId, versionIndex.latestVersion);
 
-    if (!lastSnapshot) {
-      console.log('DEBUG: Last snapshot not found, creating full snapshot');
-
-      // Fallback to full snapshot if we can't get the last one
-      return createFullSnapshot(files, chatIndex, changeType, version, summary);
+    if (lastSnapshot) {
+      const changes = calculateChangedFiles(lastSnapshot.files, files);
+      modifiedFiles = changes.map((change) => change.path);
     }
-
-    let baseFiles: FileMap;
-
-    if (lastSnapshot.isFullSnapshot) {
-      baseFiles = lastSnapshot.files;
-    } else {
-      const reconstructed = await reconstructFullSnapshot(db, chatId, lastSnapshot.version);
-
-      if (!reconstructed) {
-        console.log('DEBUG: Reconstruction failed, creating full snapshot');
-
-        // Fallback to full snapshot if reconstruction fails
-        return createFullSnapshot(files, chatIndex, changeType, version, summary);
-      }
-
-      baseFiles = reconstructed.files;
-    }
-
-    const baseSnapshot: VersionedSnapshot = {
-      ...lastSnapshot,
-      files: baseFiles,
-    };
-
-    console.log('DEBUG: Creating differential snapshot, current files:', Object.keys(files).length);
-
-    return createDifferentialSnapshot(baseSnapshot, files, changeType, version);
   }
+
+  const previousSnapshotId =
+    versionIndex && versionIndex.versions.length > 0 ? `${chatId}-${versionIndex.latestVersion}` : undefined;
+
+  console.log('DEBUG: Creating full snapshot with', Object.keys(files).length, 'files');
+
+  return {
+    chatIndex,
+    files,
+    summary,
+    version,
+    timestamp: Date.now(),
+    changeType,
+    previousSnapshotId,
+    modifiedFiles,
+  };
 }
 
 /**
@@ -578,7 +365,6 @@ export function triggerSnapshot(
       console.log('DEBUG: Created versioned snapshot:', {
         version: versionedSnapshot.version,
         filesCount: Object.keys(versionedSnapshot.files).length,
-        isFullSnapshot: versionedSnapshot.isFullSnapshot,
       });
 
       const { getNextSnapshotVersion, setVersionedSnapshot } = await import('./db');

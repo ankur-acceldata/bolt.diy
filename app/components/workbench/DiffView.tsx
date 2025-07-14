@@ -583,7 +583,6 @@ const getSharedHighlighter = async () => {
       'properties',
       'markdown',
       'dockerfile',
-      'gradle',
     ],
   });
 

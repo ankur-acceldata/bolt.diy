@@ -14,9 +14,7 @@ export interface VersionedSnapshot extends Snapshot {
   timestamp: number;
   changeType: ChangeType;
   previousSnapshotId?: string;
-  isFullSnapshot: boolean;
   modifiedFiles?: string[];
-  fullSnapshotRef?: string;
 }
 
 export interface SnapshotVersion {
@@ -24,7 +22,6 @@ export interface SnapshotVersion {
   version: number;
   timestamp: number;
   changeType: ChangeType;
-  isFullSnapshot: boolean;
   snapshotId: string;
 }
 

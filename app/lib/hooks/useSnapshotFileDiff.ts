@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
-import type { FileMap, File } from '~/lib/stores/files';
+import type { FileMap } from '~/lib/stores/files';
 import { getSnapshotVersions, getVersionedSnapshot, openDatabase } from '~/lib/persistence/db';
-import { calculateChangedFiles, reconstructFullSnapshot } from '~/lib/persistence/snapshotUtils';
+import { calculateChangedFiles } from '~/lib/persistence/snapshotUtils';
 import { getCurrentChatId, resolveActualChatId } from '~/utils/fileLocks';
 import { createScopedLogger } from '~/utils/logger';
 
@@ -48,108 +48,61 @@ export function useSnapshotFileDiff(): SnapshotDiffData {
     // Add a small delay to prevent diff calculation during rapid file changes (like uploads)
     timeoutRef.current = setTimeout(() => {
       const loadSnapshotDiff = async () => {
-        const chatId = getCurrentChatId();
-
-        if (!chatId) {
-          setDiffData({ fileChanges: {}, isLoading: false });
-          return;
-        }
-
-        setDiffData((prev) => ({ ...prev, isLoading: true, error: undefined }));
-
         try {
+          setDiffData((prev) => ({ ...prev, isLoading: true, error: undefined }));
+
           const db = await openDatabase();
 
           if (!db) {
-            throw new Error('Database not available');
+            throw new Error('Database unavailable');
           }
 
-          // Resolve the actual chat ID
-          const actualChatId = await resolveActualChatId(chatId);
+          const currentChatId = getCurrentChatId();
 
-          // Get version index
+          if (!currentChatId) {
+            setDiffData({ fileChanges: {}, isLoading: false });
+            return;
+          }
+
+          const actualChatId = await resolveActualChatId(currentChatId);
           const versionIndex = await getSnapshotVersions(db, actualChatId);
 
           if (!versionIndex || versionIndex.versions.length === 0) {
-            // No snapshots exist yet - don't show any diffs until baseline is established
-            if (isMounted) {
-              setDiffData({
-                fileChanges: {},
-                isLoading: false,
-              });
-            }
-
+            setDiffData({ fileChanges: {}, isLoading: false });
             return;
           }
 
           // Get first and latest snapshots
-          const firstVersion = versionIndex.versions[0];
-          const latestVersion = versionIndex.versions[versionIndex.versions.length - 1];
-
-          let firstSnapshot = await getVersionedSnapshot(db, actualChatId, firstVersion.version);
-          let latestSnapshot = await getVersionedSnapshot(db, actualChatId, latestVersion.version);
+          const firstSnapshot = await getVersionedSnapshot(db, actualChatId, versionIndex.versions[0].version);
+          const latestSnapshot = await getVersionedSnapshot(db, actualChatId, versionIndex.latestVersion);
 
           if (!firstSnapshot || !latestSnapshot) {
             throw new Error('Failed to load snapshots');
           }
 
-          // Always reconstruct full snapshots for both first and latest
-          if (!firstSnapshot.isFullSnapshot) {
-            const reconstructed = await reconstructFullSnapshot(db, actualChatId, firstSnapshot.version);
+          // Since all snapshots are now full snapshots, we can directly use their files
+          const firstFiles = firstSnapshot.files;
+          const latestFiles = latestSnapshot.files;
 
-            if (reconstructed) {
-              firstSnapshot = reconstructed;
-            }
-          }
+          logger.info(
+            `Comparing snapshots - First: ${Object.keys(firstFiles).length} files, Latest: ${Object.keys(latestFiles).length} files`,
+          );
 
-          // Always reconstruct the latest snapshot to get the full file map
-          if (!latestSnapshot.isFullSnapshot) {
-            const reconstructed = await reconstructFullSnapshot(db, actualChatId, latestSnapshot.version);
+          // Calculate changes between first and latest snapshots
+          const changes = calculateChangedFiles(firstFiles, latestFiles);
 
-            if (reconstructed) {
-              latestSnapshot = reconstructed;
-            }
-          }
-
-          /*
-           * Compare first snapshot vs current workbench files
-           * This ensures we see all current files compared to baseline,
-           * regardless of differential snapshot content
-           */
-          const changes = calculateChangedFiles(firstSnapshot.files, files);
-
-          if (versionIndex.versions.length === 1 || changes.length === 0) {
-            if (isMounted) {
-              setDiffData({
-                fileChanges: {},
-                firstSnapshot,
-                latestSnapshot,
-                isLoading: false,
-              });
-            }
-
-            return;
-          }
-
-          // Convert to our diff format
+          // Transform changes into our diff format
           const fileChanges: Record<string, SnapshotFileDiff> = {};
 
-          for (const change of changes) {
-            // For files, get the current content from workbench
-            const currentFile = files[change.path];
-            const currentContent =
-              currentFile && currentFile.type === 'file' ? (currentFile as File).content : change.newContent;
-
+          changes.forEach((change) => {
             fileChanges[change.path] = {
               filePath: change.path,
               changeType: change.type,
               originalContent: change.oldContent,
-              currentContent,
+              currentContent: change.newContent,
               hasChanges: true,
             };
-          }
-
-          // No need for additional workbench file checking since we're already comparing against current files
+          });
 
           if (isMounted) {
             setDiffData({
@@ -159,8 +112,6 @@ export function useSnapshotFileDiff(): SnapshotDiffData {
               isLoading: false,
             });
           }
-
-          logger.info(`Loaded snapshot diff: ${Object.keys(fileChanges).length} changed files`);
         } catch (error) {
           logger.error('Failed to load snapshot diff:', error);
 
@@ -168,14 +119,14 @@ export function useSnapshotFileDiff(): SnapshotDiffData {
             setDiffData({
               fileChanges: {},
               isLoading: false,
-              error: error instanceof Error ? error.message : 'Failed to load snapshot diff',
+              error: error instanceof Error ? error.message : 'Unknown error',
             });
           }
         }
       };
 
       loadSnapshotDiff();
-    }, 500); // 500ms delay to allow upload operations to settle
+    }, 1000); // 1 second delay
 
     return () => {
       isMounted = false;
