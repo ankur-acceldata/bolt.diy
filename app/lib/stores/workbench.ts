@@ -14,13 +14,14 @@ import fileSaver from 'file-saver';
 import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
 import { path } from '~/utils/path';
 import { extractRelativePath } from '~/utils/diff';
-import { description } from '~/lib/persistence';
+import { description, getMessages } from '~/lib/persistence';
 import Cookies from 'js-cookie';
 import { createSampler } from '~/utils/sampler';
 import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
 import { getCurrentChatId, resolveActualChatId } from '~/utils/fileLocks';
 import { triggerSnapshot } from '~/lib/persistence/snapshotUtils';
 import { db } from '~/lib/persistence/useChatHistory';
+import { streamingState } from '~/lib/stores/streaming';
 
 const { saveAs } = fileSaver;
 
@@ -59,7 +60,11 @@ export class WorkbenchStore {
     import.meta.hot?.data.deployAlert ?? atom<DeployAlert | undefined>(undefined);
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
+
+  // Track user upload state
+  #userUploadInProgress = false;
   #globalExecutionQueue = Promise.resolve();
+
   constructor() {
     if (import.meta.hot) {
       import.meta.hot.data.artifacts = this.artifacts;
@@ -225,7 +230,7 @@ export class WorkbenchStore {
     this.#editorStore.setSelectedFile(filePath);
   }
 
-  async saveFile(filePath: string) {
+  async saveFile(filePath: string, skipSnapshot: boolean = false) {
     const documents = this.#editorStore.documents.get();
     const document = documents[filePath];
 
@@ -246,14 +251,32 @@ export class WorkbenchStore {
 
     this.unsavedFiles.set(newUnsavedFiles);
 
-    // Trigger a snapshot for user edits
-    if (db) {
+    // Trigger a snapshot for user edits - skip for batch imports
+    if (db && !skipSnapshot) {
       try {
         const mixedChatId = getCurrentChatId();
         const actualChatId = await resolveActualChatId(mixedChatId);
+
+        // Wait for file watcher to pick up the files (100ms buffer + small safety margin)
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
         const files = this.files.get();
-        console.log('DEBUG: saveFile - triggering snapshot with', Object.keys(files).length, 'files');
-        triggerSnapshot(db, actualChatId, files, 'user-edit');
+
+        // Only create snapshot if there are actually files to snapshot OR if user upload is in progress
+        if (Object.keys(files).length > 0 || this.isUserUploadInProgress()) {
+          console.log(
+            'DEBUG: saveFile - triggering user-edit snapshot with',
+            Object.keys(files).length,
+            'files',
+            this.isUserUploadInProgress() ? '(user upload in progress)' : '',
+          );
+
+          const lastMessageId = await this.getLastMessageId(db);
+
+          triggerSnapshot(db, actualChatId, files, 'user-edit', lastMessageId);
+        } else {
+          console.log('DEBUG: saveFile - Skipping user-edit snapshot creation - no files to snapshot');
+        }
       } catch (error) {
         console.error('Failed to trigger snapshot after file save:', error);
       }
@@ -303,6 +326,14 @@ export class WorkbenchStore {
 
   resetAllFileModifications() {
     this.#filesStore.resetFileModifications();
+  }
+
+  async getLastMessageId(db: IDBDatabase) {
+    const mixedChatId = getCurrentChatId();
+    const actualChatId = await resolveActualChatId(mixedChatId);
+    const chat = await getMessages(db, actualChatId);
+
+    return chat?.messages[chat.messages.length - 1].id;
   }
 
   /**
@@ -376,16 +407,36 @@ export class WorkbenchStore {
           this.unsavedFiles.set(newUnsavedFiles);
         }
 
-        // Trigger a snapshot for file uploads/creation
+        /*
+         * Trigger a snapshot for file uploads/creation
+         * User uploads should always create snapshots regardless of streaming state
+         */
         if (db) {
           try {
             const mixedChatId = getCurrentChatId();
             const actualChatId = await resolveActualChatId(mixedChatId);
-            const files = this.files.get();
-            console.log('DEBUG: createFile - triggering snapshot with', Object.keys(files).length, 'files');
 
-            // Use 'upload' type for file creation, which could be from upload or manual creation
-            triggerSnapshot(db, actualChatId, files, 'upload');
+            // Wait for file watcher to pick up the files (100ms buffer + small safety margin)
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            const files = this.files.get();
+
+            // Only create snapshot if there are actually files to snapshot OR if user upload is in progress
+            if (Object.keys(files).length > 0 || this.isUserUploadInProgress()) {
+              console.log(
+                'DEBUG: createFile - triggering upload snapshot with',
+                Object.keys(files).length,
+                'files',
+                this.isUserUploadInProgress() ? '(user upload in progress)' : '',
+              );
+
+              const lastMessageId = await this.getLastMessageId(db);
+
+              // Use 'upload' type for file creation - this represents user uploads
+              triggerSnapshot(db, actualChatId, files, 'upload', lastMessageId);
+            } else {
+              console.log('DEBUG: createFile - Skipping upload snapshot creation - no files to snapshot');
+            }
           } catch (error) {
             console.error('Failed to trigger snapshot after file creation:', error);
           }
@@ -617,37 +668,61 @@ export class WorkbenchStore {
 
       if (!isStreaming && data.action.content) {
         console.log('DEBUG: _runAction - Before saveFile, current files:', Object.keys(this.files.get()).length);
-        await this.saveFile(fullPath);
+
+        // Skip individual snapshots for batch imports - we'll create one after all files are processed
+        await this.saveFile(fullPath, true);
+
         console.log('DEBUG: _runAction - After saveFile, current files:', Object.keys(this.files.get()).length);
+
+        // Check if this is the last file action in the batch by seeing if we have pending file actions
+        const actions = artifact.runner.actions.get();
+        const pendingFileActions = Object.values(actions).filter(
+          (action) => action.type === 'file' && !action.executed,
+        );
+
+        console.log('DEBUG: _runAction - Pending file actions:', pendingFileActions.length);
+
+        /*
+         * If no more pending file actions, trigger snapshot for the complete import
+         * But ONLY for user imports, not AI-generated file batches
+         */
+        if (pendingFileActions.length <= 1) {
+          // <= 1 because current action hasn't been marked executed yet
+          const isCurrentlyStreaming = streamingState.get();
+
+          // Only create batch snapshots for user imports (not during AI streaming)
+          if (!isCurrentlyStreaming && db) {
+            try {
+              const mixedChatId = getCurrentChatId();
+              const actualChatId = await resolveActualChatId(mixedChatId);
+
+              // Wait for file watcher to pick up the files (100ms buffer + small safety margin)
+              await new Promise((resolve) => setTimeout(resolve, 200));
+
+              const files = this.files.get();
+
+              // Only create snapshot if there are actually files to snapshot OR if user upload is in progress
+              if (Object.keys(files).length > 0 || this.isUserUploadInProgress()) {
+                console.log(
+                  'DEBUG: _runAction - Triggering user batch import snapshot with',
+                  Object.keys(files).length,
+                  'files',
+                  this.isUserUploadInProgress() ? '(user upload in progress)' : '',
+                );
+                triggerSnapshot(db, actualChatId, files, 'upload', data.messageId);
+              } else {
+                console.log('DEBUG: _runAction - Skipping batch snapshot creation - no files to snapshot');
+              }
+            } catch (error) {
+              console.error('Failed to trigger snapshot after batch import:', error);
+            }
+          }
+        }
       }
 
       if (!isStreaming) {
         await artifact.runner.runAction(data);
         this.resetAllFileModifications();
-
-        console.log(
-          'DEBUG: _runAction - Before snapshot trigger, current files:',
-          Object.keys(this.files.get()).length,
-        );
-
-        // Add a small delay to ensure file system events are processed
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        console.log('DEBUG: _runAction - After 500ms delay, current files:', Object.keys(this.files.get()).length);
-
-        // Trigger a snapshot for AI-generated changes
-        if (db) {
-          try {
-            const mixedChatId = getCurrentChatId();
-            const actualChatId = await resolveActualChatId(mixedChatId);
-            const files = this.files.get();
-            console.log('DEBUG: _runAction - Final files before snapshot:', Object.keys(files).length, 'files');
-            console.log('DEBUG: _runAction - Final files preview:', Object.keys(files).slice(0, 5));
-            triggerSnapshot(db, actualChatId, files, 'ai-response', messageId);
-          } catch (error) {
-            console.error('Failed to trigger snapshot after AI action:', error);
-          }
-        }
       }
     } else {
       await artifact.runner.runAction(data);
@@ -940,6 +1015,16 @@ export class WorkbenchStore {
     } catch (error) {
       console.error('Failed to execute action:', error);
     }
+  }
+
+  // Methods to track user upload state
+  setUserUploadInProgress(inProgress: boolean) {
+    this.#userUploadInProgress = inProgress;
+    console.log('DEBUG: User upload state changed:', inProgress);
+  }
+
+  isUserUploadInProgress(): boolean {
+    return this.#userUploadInProgress;
   }
 }
 

@@ -5,6 +5,7 @@ import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
+import { streamingState } from '~/lib/stores/streaming';
 import {
   getMessages,
   getNextId,
@@ -13,7 +14,6 @@ import {
   setMessages,
   duplicateChat,
   createChatFromMessages,
-  getSnapshot,
   setSnapshot,
   setVersionedSnapshot,
   getLatestVersionedSnapshot,
@@ -69,25 +69,22 @@ export function useChatHistory() {
     }
 
     if (mixedId) {
-      Promise.all([
-        getMessages(db, mixedId),
-        getSnapshot(db, mixedId), // Fetch snapshot from DB
-      ])
+      Promise.all([getMessages(db, mixedId), getLatestVersionedSnapshot(db, mixedId)])
         .then(async ([storedMessages, snapshot]) => {
           if (storedMessages && storedMessages.messages.length > 0) {
             /*
              * const snapshotStr = localStorage.getItem(`snapshot:${mixedId}`); // Remove localStorage usage
              * const snapshot: Snapshot = snapshotStr ? JSON.parse(snapshotStr) : { chatIndex: 0, files: {} }; // Use snapshot from DB
              */
-            const validSnapshot = snapshot || { chatIndex: '', files: {} }; // Ensure snapshot is not undefined
-            const summary = validSnapshot.summary;
+            const validSnapshot = snapshot;
+            const summary = validSnapshot?.summary;
 
             const rewindId = searchParams.get('rewindTo');
             let startingIdx = -1;
             const endingIdx = rewindId
               ? storedMessages.messages.findIndex((m) => m.id === rewindId) + 1
               : storedMessages.messages.length;
-            const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot.chatIndex);
+            const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot?.chatIndex);
 
             if (snapshotIndex >= 0 && snapshotIndex < endingIdx) {
               startingIdx = snapshotIndex;
@@ -105,6 +102,7 @@ export function useChatHistory() {
             }
 
             setArchivedMessages(archivedMessages);
+            console.log('DEBUG: startingIdx', startingIdx);
 
             if (startingIdx > 0) {
               const files = Object.entries(validSnapshot?.files || {})
@@ -119,6 +117,9 @@ export function useChatHistory() {
                   };
                 })
                 .filter((x): x is { content: string; path: string } => !!x); // Type assertion
+              console.log('DEBUG: validSnapshot', validSnapshot);
+              console.log('DEBUG: files', files);
+
               const projectCommands = await detectProjectCommands(files);
 
               // Call the modified function to get only the command actions string
@@ -225,8 +226,11 @@ ${value.content}
           return;
         }
 
-        // Determine change type based on context
-        let changeType: ChangeType = 'ai-response'; // Default to AI response
+        /*
+         * Determine change type based on context
+         * Since AI responses are now handled in Chat.client.tsx, this defaults to user-edit
+         */
+        let changeType: ChangeType = 'user-edit';
 
         // Check if this is an initial snapshot (no previous snapshots)
         const latestSnapshot = await getLatestVersionedSnapshot(db, actualChatId);
@@ -292,6 +296,8 @@ ${value.content}
     if (!validSnapshot?.files) {
       return;
     }
+
+    console.log('DEBUG: validSnapshot', validSnapshot);
 
     Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
       if (key.startsWith(container.workdir)) {
@@ -395,9 +401,21 @@ ${value.content}
         }
       }
 
-      // Only take snapshot if this is a new message being added, not during page load
+      /*
+       * Only take snapshot if this is a new message being added, not during page load
+       * Skip ALL snapshots during AI streaming since AI response snapshots are now handled in Chat.client.tsx onFinish
+       */
       if (!isInitialLoad && messages.length > initialMessages.length) {
-        takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+        const isCurrentlyStreaming = streamingState.get();
+
+        /*
+         * Skip snapshot creation only during active AI streaming
+         * AI response snapshots are now centralized to Chat.client.tsx onFinish callback
+         * But allow snapshots for user imports (like folder uploads) even if they create assistant messages
+         */
+        if (!isCurrentlyStreaming) {
+          takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+        }
       }
 
       if (!description.get() && firstArtifact?.title) {
@@ -463,6 +481,10 @@ ${value.content}
       }
 
       try {
+        // Set user upload state to indicate import is in progress
+        workbenchStore.setUserUploadInProgress(true);
+        console.log('DEBUG: importChat - Starting user upload, setting upload state to true');
+
         const newId = await createChatFromMessages(db, description, messages, metadata);
 
         /*
@@ -473,7 +495,19 @@ ${value.content}
 
         window.location.href = `/chat/${newId}`;
         toast.success('Chat imported successfully');
+
+        // Set a timeout to clear upload state as fallback (in case AI doesn't complete)
+        setTimeout(() => {
+          if (workbenchStore.isUserUploadInProgress()) {
+            workbenchStore.setUserUploadInProgress(false);
+            console.log('DEBUG: importChat - Timeout fallback: clearing upload state');
+          }
+        }, 30000); // 30 second timeout
       } catch (error) {
+        // Clear upload state on error
+        workbenchStore.setUserUploadInProgress(false);
+        console.log('DEBUG: importChat - Error during import, clearing upload state');
+
         if (error instanceof Error) {
           toast.error('Failed to import chat: ' + error.message);
         } else {

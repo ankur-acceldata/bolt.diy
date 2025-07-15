@@ -493,7 +493,6 @@ export async function setVersionedSnapshot(
           version,
           timestamp: versionedSnapshot.timestamp,
           changeType,
-          isFullSnapshot: versionedSnapshot.isFullSnapshot,
           snapshotId,
         };
 
