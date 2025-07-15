@@ -182,17 +182,20 @@ export async function createVersionedSnapshot(
     changeType,
   });
 
+  console.log('DEBUG: Will calculate modified files against first snapshot (v1) instead of latest');
+
   const versionIndex = await getSnapshotVersions(db, chatId);
   const version = versionIndex ? versionIndex.latestVersion + 1 : 1;
 
-  // Calculate modified files by comparing with the previous snapshot
+  // Calculate modified files by comparing with the first snapshot (version 1)
   let modifiedFiles: string[] = Object.keys(files);
 
   if (versionIndex && versionIndex.versions.length > 0) {
-    const lastSnapshot = await getVersionedSnapshot(db, chatId, versionIndex.latestVersion);
+    // Use version 1 (first snapshot) instead of the latest version
+    const firstSnapshot = await getVersionedSnapshot(db, chatId, 1);
 
-    if (lastSnapshot) {
-      const changes = calculateChangedFiles(lastSnapshot.files, files);
+    if (firstSnapshot) {
+      const changes = calculateChangedFiles(firstSnapshot.files, files);
       modifiedFiles = changes.map((change) => change.path);
     }
   }
@@ -266,7 +269,7 @@ export function triggerSnapshot(
   chatId: string,
   files: FileMap,
   changeType: ChangeType,
-  chatIndex?: string,
+  chatIndex: string,
   summary?: string,
   debounceMs: number = 2000,
 ): void {
@@ -294,7 +297,7 @@ export function triggerSnapshot(
       const effectiveChatId = actualChatId;
 
       // Use a default chatIndex if not provided
-      const effectiveChatIndex = chatIndex || `snapshot-${Date.now()}`;
+      const effectiveChatIndex = chatIndex;
 
       console.log('DEBUG: triggerSnapshot processing:', {
         effectiveChatId,

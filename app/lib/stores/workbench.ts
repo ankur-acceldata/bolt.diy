@@ -14,7 +14,7 @@ import fileSaver from 'file-saver';
 import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
 import { path } from '~/utils/path';
 import { extractRelativePath } from '~/utils/diff';
-import { description } from '~/lib/persistence';
+import { description, getMessages } from '~/lib/persistence';
 import Cookies from 'js-cookie';
 import { createSampler } from '~/utils/sampler';
 import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
@@ -270,7 +270,10 @@ export class WorkbenchStore {
             'files',
             this.isUserUploadInProgress() ? '(user upload in progress)' : '',
           );
-          triggerSnapshot(db, actualChatId, files, 'user-edit');
+
+          const lastMessageId = await this.getLastMessageId(db);
+
+          triggerSnapshot(db, actualChatId, files, 'user-edit', lastMessageId);
         } else {
           console.log('DEBUG: saveFile - Skipping user-edit snapshot creation - no files to snapshot');
         }
@@ -323,6 +326,14 @@ export class WorkbenchStore {
 
   resetAllFileModifications() {
     this.#filesStore.resetFileModifications();
+  }
+
+  async getLastMessageId(db: IDBDatabase) {
+    const mixedChatId = getCurrentChatId();
+    const actualChatId = await resolveActualChatId(mixedChatId);
+    const chat = await getMessages(db, actualChatId);
+
+    return chat?.messages[chat.messages.length - 1].id;
   }
 
   /**
@@ -419,8 +430,10 @@ export class WorkbenchStore {
                 this.isUserUploadInProgress() ? '(user upload in progress)' : '',
               );
 
+              const lastMessageId = await this.getLastMessageId(db);
+
               // Use 'upload' type for file creation - this represents user uploads
-              triggerSnapshot(db, actualChatId, files, 'upload');
+              triggerSnapshot(db, actualChatId, files, 'upload', lastMessageId);
             } else {
               console.log('DEBUG: createFile - Skipping upload snapshot creation - no files to snapshot');
             }

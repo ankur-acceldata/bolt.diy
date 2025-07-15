@@ -14,7 +14,6 @@ import {
   setMessages,
   duplicateChat,
   createChatFromMessages,
-  getSnapshot,
   setSnapshot,
   setVersionedSnapshot,
   getLatestVersionedSnapshot,
@@ -70,25 +69,22 @@ export function useChatHistory() {
     }
 
     if (mixedId) {
-      Promise.all([
-        getMessages(db, mixedId),
-        getSnapshot(db, mixedId), // Fetch snapshot from DB
-      ])
+      Promise.all([getMessages(db, mixedId), getLatestVersionedSnapshot(db, mixedId)])
         .then(async ([storedMessages, snapshot]) => {
           if (storedMessages && storedMessages.messages.length > 0) {
             /*
              * const snapshotStr = localStorage.getItem(`snapshot:${mixedId}`); // Remove localStorage usage
              * const snapshot: Snapshot = snapshotStr ? JSON.parse(snapshotStr) : { chatIndex: 0, files: {} }; // Use snapshot from DB
              */
-            const validSnapshot = snapshot || { chatIndex: '', files: {} }; // Ensure snapshot is not undefined
-            const summary = validSnapshot.summary;
+            const validSnapshot = snapshot;
+            const summary = validSnapshot?.summary;
 
             const rewindId = searchParams.get('rewindTo');
             let startingIdx = -1;
             const endingIdx = rewindId
               ? storedMessages.messages.findIndex((m) => m.id === rewindId) + 1
               : storedMessages.messages.length;
-            const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot.chatIndex);
+            const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot?.chatIndex);
 
             if (snapshotIndex >= 0 && snapshotIndex < endingIdx) {
               startingIdx = snapshotIndex;
@@ -106,6 +102,7 @@ export function useChatHistory() {
             }
 
             setArchivedMessages(archivedMessages);
+            console.log('DEBUG: startingIdx', startingIdx);
 
             if (startingIdx > 0) {
               const files = Object.entries(validSnapshot?.files || {})
@@ -120,6 +117,9 @@ export function useChatHistory() {
                   };
                 })
                 .filter((x): x is { content: string; path: string } => !!x); // Type assertion
+              console.log('DEBUG: validSnapshot', validSnapshot);
+              console.log('DEBUG: files', files);
+
               const projectCommands = await detectProjectCommands(files);
 
               // Call the modified function to get only the command actions string
@@ -296,6 +296,8 @@ ${value.content}
     if (!validSnapshot?.files) {
       return;
     }
+
+    console.log('DEBUG: validSnapshot', validSnapshot);
 
     Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
       if (key.startsWith(container.workdir)) {
