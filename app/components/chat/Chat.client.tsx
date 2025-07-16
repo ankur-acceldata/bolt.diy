@@ -150,6 +150,13 @@ export const ChatImpl = memo(
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
+    const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+
+    // Debug selectedTemplate changes
+    useEffect(() => {
+      console.log('selectedTemplate changed:', selectedTemplate);
+    }, [selectedTemplate]);
+
     const {
       messages,
       isLoading,
@@ -172,6 +179,7 @@ export const ChatImpl = memo(
         contextOptimization: contextOptimizationEnabled,
         chatMode,
         designScheme,
+        selectedTemplate,
         supabase: {
           isConnected: supabaseConn.isConnected,
           hasSelectedProject: !!selectedProject,
@@ -385,7 +393,8 @@ export const ChatImpl = memo(
       if (!chatStarted) {
         setFakeLoading(true);
 
-        if (autoSelectTemplate) {
+        // Only auto-select template if no template has been manually selected
+        if (autoSelectTemplate && !selectedTemplate) {
           const { template, title } = await selectStarterTemplate({
             message: finalMessageContent,
             model,
@@ -638,6 +647,8 @@ export const ChatImpl = memo(
         setDesignScheme={setDesignScheme}
         selectedElement={selectedElement}
         setSelectedElement={setSelectedElement}
+        selectedTemplate={selectedTemplate}
+        setSelectedTemplate={setSelectedTemplate}
       />
     );
   },

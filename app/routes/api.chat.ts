@@ -38,22 +38,27 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
-  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme } = await request.json<{
-    messages: Messages;
-    files: any;
-    promptId?: string;
-    contextOptimization: boolean;
-    chatMode: 'discuss' | 'build';
-    designScheme?: DesignScheme;
-    supabase?: {
-      isConnected: boolean;
-      hasSelectedProject: boolean;
-      credentials?: {
-        anonKey?: string;
-        supabaseUrl?: string;
+  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, selectedTemplate } =
+    await request.json<{
+      messages: Messages;
+      files: any;
+      promptId?: string;
+      contextOptimization: boolean;
+      chatMode: 'discuss' | 'build';
+      designScheme?: DesignScheme;
+      selectedTemplate?: {
+        id: string;
+        name: string;
       };
-    };
-  }>();
+      supabase?: {
+        isConnected: boolean;
+        hasSelectedProject: boolean;
+        credentials?: {
+          anonKey?: string;
+          supabaseUrl?: string;
+        };
+      };
+    }>();
 
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');
@@ -253,6 +258,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               contextFiles: filteredFiles,
               chatMode,
               designScheme,
+              selectedTemplate,
               summary,
               messageSliceId,
             });
@@ -294,6 +300,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           contextFiles: filteredFiles,
           chatMode,
           designScheme,
+          selectedTemplate,
           summary,
           messageSliceId,
         });

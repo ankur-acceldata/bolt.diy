@@ -16,6 +16,7 @@ import type { ProviderInfo } from '~/types/model';
 import { ColorSchemeDialog } from '~/components/ui/ColorSchemeDialog';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
+import { StarterTemplateSelector } from './StarterTemplateSelector';
 
 interface ChatBoxProps {
   isModelSettingsCollapsed: boolean;
@@ -58,6 +59,8 @@ interface ChatBoxProps {
   setDesignScheme?: (scheme: DesignScheme) => void;
   selectedElement?: ElementInfo | null;
   setSelectedElement?: ((element: ElementInfo | null) => void) | undefined;
+  selectedTemplate?: any;
+  setSelectedTemplate?: (template: any) => void;
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
@@ -73,6 +76,20 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
          */
       )}
     >
+      {/* Show template selector when chat hasn't started */}
+      {!props.chatStarted && (
+        <div className="mb-6">
+          <StarterTemplateSelector
+            onTemplateSelect={(template) => {
+              console.log('Template selected:', template);
+              console.log('setSelectedTemplate function:', props.setSelectedTemplate);
+              props.setSelectedTemplate?.(template);
+            }}
+            selectedTemplate={props.selectedTemplate}
+          />
+        </div>
+      )}
+
       <svg className={classNames(styles.PromptEffectContainer)}>
         <defs>
           <linearGradient
@@ -172,7 +189,12 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             'w-full pl-4 pt-4 pr-16 outline-none resize-none text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary bg-transparent text-sm',
             'transition-all duration-200',
             'hover:border-bolt-elements-focus',
+            {
+              'cursor-not-allowed opacity-50': !props.chatStarted && !props.selectedTemplate,
+            },
           )}
+          disabled={!props.chatStarted && !props.selectedTemplate}
+          title={!props.chatStarted && !props.selectedTemplate ? 'Select a Template to start with' : ''}
           onDragEnter={(e) => {
             e.preventDefault();
             e.currentTarget.style.border = '2px solid #1488fc';
@@ -221,6 +243,11 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 return;
               }
 
+              // Don't send message if no template selected
+              if (!props.chatStarted && !props.selectedTemplate) {
+                return;
+              }
+
               props.handleSendMessage?.(event);
             }
           }}
@@ -233,7 +260,13 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             minHeight: props.TEXTAREA_MIN_HEIGHT,
             maxHeight: props.TEXTAREA_MAX_HEIGHT,
           }}
-          placeholder={props.chatMode === 'build' ? 'How can Bolt help you today?' : 'What would you like to discuss?'}
+          placeholder={
+            !props.chatStarted && !props.selectedTemplate
+              ? 'Select a template to start...'
+              : props.chatMode === 'build'
+                ? 'How can Bolt help you today?'
+                : 'What would you like to discuss?'
+          }
           translate="no"
         />
         <ClientOnly>
@@ -241,10 +274,19 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             <SendButton
               show={props.input.length > 0 || props.isStreaming || props.uploadedFiles.length > 0}
               isStreaming={props.isStreaming}
-              disabled={!props.providerList || props.providerList.length === 0}
+              disabled={
+                !props.providerList ||
+                props.providerList.length === 0 ||
+                (!props.chatStarted && !props.selectedTemplate)
+              }
               onClick={(event) => {
                 if (props.isStreaming) {
                   props.handleStop?.();
+                  return;
+                }
+
+                // Don't send if no template selected
+                if (!props.chatStarted && !props.selectedTemplate) {
                   return;
                 }
 
