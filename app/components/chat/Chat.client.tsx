@@ -9,7 +9,7 @@ import { useAnimate } from 'framer-motion';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
 import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
-import { description, useChatHistory, db } from '~/lib/persistence';
+import { description, useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
@@ -29,8 +29,6 @@ import { filesToArtifacts } from '~/utils/fileUtils';
 import { supabaseConnection } from '~/lib/stores/supabase';
 import { defaultDesignScheme, type DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
-import { getCurrentChatId, resolveActualChatId } from '~/utils/fileLocks';
-import { triggerSnapshot } from '~/lib/persistence/snapshotUtils';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -150,6 +148,13 @@ export const ChatImpl = memo(
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
+    const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+
+    // Debug selectedTemplate changes
+    useEffect(() => {
+      console.log('selectedTemplate changed:', selectedTemplate);
+    }, [selectedTemplate]);
+
     const {
       messages,
       isLoading,
@@ -172,6 +177,7 @@ export const ChatImpl = memo(
         contextOptimization: contextOptimizationEnabled,
         chatMode,
         designScheme,
+        selectedTemplate,
         supabase: {
           isConnected: supabaseConn.isConnected,
           hasSelectedProject: !!selectedProject,
@@ -215,23 +221,6 @@ export const ChatImpl = memo(
         if (workbenchStore.isUserUploadInProgress()) {
           workbenchStore.setUserUploadInProgress(false);
           console.log('DEBUG: onFinish - Clearing user upload state after AI response completion');
-        }
-
-        // Trigger AI response snapshot after the complete response is finished
-        if (db) {
-          try {
-            const mixedChatId = getCurrentChatId();
-            const actualChatId = await resolveActualChatId(mixedChatId);
-            const files = workbenchStore.files.get();
-
-            // Add a small delay to ensure all file operations are completed
-            await new Promise((resolve) => setTimeout(resolve, 500));
-
-            console.log('DEBUG: onFinish - Triggering AI response snapshot with', Object.keys(files).length, 'files');
-            triggerSnapshot(db, actualChatId, files, 'ai-response', message.id);
-          } catch (error) {
-            console.error('Failed to trigger AI response snapshot in onFinish:', error);
-          }
         }
       },
       initialMessages,
@@ -385,7 +374,8 @@ export const ChatImpl = memo(
       if (!chatStarted) {
         setFakeLoading(true);
 
-        if (autoSelectTemplate) {
+        // Only auto-select template if no template has been manually selected
+        if (autoSelectTemplate && !selectedTemplate) {
           const { template, title } = await selectStarterTemplate({
             message: finalMessageContent,
             model,
@@ -638,6 +628,8 @@ export const ChatImpl = memo(
         setDesignScheme={setDesignScheme}
         selectedElement={selectedElement}
         setSelectedElement={setSelectedElement}
+        selectedTemplate={selectedTemplate}
+        setSelectedTemplate={setSelectedTemplate}
       />
     );
   },

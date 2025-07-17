@@ -1,0 +1,10 @@
+[
+  {
+    "id": "java-application",
+    "name": "Java Application"
+  },
+  {
+    "id": "python-application",
+    "name": "Python Application"
+  }
+]

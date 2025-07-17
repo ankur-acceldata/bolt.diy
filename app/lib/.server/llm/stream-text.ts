@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { convertToCoreMessages, streamText as _streamText, type Message } from 'ai';
 import { MAX_TOKENS, type FileMap } from './constants';
 import { getSystemPrompt } from '~/lib/common/prompts/prompts';
@@ -40,6 +41,10 @@ export async function streamText(props: {
   messageSliceId?: number;
   chatMode?: 'discuss' | 'build';
   designScheme?: DesignScheme;
+  selectedTemplate?: {
+    id: string;
+    name: string;
+  };
 }) {
   const {
     messages,
@@ -54,6 +59,7 @@ export async function streamText(props: {
     summary,
     chatMode,
     designScheme,
+    selectedTemplate,
   } = props;
   let currentModel = DEFAULT_MODEL;
   let currentProvider = DEFAULT_PROVIDER.name;
@@ -118,8 +124,25 @@ export async function streamText(props: {
     `Max tokens for model ${modelDetails.name} is ${dynamicMaxTokens} based on ${modelDetails.maxTokenAllowed} or ${MAX_TOKENS}`,
   );
 
+  // Determine which prompt to use based on selected template
+  let templatePromptId = props.promptId || 'default';
+
+  if (selectedTemplate && selectedTemplate.id) {
+    switch (selectedTemplate.id) {
+      case 'java-application':
+        templatePromptId = 'java';
+        break;
+      case 'python-application':
+        templatePromptId = 'python';
+        break;
+      default:
+        templatePromptId = props.promptId || 'default';
+        break;
+    }
+  }
+
   let systemPrompt =
-    PromptLibrary.getPropmtFromLibrary(promptId || 'default', {
+    PromptLibrary.getPropmtFromLibrary(templatePromptId, {
       cwd: WORK_DIR,
       allowedHtmlElements: allowedHTMLElements,
       modificationTagName: MODIFICATIONS_TAG_NAME,

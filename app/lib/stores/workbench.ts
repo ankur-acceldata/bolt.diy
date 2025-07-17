@@ -337,6 +337,24 @@ export class WorkbenchStore {
   }
 
   /**
+   * Fetches a specific message by its ID from the current chat
+   * @param db The database instance
+   * @param messageId The ID of the message to fetch
+   * @returns The found message or undefined if not found
+   */
+  async getMessageById(db: IDBDatabase, messageId: string) {
+    const mixedChatId = getCurrentChatId();
+    const actualChatId = await resolveActualChatId(mixedChatId);
+    const chat = await getMessages(db, actualChatId);
+
+    if (!chat?.messages) {
+      return undefined;
+    }
+
+    return chat.messages.find((message) => message.id === messageId);
+  }
+
+  /**
    * Lock a file to prevent edits
    * @param filePath Path to the file to lock
    * @returns True if the file was successfully locked
@@ -626,6 +644,25 @@ export class WorkbenchStore {
   }
   async _runAction(data: ActionCallbackData, isStreaming: boolean = false) {
     const { messageId } = data;
+    let isFromAI = false;
+
+    try {
+      if (db) {
+        const triggeringMessage = await this.getMessageById(db, messageId);
+
+        if (triggeringMessage) {
+          isFromAI = triggeringMessage.role === 'assistant';
+
+          if (isFromAI) {
+            console.log('This action was triggered by an AI message');
+
+            // Your logic here
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check message origin:', error);
+    }
 
     const artifact = this.#getArtifact(messageId);
 
@@ -709,7 +746,7 @@ export class WorkbenchStore {
                   'files',
                   this.isUserUploadInProgress() ? '(user upload in progress)' : '',
                 );
-                triggerSnapshot(db, actualChatId, files, 'upload', data.messageId);
+                triggerSnapshot(db, actualChatId, files, isFromAI ? 'ai-response' : 'upload', data.messageId);
               } else {
                 console.log('DEBUG: _runAction - Skipping batch snapshot creation - no files to snapshot');
               }
