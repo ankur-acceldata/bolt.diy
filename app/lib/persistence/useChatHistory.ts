@@ -15,14 +15,12 @@ import {
   duplicateChat,
   createChatFromMessages,
   setSnapshot,
-  setVersionedSnapshot,
   getLatestVersionedSnapshot,
-  getNextSnapshotVersion,
   type IChatMetadata,
 } from './db';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot, ChangeType } from './types';
-import { createVersionedSnapshot, hasFilesChanged, createInitialSnapshot, hasExistingSnapshots } from './snapshotUtils';
+import { createInitialSnapshot, hasExistingSnapshots, triggerSnapshot } from './snapshotUtils';
 import { webcontainer } from '~/lib/webcontainer';
 import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
@@ -152,7 +150,7 @@ ${value.content}
                       }
                     })
                     .join('\n')}
-                  ${commandActionsString} 
+                  ${commandActionsString}
                   </boltArtifact>
                   `, // Added commandActionsString, followupMessage, updated id and title
                   annotations: [
@@ -207,7 +205,13 @@ ${value.content}
   }, [mixedId, db, navigate, searchParams]); // Added db, navigate, searchParams dependencies
 
   const takeSnapshot = useCallback(
-    async (chatIdx: string, files: FileMap, _chatId?: string | undefined, chatSummary?: string) => {
+    async (
+      chatIdx: string,
+      files: FileMap,
+      _chatId?: string | undefined,
+      chatSummary?: string,
+      changeType?: ChangeType,
+    ) => {
       const currentChatId = chatId.get();
 
       if (!currentChatId || !db) {
@@ -217,54 +221,19 @@ ${value.content}
       try {
         // Resolve the mixed chatId to the actual chatId to prevent duplicate snapshots
         const actualChatId = await resolveActualChatId(currentChatId);
-
-        // Check if files have actually changed to avoid unnecessary snapshots
-        const filesChanged = await hasFilesChanged(db, actualChatId, files);
-
-        if (!filesChanged) {
-          console.log(`No file changes detected for chat ${actualChatId}, skipping snapshot`);
-          return;
-        }
-
-        /*
-         * Determine change type based on context
-         * Since AI responses are now handled in Chat.client.tsx, this defaults to user-edit
-         */
-        let changeType: ChangeType = 'user-edit';
+        let finalChangeType: ChangeType = changeType || 'user-edit';
 
         // Check if this is an initial snapshot (no previous snapshots)
         const latestSnapshot = await getLatestVersionedSnapshot(db, actualChatId);
 
         if (!latestSnapshot) {
-          changeType = 'initial';
+          finalChangeType = 'initial';
         }
 
-        // Create the versioned snapshot
-        const versionedSnapshot = await createVersionedSnapshot(
-          db,
-          actualChatId,
-          files,
-          chatIdx,
-          changeType,
-          chatSummary,
-        );
-
-        // Get the next version number
-        const version = await getNextSnapshotVersion(db, actualChatId);
-
         // Store the versioned snapshot
-        await setVersionedSnapshot(db, actualChatId, versionedSnapshot, version, changeType);
+        await triggerSnapshot(db, actualChatId, files, finalChangeType, chatIdx);
 
-        // Also maintain backward compatibility with the old snapshot system
-        const legacySnapshot: Snapshot = {
-          chatIndex: chatIdx,
-          files,
-          summary: chatSummary,
-        };
-
-        await setSnapshot(db, actualChatId, legacySnapshot);
-
-        console.log(`Created ${changeType} snapshot version ${version} for chat ${actualChatId}`);
+        console.log(`Created ${finalChangeType} snapshot for chat ${actualChatId}`);
       } catch (error) {
         console.error('Failed to save versioned snapshot:', error);
 
@@ -393,7 +362,7 @@ ${value.content}
           const hasSnapshots = await hasExistingSnapshots(db, actualChatId);
 
           if (!hasSnapshots) {
-            await createInitialSnapshot(db, actualChatId, `chat-${actualChatId}-initial`, 'Initial chat state');
+            await createInitialSnapshot(db, actualChatId, lastMessage.id, 'Initial chat state');
             console.log(`Created initial empty snapshot for new chat ${actualChatId}`);
           }
         } catch (error) {
@@ -414,7 +383,16 @@ ${value.content}
          * But allow snapshots for user imports (like folder uploads) even if they create assistant messages
          */
         if (!isCurrentlyStreaming) {
-          takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+          // Determine the appropriate change type based on context
+          const lastMessage = messages[messages.length - 1];
+          let changeType: ChangeType = 'user-edit';
+
+          // Check if this is an AI response post-completion
+          if (lastMessage.role === 'assistant') {
+            changeType = 'ai-response';
+          }
+
+          takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary, changeType);
         }
       }
 
