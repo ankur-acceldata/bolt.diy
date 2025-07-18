@@ -111,10 +111,18 @@ export default function FeaturesTab() {
     isLatestBranch,
     contextOptimizationEnabled,
     eventLogs,
+    syncEnabled,
+    syncAutoSync,
+    syncInterval,
+    syncRemoteUrl,
     setAutoSelectTemplate,
     enableLatestBranch,
     enableContextOptimization,
     setEventLogs,
+    setSyncEnabled,
+    setSyncAutoSync,
+    setSyncInterval,
+    setSyncRemoteUrl,
     setPromptId,
     promptId,
   } = useSettings();
@@ -170,11 +178,30 @@ export default function FeaturesTab() {
           break;
         }
 
+        case 'syncEnabled': {
+          setSyncEnabled(enabled);
+          toast.success(`File sync ${enabled ? 'enabled' : 'disabled'}`);
+          break;
+        }
+
+        case 'syncAutoSync': {
+          setSyncAutoSync(enabled);
+          toast.success(`Auto sync ${enabled ? 'enabled' : 'disabled'}`);
+          break;
+        }
+
         default:
           break;
       }
     },
-    [enableLatestBranch, setAutoSelectTemplate, enableContextOptimization, setEventLogs],
+    [
+      enableLatestBranch,
+      setAutoSelectTemplate,
+      enableContextOptimization,
+      setEventLogs,
+      setSyncEnabled,
+      setSyncAutoSync,
+    ],
   );
 
   const features = {
@@ -212,7 +239,26 @@ export default function FeaturesTab() {
         tooltip: 'Enabled by default to record detailed logs of system events and user actions',
       },
     ],
-    beta: [],
+    beta: [
+      {
+        id: 'syncEnabled',
+        title: 'File Sync',
+        description: 'Enable real-time file synchronization',
+        icon: 'i-ph:cloud-arrow-up',
+        enabled: syncEnabled,
+        beta: true,
+        tooltip: 'Beta feature: Sync files with remote servers or other clients',
+      },
+      {
+        id: 'syncAutoSync',
+        title: 'Auto Sync',
+        description: 'Automatically sync changes as you work',
+        icon: 'i-ph:arrows-clockwise',
+        enabled: syncAutoSync,
+        beta: true,
+        tooltip: 'When enabled, changes are automatically synchronized without manual intervention',
+      },
+    ],
   };
 
   return (
@@ -290,6 +336,122 @@ export default function FeaturesTab() {
           </select>
         </div>
       </motion.div>
+
+      {/* Sync Configuration */}
+      {syncEnabled && (
+        <motion.div
+          layout
+          className={classNames(
+            'bg-bolt-elements-background-depth-2',
+            'hover:bg-bolt-elements-background-depth-3',
+            'transition-all duration-200',
+            'rounded-lg p-4',
+            'group',
+          )}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <div
+              className={classNames(
+                'p-2 rounded-lg text-xl',
+                'bg-bolt-elements-background-depth-3 group-hover:bg-bolt-elements-background-depth-4',
+                'transition-colors duration-200',
+                'text-blue-500',
+              )}
+            >
+              <div className="i-ph:cloud-arrow-up" />
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-bolt-elements-textPrimary group-hover:text-blue-500 transition-colors">
+                Sync Configuration
+              </h4>
+              <p className="text-xs text-bolt-elements-textSecondary mt-0.5">
+                Configure how file synchronization works
+              </p>
+            </div>
+          </div>
+
+          {/* Info about Golang API integration */}
+          <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <div className="flex items-center gap-2">
+              <div className="i-ph:info text-blue-500" />
+              <p className="text-xs text-blue-600">
+                <strong>Golang API Integration:</strong> Files are automatically synchronized with your Golang server
+                and Minio storage. Auto-save functionality is enabled for real-time file synchronization.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-bolt-elements-textPrimary mb-2">
+                Auto-save Interval (milliseconds)
+              </label>
+              <input
+                type="number"
+                value={syncInterval}
+                onChange={(e) => {
+                  const interval = parseInt(e.target.value, 10);
+
+                  if (!isNaN(interval) && interval >= 1000) {
+                    setSyncInterval(interval);
+                  }
+                }}
+                min="1000"
+                step="1000"
+                className={classNames(
+                  'w-full p-2 rounded-lg text-sm',
+                  'bg-bolt-elements-background-depth-3 border border-bolt-elements-borderColor',
+                  'text-bolt-elements-textPrimary',
+                  'focus:outline-none focus:ring-2 focus:ring-blue-500/30',
+                  'transition-all duration-200',
+                )}
+              />
+              <p className="text-xs text-bolt-elements-textTertiary mt-1">
+                How often to auto-save and sync files (minimum 1000ms, recommended: 5000ms)
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-bolt-elements-textPrimary mb-2">
+                Golang API Server URL
+              </label>
+              <input
+                type="text"
+                value={syncRemoteUrl || 'http://localhost:8080/api'}
+                onChange={(e) => setSyncRemoteUrl(e.target.value)}
+                placeholder="http://localhost:8080/api"
+                className={classNames(
+                  'w-full p-2 rounded-lg text-sm',
+                  'bg-bolt-elements-background-depth-3 border border-bolt-elements-borderColor',
+                  'text-bolt-elements-textPrimary',
+                  'focus:outline-none focus:ring-2 focus:ring-blue-500/30',
+                  'transition-all duration-200',
+                )}
+              />
+              <p className="text-xs text-bolt-elements-textTertiary mt-1">
+                Direct URL to your Golang API server with Minio backend (default: http://localhost:8080/api)
+              </p>
+            </div>
+
+            <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="i-ph:check-circle text-green-500" />
+                <span className="text-sm font-medium text-green-600">Auto-save Features</span>
+              </div>
+              <ul className="text-xs text-green-600 space-y-1">
+                <li>• Files are automatically saved 2 seconds after editing stops</li>
+                <li>• Real-time sync with Golang API and Minio storage</li>
+                <li>• WebSocket connection for instant file updates</li>
+                <li>• No browser permissions required</li>
+                <li>• Background synchronization with visual feedback</li>
+              </ul>
+            </div>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }

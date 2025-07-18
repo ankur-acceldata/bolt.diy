@@ -8,6 +8,10 @@ import {
   autoSelectStarterTemplate,
   enableContextOptimizationStore,
   tabConfigurationStore,
+  syncEnabledStore,
+  syncAutoSyncStore,
+  syncIntervalStore,
+  syncRemoteUrlStore,
   updateTabConfiguration as updateTabConfig,
   resetTabConfiguration as resetTabConfig,
   updateProviderSettings as updateProviderSettingsStore,
@@ -16,6 +20,10 @@ import {
   updateContextOptimization,
   updateEventLogs,
   updatePromptId,
+  updateSyncEnabled,
+  updateSyncAutoSync,
+  updateSyncInterval,
+  updateSyncRemoteUrl,
 } from '~/lib/stores/settings';
 import { useCallback, useEffect, useState } from 'react';
 import Cookies from 'js-cookie';
@@ -64,6 +72,16 @@ export interface UseSettingsReturn {
   tabConfiguration: TabWindowConfig;
   updateTabConfiguration: (config: TabVisibilityConfig) => void;
   resetTabConfiguration: () => void;
+
+  // Sync settings
+  syncEnabled: boolean;
+  setSyncEnabled: (enabled: boolean) => void;
+  syncAutoSync: boolean;
+  setSyncAutoSync: (enabled: boolean) => void;
+  syncInterval: number;
+  setSyncInterval: (interval: number) => void;
+  syncRemoteUrl: string;
+  setSyncRemoteUrl: (url: string) => void;
 }
 
 // Add interface to match ProviderSetting type
@@ -81,6 +99,12 @@ export function useSettings(): UseSettingsReturn {
   const [activeProviders, setActiveProviders] = useState<ProviderInfo[]>([]);
   const contextOptimizationEnabled = useStore(enableContextOptimizationStore);
   const tabConfiguration = useStore(tabConfigurationStore);
+
+  // Sync settings
+  const syncEnabled = useStore(syncEnabledStore);
+  const syncAutoSync = useStore(syncAutoSyncStore);
+  const syncInterval = useStore(syncIntervalStore);
+  const syncRemoteUrl = useStore(syncRemoteUrlStore);
   const [settings, setSettings] = useState<Settings>(() => {
     const storedSettings = getLocalStorage('settings');
     return {
@@ -145,6 +169,27 @@ export function useSettings(): UseSettingsReturn {
     logStore.logSystem(`Context optimization ${enabled ? 'enabled' : 'disabled'}`);
   }, []);
 
+  // Sync settings callbacks
+  const setSyncEnabled = useCallback((enabled: boolean) => {
+    updateSyncEnabled(enabled);
+    logStore.logSystem(`Sync ${enabled ? 'enabled' : 'disabled'}`);
+  }, []);
+
+  const setSyncAutoSync = useCallback((enabled: boolean) => {
+    updateSyncAutoSync(enabled);
+    logStore.logSystem(`Auto sync ${enabled ? 'enabled' : 'disabled'}`);
+  }, []);
+
+  const setSyncInterval = useCallback((interval: number) => {
+    updateSyncInterval(interval);
+    logStore.logSystem(`Sync interval updated to ${interval}ms`);
+  }, []);
+
+  const setSyncRemoteUrl = useCallback((url: string) => {
+    updateSyncRemoteUrl(url);
+    logStore.logSystem(`Sync remote URL updated to ${url || 'none'}`);
+  }, []);
+
   const setTheme = useCallback(
     (theme: Settings['theme']) => {
       saveSettings({ theme });
@@ -207,5 +252,15 @@ export function useSettings(): UseSettingsReturn {
     tabConfiguration,
     updateTabConfiguration: updateTabConfig,
     resetTabConfiguration: resetTabConfig,
+
+    // Sync settings
+    syncEnabled,
+    setSyncEnabled,
+    syncAutoSync,
+    setSyncAutoSync,
+    syncInterval,
+    setSyncInterval,
+    syncRemoteUrl,
+    setSyncRemoteUrl,
   };
 }

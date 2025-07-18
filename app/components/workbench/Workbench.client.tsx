@@ -27,6 +27,8 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { usePreviewStore } from '~/lib/stores/previews';
 import { chatStore } from '~/lib/stores/chat';
 import type { ElementInfo } from './Inspector';
+import { useSync } from '~/lib/hooks/useSync';
+import { useSettings } from '~/lib/hooks/useSettings';
 
 interface WorkspaceProps {
   chatStarted?: boolean;
@@ -288,6 +290,10 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   const [isPushDialogOpen, setIsPushDialogOpen] = useState(false);
   const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
 
+  // Initialize sync and settings hooks
+  const { forceSync, isInitialized: syncInitialized } = useSync();
+  const { syncEnabled } = useSettings();
+
   // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
 
   // const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
@@ -369,19 +375,30 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   }, []);
 
   const handleSyncFiles = useCallback(async () => {
+    // Check if sync is enabled and initialized
+    if (!syncEnabled) {
+      toast.error('File sync is not enabled. Please enable it in Settings → Features');
+      return;
+    }
+
+    if (!syncInitialized) {
+      toast.error('Sync service is not initialized. Please check your Golang API server configuration.');
+      return;
+    }
+
     setIsSyncing(true);
 
     try {
-      const directoryHandle = await window.showDirectoryPicker();
-      await workbenchStore.syncFiles(directoryHandle);
-      toast.success('Files synced successfully');
+      // Use the new Golang API sync instead of browser file system
+      await forceSync();
+      toast.success('Files synced successfully to Golang API and Minio storage');
     } catch (error) {
       console.error('Error syncing files:', error);
-      toast.error('Failed to sync files');
+      toast.error('Failed to sync files to Golang API');
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [syncEnabled, syncInitialized, forceSync]);
 
   const handleDiffFileSelect = useCallback((filePath: string) => {
     workbenchStore.setSelectedFile(filePath);
@@ -457,8 +474,12 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
                           disabled={isSyncing}
                         >
                           <div className="flex items-center gap-2">
-                            {isSyncing ? <div className="i-ph:spinner" /> : <div className="i-ph:cloud-arrow-down" />}
-                            <span>{isSyncing ? 'Syncing...' : 'Sync Files'}</span>
+                            {isSyncing ? (
+                              <div className="i-ph:spinner animate-spin" />
+                            ) : (
+                              <div className="i-ph:cloud-arrow-up" />
+                            )}
+                            <span>{isSyncing ? 'Syncing to Minio...' : 'Sync to Golang API'}</span>
                           </div>
                         </DropdownMenu.Item>
                         {/* <DropdownMenu.Item

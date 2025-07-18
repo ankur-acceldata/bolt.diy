@@ -73,6 +73,21 @@ const gitInfo = getGitInfo();
 
 export default defineConfig((config) => {
   return {
+    server: {
+      proxy: {
+        '/api/golang': {
+          target: 'http://localhost:8080',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/golang/, '/api'),
+        },
+        '/ws/golang': {
+          target: 'ws://localhost:8080',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/ws\/golang/, '/ws'),
+          ws: true,
+        },
+      },
+    },
     define: {
       __COMMIT_HASH: JSON.stringify(gitInfo.commitHash),
       __GIT_BRANCH: JSON.stringify(gitInfo.branch),

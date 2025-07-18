@@ -5,11 +5,11 @@ import { Dialog, DialogButton, DialogDescription, DialogRoot, DialogTitle } from
 
 // Add useStore import for the menu store
 import { useStore } from '@nanostores/react';
-import { menuStore } from '~/lib/stores/menu';
+import { menuStore, closeMenu } from '~/lib/stores/menu';
 import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
 import { ControlPanel } from '~/components/@settings/core/ControlPanel';
 
-// import { SettingsButton } from '~/components/ui/SettingsButton';
+import { SettingsButton } from '~/components/ui/SettingsButton';
 import { Button } from '~/components/ui/Button';
 import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
 import { cubicEasingFn } from '~/utils/easings';
@@ -326,13 +326,11 @@ export const Menu = () => {
     loadEntries(); // Reload the list after duplication
   };
 
-  /*
-   * Settings button handler - currently not used as settings button is commented out
-   * const handleSettingsClick = () => {
-   *   setIsSettingsOpen(true);
-   *   closeMenu(); // Use store method instead of setOpen(false)
-   * };
-   */
+  // Settings button handler
+  const handleSettingsClick = () => {
+    setIsSettingsOpen(true);
+    closeMenu(); // Use store method instead of setOpen(false)
+  };
 
   const handleSettingsClose = () => {
     setIsSettingsOpen(false);
@@ -546,7 +544,7 @@ export const Menu = () => {
             </DialogRoot>
           </div>
           <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-800 px-4 py-3">
-            {/* <SettingsButton onClick={handleSettingsClick} /> */}
+            <SettingsButton onClick={handleSettingsClick} />
             <ThemeSwitch />
           </div>
         </div>
