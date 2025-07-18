@@ -3,7 +3,6 @@
  * Replaces direct browser file system sync with Golang API and Minio integration
  */
 
-import { toast } from 'react-toastify';
 import { logStore } from '~/lib/stores/logs';
 import { fernApiService, type SyncResult } from '~/lib/services/fernApiService';
 import type { WorkbenchStore } from '~/lib/stores/workbench';
@@ -59,7 +58,8 @@ export class FernSyncService {
       }
 
       logStore.logSystem('Fern sync service initialized successfully');
-      toast.success('File sync enabled with Golang API');
+
+      // Removed toast - using status indicator instead
     } catch (error) {
       logStore.logError('Failed to initialize Fern sync service', error);
       throw error;
@@ -302,11 +302,7 @@ export class FernSyncService {
         this._pendingChanges.delete(path);
         this._emit('file-saved', { path, content: file.content });
 
-        // Show subtle notification for auto-save
-        toast.success(`Auto-saved: ${path.split('/').pop()}`, {
-          autoClose: 2000,
-          hideProgressBar: true,
-        });
+        // Removed toast - using status indicator instead
       }
     } catch (error) {
       logStore.logError(`Failed to auto-save file ${path}`, error);

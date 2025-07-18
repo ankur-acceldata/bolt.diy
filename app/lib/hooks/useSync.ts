@@ -37,12 +37,28 @@ export function useSync() {
 
       if (fernSync && isInitialized) {
         fernSync.setAutoSync(syncAutoSync);
+
+        // Parse URLs properly for config update
+        let configServerUrl = 'http://localhost:8080/api';
+        let configWsUrl = 'ws://localhost:8080/ws';
+
+        if (syncRemoteUrl) {
+          if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
+            configWsUrl = syncRemoteUrl;
+            configServerUrl =
+              syncRemoteUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '') + '/api';
+          } else {
+            // Add /api to server URL if not present
+            configServerUrl = syncRemoteUrl.endsWith('/api') ? syncRemoteUrl : syncRemoteUrl + '/api';
+            configWsUrl =
+              syncRemoteUrl.replace('http://', 'ws://').replace('https://', 'wss://').replace('/api', '') + '/ws';
+          }
+        }
+
         fernSync.updateConfig({
           syncInterval,
-          serverUrl: syncRemoteUrl
-            ? syncRemoteUrl.replace('ws://', 'http://').replace('wss://', 'https://')
-            : undefined,
-          wsUrl: syncRemoteUrl,
+          serverUrl: configServerUrl,
+          wsUrl: configWsUrl,
         });
         logStore.logSystem(`Sync configuration updated: autoSync=${syncAutoSync}, interval=${syncInterval}ms`);
       }
@@ -87,10 +103,12 @@ export function useSync() {
       if (syncRemoteUrl) {
         if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
           wsUrl = syncRemoteUrl;
-          serverUrl = syncRemoteUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '');
+          serverUrl =
+            syncRemoteUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '') + '/api';
         } else {
-          serverUrl = syncRemoteUrl;
-          wsUrl = syncRemoteUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws';
+          // Add /api to server URL if not present
+          serverUrl = syncRemoteUrl.endsWith('/api') ? syncRemoteUrl : syncRemoteUrl + '/api';
+          wsUrl = syncRemoteUrl.replace('http://', 'ws://').replace('https://', 'wss://').replace('/api', '') + '/ws';
         }
       }
 
@@ -118,26 +136,24 @@ export function useSync() {
           pendingChanges: 0,
         }));
 
-        if (data.changesApplied > 0) {
-          toast.success(`Synced ${data.changesApplied} files to Minio`, { autoClose: 3000 });
-        }
+        // Removed toast - using status indicator instead
       });
 
       syncIntegration.on('sync-error', (error: any) => {
         logStore.logError('Sync error', error);
         setSyncStatus((prev) => ({ ...prev, isRunning: false }));
-        toast.error(`Sync error: ${error.message}`);
+
+        // Only show critical errors
+        if (error.message.includes('server not available') || error.message.includes('connection failed')) {
+          toast.error(`Sync error: ${error.message}`);
+        }
       });
 
       syncIntegration.on('connection-changed', (connected: boolean) => {
         setSyncStatus((prev) => ({ ...prev, connected }));
         logStore.logSystem(`Sync connection ${connected ? 'established' : 'lost'}`);
 
-        if (connected) {
-          toast.success('Connected to Golang API server');
-        } else {
-          toast.warning('Lost connection to Golang API server');
-        }
+        // Removed toast - using status indicator instead
       });
 
       syncIntegration.on('file-saved', (data: any) => {
@@ -148,17 +164,20 @@ export function useSync() {
 
       syncIntegration.on('auto-save-error', (data: any) => {
         logStore.logError(`Auto-save failed for ${data.path}`, data.error);
-        toast.error(`Failed to auto-save ${data.path.split('/').pop()}`);
+
+        // Removed toast - using status indicator instead
       });
 
       syncIntegration.on('remote-change', (data: any) => {
         logStore.logSystem(`Remote file change: ${data.operation} on ${data.path}`);
-        toast.info(`Remote change: ${data.operation} on ${data.path.split('/').pop()}`, { autoClose: 2000 });
+
+        // Removed toast - using status indicator instead
       });
 
       setIsInitialized(true);
       logStore.logSystem('Fern API sync service initialized successfully');
-      toast.success('File sync enabled with Golang API and Minio storage');
+
+      // Removed toast - using status indicator instead
     } catch (error) {
       logStore.logError('Failed to initialize sync', error);
       toast.error(`Failed to initialize sync: ${(error as Error).message}`);
@@ -177,7 +196,8 @@ export function useSync() {
         connected: false,
       });
       logStore.logSystem('Fern sync service disposed');
-      toast.info('File sync disabled');
+
+      // Removed toast - using status indicator instead
     } catch (error) {
       logStore.logError('Failed to dispose sync', error);
       toast.error(`Failed to disable sync: ${(error as Error).message}`);
@@ -199,10 +219,15 @@ export function useSync() {
 
       if (result.success) {
         logStore.logSystem('Manual sync completed successfully');
-        toast.success(`Manual sync completed: ${result.filesUpdated} files synced to Minio`);
+
+        // Removed toast - using status indicator instead
       } else {
         logStore.logError('Manual sync completed with errors', result.errors);
-        toast.warning(`Sync completed with some errors. Check logs for details.`);
+
+        // Show critical errors only
+        if (result.errors && result.errors.length > 0) {
+          toast.warning(`Sync completed with some errors. Check logs for details.`);
+        }
       }
     } catch (error) {
       logStore.logError('Manual sync failed', error);

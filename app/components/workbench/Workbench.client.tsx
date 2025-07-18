@@ -16,6 +16,7 @@ import {
 import { IconButton } from '~/components/ui/IconButton';
 import { PanelHeaderButton } from '~/components/ui/PanelHeaderButton';
 import { Slider, type SliderOptions } from '~/components/ui/Slider';
+import { StatusIndicator } from '~/components/ui/StatusIndicator';
 import { workbenchStore, type WorkbenchViewType } from '~/lib/stores/workbench';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
@@ -23,7 +24,6 @@ import { renderLogger } from '~/utils/logger';
 import { EditorPanel } from './EditorPanel';
 import useViewport from '~/lib/hooks';
 import { PushToGitHubDialog } from '~/components/@settings/tabs/connections/components/PushToGitHubDialog';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { usePreviewStore } from '~/lib/stores/previews';
 import { chatStore } from '~/lib/stores/chat';
 import type { ElementInfo } from './Inspector';
@@ -291,7 +291,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
 
   // Initialize sync and settings hooks
-  const { forceSync, isInitialized: syncInitialized } = useSync();
+  const { forceSync, isInitialized: syncInitialized, syncStatus } = useSync();
   const { syncEnabled } = useSettings();
 
   // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
@@ -382,7 +382,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
     }
 
     if (!syncInitialized) {
-      toast.error('Sync service is not initialized. Please check your Golang API server configuration.');
+      // Service not initialized - status indicator will show this
       return;
     }
 
@@ -449,52 +449,35 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
                       <div className="i-ph:terminal" />
                       Toggle Terminal
                     </PanelHeaderButton>
-                    <DropdownMenu.Root>
-                      <DropdownMenu.Trigger className="text-sm flex items-center gap-1 text-bolt-elements-item-contentDefault bg-transparent enabled:hover:text-bolt-elements-item-contentActive rounded-md p-1 enabled:hover:bg-bolt-elements-item-backgroundActive disabled:cursor-not-allowed">
-                        <div className="i-ph:box-arrow-up" />
-                        Sync
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Content
-                        className={classNames(
-                          'min-w-[240px] z-[250]',
-                          'bg-white dark:bg-[#141414]',
-                          'rounded-lg shadow-lg',
-                          'border border-gray-200/50 dark:border-gray-800/50',
-                          'animate-in fade-in-0 zoom-in-95',
-                          'py-1',
-                        )}
-                        sideOffset={5}
-                        align="end"
+                    <div className="flex items-center gap-2">
+                      <PanelHeaderButton
+                        className="mr-1 text-sm"
+                        onClick={handleSyncFiles}
+                        disabled={isSyncing || !syncInitialized}
                       >
-                        <DropdownMenu.Item
-                          className={classNames(
-                            'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
-                          )}
-                          onClick={handleSyncFiles}
-                          disabled={isSyncing}
-                        >
-                          <div className="flex items-center gap-2">
-                            {isSyncing ? (
-                              <div className="i-ph:spinner animate-spin" />
-                            ) : (
-                              <div className="i-ph:cloud-arrow-up" />
-                            )}
-                            <span>{isSyncing ? 'Syncing to Minio...' : 'Sync to Golang API'}</span>
-                          </div>
-                        </DropdownMenu.Item>
-                        {/* <DropdownMenu.Item
-                          className={classNames(
-                            'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
-                          )}
-                          onClick={() => setIsPushDialogOpen(true)}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="i-ph:git-branch" />
-                            Push to GitHub
-                          </div>
-                        </DropdownMenu.Item> */}
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Root>
+                        {isSyncing ? (
+                          <div className="i-ph:spinner animate-spin" />
+                        ) : (
+                          <div className="i-ph:cloud-arrow-up" />
+                        )}
+                        Sync
+                      </PanelHeaderButton>
+                      <StatusIndicator
+                        status={
+                          !syncInitialized
+                            ? 'offline'
+                            : !syncStatus.connected
+                              ? 'warning'
+                              : syncStatus.isRunning
+                                ? 'loading'
+                                : syncStatus.pendingChanges > 0
+                                  ? 'warning'
+                                  : 'success'
+                        }
+                        pulse={syncStatus.isRunning}
+                        size="sm"
+                      />
+                    </div>
                   </div>
                 )}
 
