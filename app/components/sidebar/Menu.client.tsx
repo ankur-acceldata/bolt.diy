@@ -5,11 +5,9 @@ import { Dialog, DialogButton, DialogDescription, DialogRoot, DialogTitle } from
 
 // Add useStore import for the menu store
 import { useStore } from '@nanostores/react';
-import { menuStore, closeMenu } from '~/lib/stores/menu';
+import { menuStore } from '~/lib/stores/menu';
 import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
-import { ControlPanel } from '~/components/@settings/core/ControlPanel';
 
-import { SettingsButton } from '~/components/ui/SettingsButton';
 import { Button } from '~/components/ui/Button';
 import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
 import { cubicEasingFn } from '~/utils/easings';
@@ -83,7 +81,6 @@ export const Menu = () => {
 
   // Remove: const [open, setOpen] = useState(false);
   const [dialogContent, setDialogContent] = useState<DialogContent>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // const profile = useStore(profileStore);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -326,16 +323,6 @@ export const Menu = () => {
     loadEntries(); // Reload the list after duplication
   };
 
-  // Settings button handler
-  const handleSettingsClick = () => {
-    setIsSettingsOpen(true);
-    closeMenu(); // Use store method instead of setOpen(false)
-  };
-
-  const handleSettingsClose = () => {
-    setIsSettingsOpen(false);
-  };
-
   const setDialogContentWithLogging = useCallback((content: DialogContent) => {
     console.log('Setting dialog content:', content);
     setDialogContent(content);
@@ -353,7 +340,7 @@ export const Menu = () => {
           'flex selection-accent flex-col side-menu fixed top-0 h-full rounded-r-2xl',
           'bg-white dark:bg-gray-950 border-r border-bolt-elements-borderColor',
           'shadow-sm text-sm',
-          isSettingsOpen ? 'z-40' : 'z-sidebar',
+          'z-sidebar',
         )}
       >
         <div className="h-12 flex items-center justify-between px-4 border-b border-gray-100 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-900/50 rounded-tr-2xl">
@@ -543,14 +530,11 @@ export const Menu = () => {
               </Dialog>
             </DialogRoot>
           </div>
-          <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-800 px-4 py-3">
-            <SettingsButton onClick={handleSettingsClick} />
+          <div className="flex items-center justify-end border-t border-gray-200 dark:border-gray-800 px-4 py-3">
             <ThemeSwitch />
           </div>
         </div>
       </motion.div>
-
-      <ControlPanel open={isSettingsOpen} onClose={handleSettingsClose} />
     </>
   );
 };

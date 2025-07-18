@@ -188,7 +188,7 @@ const getInitialSettings = () => {
     eventLogs: getStoredBoolean(SETTINGS_KEYS.EVENT_LOGS, true),
     promptId: isBrowser ? localStorage.getItem(SETTINGS_KEYS.PROMPT_ID) || 'default' : 'default',
     developerMode: getStoredBoolean(SETTINGS_KEYS.DEVELOPER_MODE, false),
-    syncEnabled: getStoredBoolean(SETTINGS_KEYS.SYNC_ENABLED, false),
+    syncEnabled: getStoredBoolean(SETTINGS_KEYS.SYNC_ENABLED, true),
     syncAutoSync: getStoredBoolean(SETTINGS_KEYS.SYNC_AUTO_SYNC, true),
     syncInterval: getStoredNumber(SETTINGS_KEYS.SYNC_INTERVAL, 5000),
     syncRemoteUrl: getStoredString(SETTINGS_KEYS.SYNC_REMOTE_URL, 'http://localhost:8080/api'),
