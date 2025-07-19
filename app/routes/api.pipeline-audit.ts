@@ -6,12 +6,14 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   try {
-    /**
-     * Optionally, parse body for pipelineId, user, tenant, etc. For now, hardcode as per the example
-     * // const { pipelineId, userName, tenantId, tenantName, userId, accessKey, secretKey } = await request.json();
-     */
-    const response = await fetch('https://demo.xdp.acceldata.tech/xdp-cp-service/api/pipelines/4/execute', {
-      method: 'POST',
+    const { runId } = (await request.json()) as { runId?: string | number };
+
+    if (!runId) {
+      return json({ error: 'Missing runId' }, { status: 400 });
+    }
+
+    const response = await fetch(`https://demo.xdp.acceldata.tech/xdp-cp-service/api/pipelines/runs/${runId}/audit`, {
+      method: 'GET',
       headers: {
         'X-User-Name': 'Tanaya',
         'X-Tenant-ID': '1234',
@@ -20,9 +22,7 @@ export async function action({ request }: ActionFunctionArgs) {
         accessKey: 'ALT6BIHE5NMKBDN',
         secretKey: '3T8QZL5QOZ8KHXSO20OKETW5EI6JPM',
       },
-      body: '',
     });
-
     const data = await response.json().catch(() => ({}));
 
     return json({ status: response.status, data });
