@@ -1,12 +1,12 @@
 import { cloudflareDevProxyVitePlugin as remixCloudflareDevProxy, vitePlugin as remixVitePlugin } from '@remix-run/dev';
 import UnoCSS from 'unocss/vite';
-import { defineConfig, type ViteDevServer } from 'vite';
+import { defineConfig, type ViteDevServer, loadEnv } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { optimizeCssModules } from 'vite-plugin-optimize-css-modules';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import * as dotenv from 'dotenv';
 import { execSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 dotenv.config();
@@ -72,9 +72,34 @@ const pkg = getPackageJson();
 const gitInfo = getGitInfo();
 
 export default defineConfig((config) => {
+  // Load environment variables including non-VITE_ prefixed ones
+  const env = loadEnv(config.mode || 'development', process.cwd(), '');
+
+  // Extract host configuration from environment
+  const HOST = env.HOST;
+  const PORT = Number(env.PORT || 5173);
+  const LISTEN_HOST = HOST ? `local.${HOST}` : undefined;
+
+  // Check if we have SSL certificates for HTTPS
+  const httpsConfig =
+    LISTEN_HOST && existsSync(`certs/${LISTEN_HOST}.pem`) && existsSync(`certs/${LISTEN_HOST}-key.pem`)
+      ? {
+          key: readFileSync(`certs/${LISTEN_HOST}-key.pem`),
+          cert: readFileSync(`certs/${LISTEN_HOST}.pem`),
+        }
+      : undefined;
+
   return {
     server: {
+      host: LISTEN_HOST || 'localhost',
+      port: PORT,
+      https: httpsConfig,
+      strictPort: true,
+
+      // Make HMR work when using custom host
+      hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
       proxy: {
+        // Golang/Minio file sync endpoints only
         '/api/golang': {
           target: 'http://localhost:8080',
           changeOrigin: true,

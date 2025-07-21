@@ -33,6 +33,9 @@ functions/build/
 .wrangler
 _worker.bundle
 
+# SSL certificates for local development
+/certs/*.pem
+
 Modelfile
 modelfiles
 
