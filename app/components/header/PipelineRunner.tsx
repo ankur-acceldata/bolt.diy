@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Button } from '~/components/ui/Button';
 import { Dialog, DialogRoot, DialogTitle, DialogDescription } from '~/components/ui/Dialog';
+import { apiFetch } from '~/utils/api';
 
 interface PipelineRunnerProps {
   onClose?: () => void;
@@ -28,7 +29,7 @@ export function PipelineRunner({ onClose }: PipelineRunnerProps) {
 
     while (!finished && modalOpenRef.current) {
       try {
-        const res = await fetch('/api/pipeline-audit', {
+        const res = await apiFetch('/api/pipeline-audit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ runId }),
@@ -169,7 +170,7 @@ export function PipelineRunner({ onClose }: PipelineRunnerProps) {
     setShowPipelineDialog(false);
 
     try {
-      const res = await fetch('/api/pipeline-execute', { method: 'POST' });
+      const res = await apiFetch('/api/pipeline-execute', { method: 'POST' });
 
       if (!res.ok) {
         throw new Error(`Execute API error: ${res.status} ${res.statusText}`);
