@@ -4,7 +4,7 @@ FROM ${BASE} AS base
 WORKDIR /app
 
 # Install dependencies (this step is cached as long as the dependencies don't change)
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml .npmrc ./
 
 #RUN npm install -g corepack@latest
 
