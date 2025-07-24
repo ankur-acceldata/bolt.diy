@@ -4,16 +4,25 @@
  */
 
 /**
- * Get the base path from the environment or default to '/bolt/'
+ * Get the base path from the environment or default to '/ai-editor/'
  */
 export function getBasePath(): string {
-  // In Remix, we can use import.meta.env.BASE_URL which is set by Vite
+  // First try to get from Vite's BASE_URL environment variable
   if (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
     return import.meta.env.BASE_URL;
   }
 
-  // Fallback to /bolt/ if not available
-  return '/bolt/';
+  // Second, try to detect from current URL in browser
+  if (typeof window !== 'undefined') {
+    const currentPath = window.location.pathname;
+
+    if (currentPath.startsWith('/ai-editor/')) {
+      return '/ai-editor/';
+    }
+  }
+
+  // Fallback to /ai-editor/ if not available
+  return '/ai-editor/';
 }
 
 /**
