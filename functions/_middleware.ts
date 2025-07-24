@@ -57,6 +57,70 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
     return createRedirect(actualBasePath + '/');
   }
 
+  /* Handle requests with base path FIRST - this prevents redirect loops */
+  if (url.pathname.startsWith(actualBasePath + '/')) {
+    const pathWithoutBase = url.pathname.slice(actualBasePath.length);
+
+    /* Static assets that should be served with base path */
+    const staticAssetPaths = [
+      '/assets/',
+      '/build/',
+      '/favicon',
+      '/_next/',
+      '/public/',
+      '/manifest.json',
+      '/robots.txt',
+      '/sitemap',
+      '/workers-site',
+      '/inspector-script.js', // WebContainer inspector script
+      '/*.css', // CSS files
+      '/*.js', // JavaScript files
+      '/*.svg', // SVG files
+      '/*.png', // PNG files
+      '/*.jpg', // JPG files
+      '/*.jpeg', // JPEG files
+      '/*.ico', // ICO files
+      '/*.woff', // WOFF fonts
+      '/*.woff2', // WOFF2 fonts
+      '/*.ttf', // TTF fonts
+      '/*.eot', // EOT fonts
+    ];
+
+    /* Check if it's a static asset with base path - serve directly */
+    const isStaticAssetPath = staticAssetPaths.some((path) => {
+      if (path.startsWith('/*')) {
+        // Handle wildcard patterns like /*.css
+        const extension = path.substring(2);
+        return pathWithoutBase.endsWith(extension);
+      }
+
+      return pathWithoutBase.startsWith(path);
+    });
+
+    if (isStaticAssetPath) {
+      /* Static assets with base path - pass through to be served directly */
+      console.log(`Serving static asset: ${url.pathname}`);
+
+      const response = await next(request);
+
+      return addCrossOriginHeaders(response);
+    }
+
+    /* API routes with base path - pass through to Remix WITHOUT modification */
+    if (pathWithoutBase.startsWith('/api/')) {
+      console.log('Passing API route with base path to Remix:', url.pathname);
+
+      const response = await next(request);
+
+      return addCrossOriginHeaders(response);
+    }
+
+    /* All other routes with base path - pass through to Remix */
+    const response = await next(request);
+
+    return addCrossOriginHeaders(response);
+  }
+
   /* Static assets that should be served with base path */
   const staticAssetPaths = [
     '/assets/',
@@ -87,7 +151,6 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
     if (path.startsWith('/*')) {
       // Handle wildcard patterns like /*.css
       const extension = path.substring(2);
-
       return url.pathname.endsWith(extension);
     }
 
@@ -97,53 +160,12 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
   if (shouldRedirectToBasePath) {
     /* Redirect static asset requests from /assets/... to /ai-editor/assets/... */
     console.log(`Redirecting static asset from ${url.pathname} to ${actualBasePath + url.pathname}`);
-
     return createRedirect(actualBasePath + url.pathname);
   }
 
   /* API routes without base path should return 404 */
   if (url.pathname.startsWith('/api/')) {
     return new Response('API route accessed without base path', { status: 404 });
-  }
-
-  /* Handle requests with base path */
-  if (url.pathname.startsWith(actualBasePath + '/')) {
-    const pathWithoutBase = url.pathname.slice(actualBasePath.length);
-
-    /* Check if it's a static asset with base path - serve directly */
-    const isStaticAssetPath = staticAssetPaths.some((path) => {
-      if (path.startsWith('/*')) {
-        // Handle wildcard patterns like /*.css
-        const extension = path.substring(2);
-
-        return pathWithoutBase.endsWith(extension);
-      }
-
-      return pathWithoutBase.startsWith(path);
-    });
-
-    if (isStaticAssetPath) {
-      /* Static assets with base path - pass through to be served directly */
-      console.log(`Serving static asset: ${url.pathname}`);
-
-      const response = await next(request);
-
-      return addCrossOriginHeaders(response);
-    }
-
-    /* API routes with base path - pass through to Remix WITHOUT modification */
-    if (pathWithoutBase.startsWith('/api/')) {
-      console.log('Passing API route with base path to Remix:', url.pathname);
-
-      const response = await next(request);
-
-      return addCrossOriginHeaders(response);
-    }
-
-    /* All other routes with base path - pass through to Remix */
-    const response = await next(request);
-
-    return addCrossOriginHeaders(response);
   }
 
   /* If the request doesn't start with the base path and isn't a static asset, return 404 */
