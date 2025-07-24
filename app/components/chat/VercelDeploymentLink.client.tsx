@@ -3,6 +3,7 @@ import { vercelConnection } from '~/lib/stores/vercel';
 import { chatId } from '~/lib/persistence/useChatHistory';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useEffect, useState } from 'react';
+import { apiFetch } from '~/utils/api';
 
 export function VercelDeploymentLink() {
   const connection = useStore(vercelConnection);
@@ -102,7 +103,7 @@ export function VercelDeploymentLink() {
         }
 
         // Fallback to API call if not found in fetched projects
-        const fallbackResponse = await fetch(`/api/vercel-deploy?projectId=${projectId}&token=${connection.token}`, {
+        const fallbackResponse = await apiFetch(`/api/vercel-deploy?projectId=${projectId}&token=${connection.token}`, {
           method: 'GET',
         });
 

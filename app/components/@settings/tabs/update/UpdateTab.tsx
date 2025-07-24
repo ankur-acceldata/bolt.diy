@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 import { Dialog, DialogRoot, DialogTitle, DialogDescription, DialogButton } from '~/components/ui/Dialog';
 import { classNames } from '~/utils/classNames';
 import { Markdown } from '~/components/chat/Markdown';
+import { apiFetch } from '~/utils/api';
 
 interface UpdateProgress {
   stage: 'fetch' | 'pull' | 'install' | 'build' | 'complete';
@@ -149,7 +150,7 @@ const UpdateTab = () => {
       const branchToCheck = isLatestBranch ? 'main' : 'stable';
 
       // Start the update check with streaming progress
-      const response = await fetch('/api/update', {
+      const response = await apiFetch('/api/update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -228,7 +229,7 @@ const UpdateTab = () => {
       const branchToCheck = isLatestBranch ? 'main' : 'stable';
 
       // Start the update with autoUpdate set to true to force the update
-      const response = await fetch('/api/update', {
+      const response = await apiFetch('/api/update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

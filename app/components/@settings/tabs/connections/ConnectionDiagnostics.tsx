@@ -5,6 +5,7 @@ import { Badge } from '~/components/ui/Badge';
 import { classNames } from '~/utils/classNames';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '~/components/ui/Collapsible';
 import { CodeBracketIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { apiFetch } from '~/utils/api';
 
 // Helper function to safely parse JSON
 const safeJsonParse = (item: string | null) => {
@@ -43,7 +44,7 @@ export default function ConnectionDiagnostics() {
       };
 
       // Get diagnostic data from server
-      const response = await fetch('/api/system/diagnostics');
+      const response = await apiFetch('/api/system/diagnostics');
 
       if (!response.ok) {
         throw new Error(`Diagnostics API error: ${response.status}`);

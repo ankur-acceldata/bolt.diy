@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import { classNames } from '~/utils/classNames';
+import { apiFetch } from '~/utils/api';
 import { logStore, type LogEntry } from '~/lib/stores/logs';
 import { useStore } from '@nanostores/react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/Collapsible';
@@ -307,7 +308,7 @@ export default function DebugTab() {
     // Initial fetch
     const fetchGitInfo = async () => {
       try {
-        const response = await fetch('/api/system/git-info');
+        const response = await apiFetch('/api/system/git-info');
         const updatedGitInfo = (await response.json()) as GitInfo;
 
         setWebAppInfo((prev) => {
@@ -567,8 +568,8 @@ export default function DebugTab() {
       setLoading((prev) => ({ ...prev, webAppInfo: true }));
 
       const [appResponse, gitResponse] = await Promise.all([
-        fetch('/api/system/app-info'),
-        fetch('/api/system/git-info'),
+        apiFetch('/api/system/app-info'),
+        apiFetch('/api/system/git-info'),
       ]);
 
       if (!appResponse.ok || !gitResponse.ok) {

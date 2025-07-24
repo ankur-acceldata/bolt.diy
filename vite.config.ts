@@ -90,7 +90,13 @@ export default defineConfig((config) => {
       : undefined;
 
   return {
+    base: '/ai-editor/',
     server: {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+      },
       host: LISTEN_HOST || 'localhost',
       port: PORT,
       https: httpsConfig,
@@ -160,6 +166,7 @@ export default defineConfig((config) => {
       },
       config.mode !== 'test' && remixCloudflareDevProxy(),
       remixVitePlugin({
+        basename: '/ai-editor/',
         future: {
           v3_fetcherPersist: true,
           v3_relativeSplatPath: true,
