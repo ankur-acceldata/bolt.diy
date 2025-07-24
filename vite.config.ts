@@ -96,6 +96,9 @@ export default defineConfig((config) => {
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
         'Cross-Origin-Resource-Policy': 'cross-origin',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
       host: LISTEN_HOST || 'localhost',
       port: PORT,
@@ -142,14 +145,14 @@ export default defineConfig((config) => {
     },
     plugins: [
       nodePolyfills({
-        include: ['buffer', 'process', 'util', 'stream'],
+        include: ['buffer', 'process', 'util', 'stream', 'path'],
         globals: {
           Buffer: true,
           process: true,
           global: true,
         },
         protocolImports: true,
-        exclude: ['child_process', 'fs', 'path'],
+        exclude: ['child_process', 'fs'],
       }),
       {
         name: 'buffer-polyfill',

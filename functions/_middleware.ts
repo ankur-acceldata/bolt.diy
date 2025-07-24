@@ -10,14 +10,28 @@ export const onRequest: PagesFunction = async ({ request, next, env }) => {
   /* For development, also handle the case where BASE_PATH might be set via environment */
   const actualBasePath = BASE_PATH.endsWith('/') ? BASE_PATH.slice(0, -1) : BASE_PATH;
 
+  // Helper function to add cross-origin isolation headers to any response
+  const addCrossOriginHeaders = (response: Response) => {
+    const newResponse = new Response(response.body, response);
+    newResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    newResponse.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    newResponse.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    return newResponse;
+  };
+
   /* Handle root redirect - redirect / to /ai-editor/ */
   if (url.pathname === '/') {
-    return Response.redirect(url.origin + actualBasePath + '/', 301);
+    const redirectResponse = Response.redirect(url.origin + actualBasePath + '/', 301);
+
+    return addCrossOriginHeaders(redirectResponse);
   }
 
   /* Check if the request is for the base path (with or without trailing slash) */
   if (url.pathname === actualBasePath) {
-    return Response.redirect(url.origin + actualBasePath + '/', 301);
+    const redirectResponse = Response.redirect(url.origin + actualBasePath + '/', 301);
+
+    return addCrossOriginHeaders(redirectResponse);
   }
 
   /* Static assets that should be served without base path */
@@ -31,6 +45,7 @@ export const onRequest: PagesFunction = async ({ request, next, env }) => {
     '/robots.txt',
     '/sitemap',
     '/workers-site',
+    '/inspector-script.js', // WebContainer inspector script
   ];
 
   const shouldAllowStaticPath = staticAssetPaths.some((path) => url.pathname.startsWith(path));
@@ -40,9 +55,11 @@ export const onRequest: PagesFunction = async ({ request, next, env }) => {
     return new Response('API route accessed without base path', { status: 404 });
   }
 
-  /* If it's a static asset without base path, allow it */
+  /* If it's a static asset without base path, allow it with cross-origin headers */
   if (shouldAllowStaticPath) {
-    return next(request);
+    const response = await next(request);
+
+    return addCrossOriginHeaders(response);
   }
 
   /* Handle requests with base path */
@@ -57,7 +74,9 @@ export const onRequest: PagesFunction = async ({ request, next, env }) => {
       const newUrl = new URL(request.url);
       newUrl.pathname = pathWithoutBase;
 
-      return Response.redirect(newUrl.toString(), 302);
+      const redirectResponse = Response.redirect(newUrl.toString(), 302);
+
+      return addCrossOriginHeaders(redirectResponse);
     }
 
     /* API routes with base path - pass through to Remix WITHOUT modification */
@@ -66,25 +85,13 @@ export const onRequest: PagesFunction = async ({ request, next, env }) => {
 
       const response = await next(request);
 
-      /* Add CORS headers for WebContainer support */
-      const newResponse = new Response(response.body, response);
-      newResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-      newResponse.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
-      newResponse.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-
-      return newResponse;
+      return addCrossOriginHeaders(response);
     }
 
     /* All other routes with base path - pass through to Remix */
     const response = await next(request);
 
-    /* Add CORS headers for WebContainer support */
-    const newResponse = new Response(response.body, response);
-    newResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-    newResponse.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
-    newResponse.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-
-    return newResponse;
+    return addCrossOriginHeaders(response);
   }
 
   /* If the request doesn't start with the base path and isn't a static asset, return 404 */
