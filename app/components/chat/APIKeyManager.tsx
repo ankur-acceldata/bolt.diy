@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { IconButton } from '~/components/ui/IconButton';
 import type { ProviderInfo } from '~/types/model';
 import Cookies from 'js-cookie';
+import { apiFetch } from '~/utils/api';
 
 interface APIKeyManagerProps {
   provider: ProviderInfo;
@@ -56,7 +57,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
     }
 
     try {
-      const response = await fetch(`/api/check-env-key?provider=${encodeURIComponent(provider.name)}`);
+      const response = await apiFetch(`/api/check-env-key?provider=${encodeURIComponent(provider.name)}`);
       const data = await response.json();
       const isSet = (data as { isSet: boolean }).isSet;
 
