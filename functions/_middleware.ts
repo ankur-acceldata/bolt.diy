@@ -4,8 +4,18 @@
  * and ensures all static assets are served with proper base path and HTTPS protocol
  */
 
-export const onRequest = async ({ request, next, env }) => {
-  const BASE_PATH = (env as any).BASE_PATH || '/ai-editor';
+interface Env {
+  BASE_PATH?: string;
+}
+
+interface EventContext {
+  request: Request;
+  next: (request?: Request) => Promise<Response>;
+  env: Env;
+}
+
+export const onRequest = async ({ request, next, env }: EventContext): Promise<Response> => {
+  const BASE_PATH = env.BASE_PATH || '/ai-editor';
   const url = new URL(request.url);
 
   /* For development, also handle the case where BASE_PATH might be set via environment */
