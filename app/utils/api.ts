@@ -26,6 +26,39 @@ export function getBasePath(): string {
 }
 
 /**
+ * Get the current protocol, preferring HTTPS when available
+ */
+export function getProtocol(): string {
+  if (typeof window !== 'undefined') {
+    // Always prefer HTTPS in production-like environments
+    if (
+      window.location.protocol === 'https:' ||
+      (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ) {
+      return 'https:';
+    }
+
+    return window.location.protocol;
+  }
+
+  // Default to HTTPS for server-side rendering
+  return 'https:';
+}
+
+/**
+ * Get the full base URL including protocol and host
+ */
+export function getBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const protocol = getProtocol();
+    return `${protocol}//${window.location.host}${getBasePath()}`;
+  }
+
+  // Server-side fallback
+  return getBasePath();
+}
+
+/**
  * Construct an API URL with the correct base path
  * @param path - The API path (e.g., '/api/models', 'api/chat')
  * @returns The full API URL with base path
@@ -50,4 +83,34 @@ export function apiUrl(path: string): string {
  */
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(apiUrl(path), init);
+}
+
+/**
+ * Generate a proper asset URL with base path and protocol
+ * @param assetPath - The asset path (e.g., '/favicon.svg', 'assets/image.png')
+ * @returns The full asset URL with base path
+ */
+export function assetUrl(assetPath: string): string {
+  const basePath = getBasePath();
+
+  // Ensure basePath ends with slash and assetPath doesn't start with slash for proper joining
+  const basePathWithSlash = basePath.endsWith('/') ? basePath : `${basePath}/`;
+  const normalizedAssetPath = assetPath.startsWith('/') ? assetPath.substring(1) : assetPath;
+
+  return `${basePathWithSlash}${normalizedAssetPath}`;
+}
+
+/**
+ * Generate a full asset URL including protocol and host (for absolute URLs)
+ * @param assetPath - The asset path
+ * @returns The full absolute asset URL
+ */
+export function absoluteAssetUrl(assetPath: string): string {
+  if (typeof window !== 'undefined') {
+    const protocol = getProtocol();
+    return `${protocol}//${window.location.host}${assetUrl(assetPath)}`;
+  }
+
+  // Fallback for server-side rendering
+  return assetUrl(assetPath);
 }

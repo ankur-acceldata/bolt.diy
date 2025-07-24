@@ -7,3 +7,16 @@ send_metrics = false
 
 [vars]
 BASE_PATH = "/ai-editor"
+
+# Route configuration to ensure proper asset serving with base path
+[[pages.rules]]
+pattern = "/ai-editor/*"
+priority = 100
+
+[[pages.rules]]
+pattern = "/ai-editor/assets/*"
+priority = 200
+
+[[pages.rules]]
+pattern = "/ai-editor/build/*" 
+priority = 200

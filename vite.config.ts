@@ -139,6 +139,9 @@ export default defineConfig((config) => {
       __PKG_PEER_DEPENDENCIES: JSON.stringify(pkg.peerDependencies),
       __PKG_OPTIONAL_DEPENDENCIES: JSON.stringify(pkg.optionalDependencies),
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
+
+      // Ensure BASE_URL is available in client-side code for proper asset path handling
+      'import.meta.env.BASE_URL': JSON.stringify('/ai-editor/'),
     },
     build: {
       target: 'esnext',

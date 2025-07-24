@@ -1,9 +1,10 @@
 /**
  * Cloudflare Pages middleware to handle base path routing
  * This middleware handles the /ai-editor/ base path for the application
+ * and ensures all static assets are served with proper base path and HTTPS protocol
  */
 
-export const onRequest: PagesFunction = async ({ request, next, env }) => {
+export const onRequest = async ({ request, next, env }) => {
   const BASE_PATH = (env as any).BASE_PATH || '/ai-editor';
   const url = new URL(request.url);
 
@@ -17,24 +18,36 @@ export const onRequest: PagesFunction = async ({ request, next, env }) => {
     newResponse.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
     newResponse.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
 
+    // Add cache headers for static assets
+    if (url.pathname.includes('/assets/') || url.pathname.includes('/build/')) {
+      newResponse.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+
     return newResponse;
+  };
+
+  // Helper function to preserve protocol and create proper redirects
+  const createRedirect = (targetUrl: string, status: number = 301) => {
+    // Always preserve HTTPS protocol when available
+    const protocol =
+      url.protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https' ? 'https:' : url.protocol;
+    const newUrl = new URL(targetUrl, `${protocol}//${url.host}`);
+    const redirectResponse = Response.redirect(newUrl.toString(), status);
+
+    return addCrossOriginHeaders(redirectResponse);
   };
 
   /* Handle root redirect - redirect / to /ai-editor/ */
   if (url.pathname === '/') {
-    const redirectResponse = Response.redirect(url.origin + actualBasePath + '/', 301);
-
-    return addCrossOriginHeaders(redirectResponse);
+    return createRedirect(actualBasePath + '/');
   }
 
   /* Check if the request is for the base path (with or without trailing slash) */
   if (url.pathname === actualBasePath) {
-    const redirectResponse = Response.redirect(url.origin + actualBasePath + '/', 301);
-
-    return addCrossOriginHeaders(redirectResponse);
+    return createRedirect(actualBasePath + '/');
   }
 
-  /* Static assets that should be served without base path */
+  /* Static assets that should be served with base path */
   const staticAssetPaths = [
     '/assets/',
     '/build/',
@@ -46,37 +59,66 @@ export const onRequest: PagesFunction = async ({ request, next, env }) => {
     '/sitemap',
     '/workers-site',
     '/inspector-script.js', // WebContainer inspector script
+    '/*.css', // CSS files
+    '/*.js', // JavaScript files
+    '/*.svg', // SVG files
+    '/*.png', // PNG files
+    '/*.jpg', // JPG files
+    '/*.jpeg', // JPEG files
+    '/*.ico', // ICO files
+    '/*.woff', // WOFF fonts
+    '/*.woff2', // WOFF2 fonts
+    '/*.ttf', // TTF fonts
+    '/*.eot', // EOT fonts
   ];
 
-  const shouldAllowStaticPath = staticAssetPaths.some((path) => url.pathname.startsWith(path));
+  /* Check if request is for a static asset without base path - redirect to base path */
+  const shouldRedirectToBasePath = staticAssetPaths.some((path) => {
+    if (path.startsWith('/*')) {
+      // Handle wildcard patterns like /*.css
+      const extension = path.substring(2);
+
+      return url.pathname.endsWith(extension);
+    }
+
+    return url.pathname.startsWith(path);
+  });
+
+  if (shouldRedirectToBasePath) {
+    /* Redirect static asset requests from /assets/... to /ai-editor/assets/... */
+    console.log(`Redirecting static asset from ${url.pathname} to ${actualBasePath + url.pathname}`);
+
+    return createRedirect(actualBasePath + url.pathname);
+  }
 
   /* API routes without base path should return 404 */
   if (url.pathname.startsWith('/api/')) {
     return new Response('API route accessed without base path', { status: 404 });
   }
 
-  /* If it's a static asset without base path, allow it with cross-origin headers */
-  if (shouldAllowStaticPath) {
-    const response = await next(request);
-
-    return addCrossOriginHeaders(response);
-  }
-
   /* Handle requests with base path */
   if (url.pathname.startsWith(actualBasePath + '/')) {
     const pathWithoutBase = url.pathname.slice(actualBasePath.length);
 
-    /* Check if it's a static asset with base path - redirect to remove base path */
-    const isStaticAssetPath = staticAssetPaths.some((path) => pathWithoutBase.startsWith(path));
+    /* Check if it's a static asset with base path - serve directly */
+    const isStaticAssetPath = staticAssetPaths.some((path) => {
+      if (path.startsWith('/*')) {
+        // Handle wildcard patterns like /*.css
+        const extension = path.substring(2);
+
+        return pathWithoutBase.endsWith(extension);
+      }
+
+      return pathWithoutBase.startsWith(path);
+    });
 
     if (isStaticAssetPath) {
-      /* Redirect static asset requests from /ai-editor/assets/... to /assets/... */
-      const newUrl = new URL(request.url);
-      newUrl.pathname = pathWithoutBase;
+      /* Static assets with base path - pass through to be served directly */
+      console.log(`Serving static asset: ${url.pathname}`);
 
-      const redirectResponse = Response.redirect(newUrl.toString(), 302);
+      const response = await next(request);
 
-      return addCrossOriginHeaders(redirectResponse);
+      return addCrossOriginHeaders(response);
     }
 
     /* API routes with base path - pass through to Remix WITHOUT modification */
