@@ -29,6 +29,7 @@ import { chatStore } from '~/lib/stores/chat';
 import type { ElementInfo } from './Inspector';
 import { useSync } from '~/lib/hooks/useSync';
 import { useSettings } from '~/lib/hooks/useSettings';
+import { apiFetch } from '~/utils/api';
 
 interface WorkspaceProps {
   chatStarted?: boolean;
@@ -289,6 +290,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   const [isSyncing, setIsSyncing] = useState(false);
   const [isPushDialogOpen, setIsPushDialogOpen] = useState(false);
   const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
+  const [isExecuting, setIsExecuting] = useState(false);
 
   // Initialize sync and settings hooks
   const { forceSync, isInitialized: syncInitialized, syncStatus } = useSync();
@@ -312,6 +314,32 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   const setSelectedView = (view: WorkbenchViewType) => {
     workbenchStore.currentView.set(view);
   };
+
+  const handleExecuteAdhocRun = useCallback(async () => {
+    setIsExecuting(true);
+
+    try {
+      const response = await apiFetch('/api/adhoc-run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = (await response.json()) as { error?: string; message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.error || `Execution failed: ${response.status}`);
+      }
+
+      toast.success(result.message || 'Adhoc run executed successfully!');
+    } catch (error) {
+      console.error('Execute adhoc run error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to execute adhoc run');
+    } finally {
+      setIsExecuting(false);
+    }
+  }, []);
 
   /*
    * useEffect(() => {
@@ -440,6 +468,10 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
                 <div className="ml-auto" />
                 {selectedView === 'code' && (
                   <div className="flex overflow-y-auto">
+                    <PanelHeaderButton className="mr-1 text-sm" onClick={handleExecuteAdhocRun} disabled={isExecuting}>
+                      {isExecuting ? <div className="i-ph:spinner animate-spin" /> : <div className="i-ph:play" />}
+                      Execute
+                    </PanelHeaderButton>
                     <PanelHeaderButton
                       className="mr-1 text-sm"
                       onClick={() => {

@@ -105,6 +105,7 @@ export function useSettings(): UseSettingsReturn {
   const syncAutoSync = useStore(syncAutoSyncStore);
   const syncInterval = useStore(syncIntervalStore);
   const syncRemoteUrl = useStore(syncRemoteUrlStore);
+
   const [settings, setSettings] = useState<Settings>(() => {
     const storedSettings = getLocalStorage('settings');
     return {

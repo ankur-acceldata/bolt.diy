@@ -1,6 +1,9 @@
 import { json, type ActionFunctionArgs } from '@remix-run/cloudflare';
+import { createScopedLogger } from '~/utils/logger';
 
-export async function action({ request }: ActionFunctionArgs) {
+const logger = createScopedLogger('api.pipeline-audit');
+
+export async function action({ request, context }: ActionFunctionArgs) {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, { status: 405 });
   }
@@ -12,21 +15,61 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ error: 'Missing runId' }, { status: 400 });
     }
 
-    const response = await fetch(`https://demo.xdp.acceldata.tech/xdp-cp-service/api/pipelines/runs/${runId}/audit`, {
+    // Get base URL from HOST environment variable
+    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || 'demo.xdp.acceldata.tech';
+    const baseUrl = host.startsWith('http') ? host : `https://${host}`;
+
+    const endpoint = `${baseUrl}/xdp-cp-service/api/pipelines/runs/${runId}/audit`;
+
+    logger.info(`Fetching audit for run ${runId} from: ${endpoint}`);
+
+    const response = await fetch(endpoint, {
       method: 'GET',
       headers: {
         'X-User-Name': 'Tanaya',
         'X-Tenant-ID': '1234',
         'X-Tenant-Name': 'TestTenant',
         'X-User-ID': '5678',
-        accessKey: 'ALT6BIHE5NMKBDN',
-        secretKey: '3T8QZL5QOZ8KHXSO20OKETW5EI6JPM',
+        accessKey:
+          (context?.cloudflare?.env as any)?.ACCELDATA_ACCESS_KEY ||
+          process.env.ACCELDATA_ACCESS_KEY ||
+          'ALT6BIHE5NMKBDN',
+        secretKey:
+          (context?.cloudflare?.env as any)?.ACCELDATA_SECRET_KEY ||
+          process.env.ACCELDATA_SECRET_KEY ||
+          '3T8QZL5QOZ8KHXSO20OKETW5EI6JPM',
       },
     });
+
     const data = await response.json().catch(() => ({}));
 
-    return json({ status: response.status, data });
+    if (!response.ok) {
+      logger.error(`Pipeline audit failed: ${response.status} ${response.statusText}`, { data });
+      return json(
+        {
+          error: `Pipeline audit failed: ${response.status} ${response.statusText}`,
+          details: data,
+        },
+        { status: response.status },
+      );
+    }
+
+    logger.info('Pipeline audit fetched successfully', { runId, dataSize: JSON.stringify(data).length });
+
+    return json({
+      success: true,
+      status: response.status,
+      data,
+      message: `Audit for run ${runId} fetched successfully`,
+    });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    logger.error('Pipeline audit error:', error);
+    return json(
+      {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        success: false,
+      },
+      { status: 500 },
+    );
   }
 }

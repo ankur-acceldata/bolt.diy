@@ -99,6 +99,10 @@ export default defineConfig((config) => {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+
+        // Additional headers for WebContainer compatibility
+        'Service-Worker-Allowed': '/',
+        'X-Content-Type-Options': 'nosniff',
       },
       host: LISTEN_HOST || 'localhost',
       port: PORT,
