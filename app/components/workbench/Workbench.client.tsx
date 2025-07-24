@@ -319,11 +319,37 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
     setIsExecuting(true);
 
     try {
+      /*
+       * Pre-filled adhoc run configuration payload
+       * Can be customized in the future for different execution scenarios
+       */
+      const payload = {
+        config: {
+          adhocRunType: 'SPARK_PYTHON_ADHOC_RUN',
+          image: 'docker.io/apache/spark:4.0.0',
+          codeSource: {
+            type: 'MINIO',
+            config: {
+              url: 'applications/python-spark-app',
+            },
+          },
+          stages: [
+            'pip install -r requirements.txt --no-cache-dir',
+            'python3 success_test.py',
+            "echo 'Execution completed successfully'",
+          ],
+          type: 'Python',
+          mode: 'cluster',
+        },
+        dataplaneName: 'xdp-dataplane',
+      };
+
       const response = await apiFetch('/api/adhoc-run', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify(payload),
       });
 
       const result = (await response.json()) as { error?: string; message?: string };

@@ -9,31 +9,49 @@ export async function action({ request, context }: ActionFunctionArgs) {
   }
 
   try {
+    // Parse request body for configuration
+    let adhocRunConfig;
+
+    try {
+      const bodyText = await request.text();
+
+      if (bodyText && bodyText.trim()) {
+        adhocRunConfig = JSON.parse(bodyText);
+        logger.info('Using provided adhoc run configuration:', adhocRunConfig);
+      }
+    } catch (parseError) {
+      logger.warn('Failed to parse request body:', parseError);
+    }
+
+    // Fallback to default configuration if no valid payload provided
+    if (!adhocRunConfig) {
+      logger.info('Using default adhoc run configuration');
+      adhocRunConfig = {
+        config: {
+          adhocRunType: 'SPARK_PYTHON_ADHOC_RUN',
+          image: 'docker.io/apache/spark:4.0.0',
+          codeSource: {
+            type: 'MINIO',
+            config: {
+              url: 'applications/python-spark-app',
+            },
+          },
+          stages: [
+            'pip install -r requirements.txt --no-cache-dir',
+            'python3 success_test.py',
+            "echo 'Execution completed successfully'",
+          ],
+          type: 'Python',
+          mode: 'cluster',
+        },
+        dataplaneName: 'xdp-dataplane',
+      };
+    }
+
     // Get base URL from HOST environment variable
     const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || 'demo.xdp.acceldata.tech';
 
     const baseUrl = host.startsWith('http') ? host : `https://${host}`;
-
-    const adhocRunConfig = {
-      config: {
-        adhocRunType: 'SPARK_PYTHON_ADHOC_RUN',
-        image: 'docker.io/apache/spark:4.0.0',
-        codeSource: {
-          type: 'MINIO',
-          config: {
-            url: 'applications/python-spark-app',
-          },
-        },
-        stages: [
-          'pip install -r requirements.txt --no-cache-dir',
-          'python3 success_test.py',
-          "echo 'Execution completed successfully'",
-        ],
-        type: 'Python',
-        mode: 'cluster',
-      },
-      dataplaneName: 'xdp-dataplane',
-    };
 
     const endpoint = `${baseUrl}/xdp-cp-service/api/adhoc-runs`;
 
