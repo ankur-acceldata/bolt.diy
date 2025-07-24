@@ -92,6 +92,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.35.0
         version: 6.36.5
+      '@fern-fs/adapter':
+        specifier: ^1.0.5
+        version: 1.0.5
       '@headlessui/react':
         specifier: ^2.2.0
         version: 2.2.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1857,6 +1860,10 @@ packages:
   '@fastify/busboy@2.1.1':
     resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
     engines: {node: '>=14'}
+
+  '@fern-fs/adapter@1.0.5':
+    resolution: {integrity: sha512-n4KHp+UrXKkZBlPlfTMUcwfIywFJrfn4yTIgCB5neHXEJdR+6UjT/rzdyOdBMGlYS7ue1vUDTTMuT/EK2K0d7w==}
+    engines: {node: '>=16.0.0'}
 
   '@floating-ui/core@1.6.9':
     resolution: {integrity: sha512-uMXCuQ3BItDUbAMhIXw7UPXRfAlOAvZzdK9BWpE60MCn+Svt3aLn9jsPTi/WNGlRUu2uI0v5S7JiIUsbsvh3fw==}
@@ -9632,6 +9639,14 @@ snapshots:
       levn: 0.4.1
 
   '@fastify/busboy@2.1.1': {}
+
+  '@fern-fs/adapter@1.0.5':
+    dependencies:
+      uuid: 9.0.1
+      ws: 8.18.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@floating-ui/core@1.6.9':
     dependencies:

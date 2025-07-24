@@ -3,9 +3,9 @@
  * Hooks into Bolt's existing file system to provide universal sync capabilities
  */
 
-import { BoltFileSystemAdapter } from '~/shared/file-sync-adapter/adapters/bolt-adapter';
-import { SyncManager } from '~/shared/file-sync-adapter/core/sync-manager';
-import { UniversalFileNode } from '~/shared/file-sync-adapter/core/interfaces';
+import { BoltFileSystemAdapter } from '@fern-fs/adapter/adapters/bolt-adapter';
+import { SyncManager } from '@fern-fs/adapter/core/sync-manager';
+import { UniversalFileNode } from '@fern-fs/adapter/core/interfaces';
 import { openDatabase, getSnapshot, setSnapshot } from '~/lib/persistence/db';
 import type { FilesStore } from '~/lib/stores/files';
 
@@ -190,9 +190,9 @@ export class BoltSyncIntegration {
   /**
    * Listen for sync events
    */
-  onSyncEvent<K extends keyof import('~/shared/file-sync-adapter/core/interfaces').SyncEvents>(
+  onSyncEvent<K extends keyof import('@fern-fs/adapter/core/interfaces').SyncEvents>(
     event: K,
-    callback: (data: import('~/shared/file-sync-adapter/core/interfaces').SyncEvents[K]) => void,
+    callback: (data: import('@fern-fs/adapter/core/interfaces').SyncEvents[K]) => void,
   ): () => void {
     if (!this._syncManager) {
       return () => {
@@ -212,7 +212,7 @@ export class BoltSyncIntegration {
 
     try {
       const { FernWebSocketBackend: fernWebSocketBackend } = await import(
-        '~/shared/file-sync-adapter/backends/fern-websocket-backend'
+        '@fern-fs/adapter/backends/fern-websocket-backend'
       );
       const backend = new fernWebSocketBackend(remoteUrl);
 
@@ -230,7 +230,7 @@ export class BoltSyncIntegration {
 
     // Subscribe to file changes in FilesStore
     this._filesStore.files.subscribe((newFiles) => {
-      this.handleFilesStoreChange(newFiles);
+      this._handleFilesStoreChange(newFiles);
     });
 
     // Hook into file operations
@@ -238,7 +238,7 @@ export class BoltSyncIntegration {
 
     this._filesStore.saveFile = async (filePath: string, content: string) => {
       const result = await originalSaveFile(filePath, content);
-      await this.handleFileUpdate(filePath, content);
+      await this._handleFileUpdate(filePath, content);
 
       return result;
     };
@@ -247,7 +247,7 @@ export class BoltSyncIntegration {
 
     this._filesStore.createFile = async (filePath: string, content: string | Uint8Array = '') => {
       const result = await originalCreateFile(filePath, content);
-      await this.handleFileCreate(filePath, content);
+      await this._handleFileCreate(filePath, content);
 
       return result;
     };
@@ -256,7 +256,7 @@ export class BoltSyncIntegration {
 
     this._filesStore.deleteFile = async (filePath: string) => {
       const result = await originalDeleteFile(filePath);
-      await this.handleFileDelete(filePath);
+      await this._handleFileDelete(filePath);
 
       return result;
     };
@@ -310,7 +310,7 @@ export class BoltSyncIntegration {
     }
 
     try {
-      await this.adapter.deleteFile(filePath);
+      await this._adapter.deleteFile(filePath);
     } catch (error) {
       console.error('Error handling file delete:', error);
     }
