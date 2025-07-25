@@ -101,6 +101,7 @@ export default defineConfig((config) => {
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
       host: LISTEN_HOST || (process.env.RUNNING_IN_DOCKER ? '0.0.0.0' : 'localhost'),
+      allowedHosts: ['*'],
       port: PORT,
       https: httpsConfig,
       strictPort: true,
