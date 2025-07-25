@@ -147,7 +147,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
                     const formattedChunk = `data: ${JSON.stringify(logData)}\n\n`;
                     controller.enqueue(new TextEncoder().encode(formattedChunk));
 
-                    logger.debug('Forwarded log data:', logData);
+                    logger.debug('Forwarded log data:', JSON.parse(logData));
                   } catch (parseError) {
                     logger.error('Error parsing SSE data:', parseError);
                   }
