@@ -29,6 +29,7 @@ import { chatStore } from '~/lib/stores/chat';
 import type { ElementInfo } from './Inspector';
 import { useSync } from '~/lib/hooks/useSync';
 import { useSettings } from '~/lib/hooks/useSettings';
+import { apiFetch } from '~/utils/api';
 
 interface WorkspaceProps {
   chatStarted?: boolean;
@@ -289,6 +290,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   const [isSyncing, setIsSyncing] = useState(false);
   const [isPushDialogOpen, setIsPushDialogOpen] = useState(false);
   const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
+  const [isExecuting, setIsExecuting] = useState(false);
 
   // Initialize sync and settings hooks
   const { forceSync, isInitialized: syncInitialized, syncStatus } = useSync();
@@ -304,6 +306,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   const unsavedFiles = useStore(workbenchStore.unsavedFiles);
   const files = useStore(workbenchStore.files);
   const selectedView = useStore(workbenchStore.currentView);
+
   const { showChat } = useStore(chatStore);
   const canHideChat = showWorkbench || !showChat;
 
@@ -312,6 +315,80 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
   const setSelectedView = (view: WorkbenchViewType) => {
     workbenchStore.currentView.set(view);
   };
+
+  const handleExecuteAdhocRun = useCallback(async () => {
+    setIsExecuting(true);
+
+    try {
+      /*
+       * Pre-filled adhoc run configuration payload
+       * Can be customized in the future for different execution scenarios
+       */
+      const payload = {
+        config: {
+          adhocRunType: 'SPARK_PYTHON_ADHOC_RUN',
+          image: 'docker.io/apache/spark:4.0.0',
+          codeSource: {
+            type: 'MINIO',
+            config: {
+              url: 'applications/python-spark-app',
+            },
+          },
+          stages: [
+            'pip install -r requirements.txt --no-cache-dir',
+            'python3 success_test.py',
+            "echo 'Execution completed successfully'",
+          ],
+          type: 'Python',
+          mode: 'cluster',
+        },
+        dataplaneName: 'bhuvan-tanaya-pipeline-dp',
+      };
+
+      const response = await apiFetch('/api/adhoc-run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = (await response.json()) as {
+        error?: string;
+        message?: string;
+        data?: any;
+        success?: boolean;
+      };
+
+      if (!response.ok) {
+        throw new Error(result.error || `Execution failed: ${response.status}`);
+      }
+
+      toast.success(result.message || 'Adhoc run executed successfully!');
+
+      /*
+       * Extract information for log streaming
+       * Expected format from example: wss://demo.xdp.acceldata.tech/xdp-cp-service/api/dataplane/135/logs/adhoc-run-spar-1753369519227/stream?tailLines=100
+       */
+      if (result.success && result.data) {
+        // Extract pod name and dataplane ID from the API response
+        const podName =
+          result.data?.data?.podName || result.data?.name || result.data?.id || `adhoc-run-spar-${Date.now()}`;
+        const dataplaneId =
+          result.data?.data?.dataplaneId || result.data?.dataplane?.id || result.data?.dataplane || '135';
+
+        console.log('Extracted from adhoc-run response:', { podName, dataplaneId, responseData: result.data });
+
+        // Open log viewer with extracted parameters
+        workbenchStore.toggleLogViewer(true, { dataplaneId: String(dataplaneId), podName: String(podName) });
+      }
+    } catch (error) {
+      console.error('Execute adhoc run error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to execute adhoc run');
+    } finally {
+      setIsExecuting(false);
+    }
+  }, []);
 
   /*
    * useEffect(() => {
@@ -440,7 +517,10 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
                 <div className="ml-auto" />
                 {selectedView === 'code' && (
                   <div className="flex overflow-y-auto">
-                    <PanelHeaderButton
+                    <PanelHeaderButton className="mr-1 text-sm" onClick={handleExecuteAdhocRun} disabled={isExecuting}>
+                      {isExecuting ? <div className="i-ph:spinner animate-spin" /> : <div className="i-ph:play" />}
+                    </PanelHeaderButton>
+                    {/* <PanelHeaderButton
                       className="mr-1 text-sm"
                       onClick={() => {
                         workbenchStore.toggleTerminal(!workbenchStore.showTerminal.get());
@@ -448,7 +528,7 @@ export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatM
                     >
                       <div className="i-ph:terminal" />
                       Toggle Terminal
-                    </PanelHeaderButton>
+                    </PanelHeaderButton> */}
                     <div className="flex items-center gap-2">
                       <PanelHeaderButton
                         className="mr-1 text-sm"

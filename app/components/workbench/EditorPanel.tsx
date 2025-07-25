@@ -20,7 +20,8 @@ import { renderLogger } from '~/utils/logger';
 import { isMobile } from '~/utils/mobile';
 import { FileBreadcrumb } from './FileBreadcrumb';
 import { FileTree } from './FileTree';
-import { DEFAULT_TERMINAL_SIZE, TerminalTabs } from './terminal/TerminalTabs';
+import { DEFAULT_TERMINAL_SIZE } from './terminal/TerminalTabs';
+import { LogViewer } from './LogViewer';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { Search } from './Search'; // <-- Ensure Search is imported
 import { classNames } from '~/utils/classNames'; // <-- Import classNames if not already present
@@ -179,7 +180,13 @@ export const EditorPanel = memo(
           </PanelGroup>
         </Panel>
         <PanelResizeHandle />
-        <TerminalTabs />
+        {/* <TerminalTabs /> */}
+        <LogViewer
+          dataplaneId={useStore(workbenchStore.logViewerConfig)?.dataplaneId}
+          podName={useStore(workbenchStore.logViewerConfig)?.podName}
+          isOpen={useStore(workbenchStore.showLogViewer)}
+          onClose={() => workbenchStore.toggleLogViewer(false)}
+        />
       </PanelGroup>
     );
   },
