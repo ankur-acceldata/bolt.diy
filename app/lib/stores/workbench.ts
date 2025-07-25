@@ -58,6 +58,9 @@ export class WorkbenchStore {
     import.meta.hot?.data.supabaseAlert ?? atom<SupabaseAlert | undefined>(undefined);
   deployAlert: WritableAtom<DeployAlert | undefined> =
     import.meta.hot?.data.deployAlert ?? atom<DeployAlert | undefined>(undefined);
+  showLogViewer: WritableAtom<boolean> = import.meta.hot?.data.showLogViewer ?? atom(false);
+  logViewerConfig: WritableAtom<{ dataplaneId?: string; podName?: string } | null> =
+    import.meta.hot?.data.logViewerConfig ?? atom(null);
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
 
@@ -74,6 +77,8 @@ export class WorkbenchStore {
       import.meta.hot.data.actionAlert = this.actionAlert;
       import.meta.hot.data.supabaseAlert = this.supabaseAlert;
       import.meta.hot.data.deployAlert = this.deployAlert;
+      import.meta.hot.data.showLogViewer = this.showLogViewer;
+      import.meta.hot.data.logViewerConfig = this.logViewerConfig;
 
       // Ensure binary files are properly preserved across hot reloads
       const filesMap = this.files.get();
@@ -142,6 +147,14 @@ export class WorkbenchStore {
 
   clearDeployAlert() {
     this.deployAlert.set(undefined);
+  }
+
+  toggleLogViewer(value?: boolean, config?: { dataplaneId?: string; podName?: string } | null) {
+    this.showLogViewer.set(value !== undefined ? value : !this.showLogViewer.get());
+
+    if (config !== undefined) {
+      this.logViewerConfig.set(config);
+    }
   }
 
   toggleTerminal(value?: boolean) {

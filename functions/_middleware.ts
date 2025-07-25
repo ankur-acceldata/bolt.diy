@@ -3,7 +3,7 @@
  * This middleware handles the /ai-editor/ base path for the application
  */
 
-export const onRequest: PagesFunction = async ({ request, next, env }) => {
+export const onRequest = async ({ request, next, env }) => {
   const BASE_PATH = (env as any).BASE_PATH || '/ai-editor';
   const url = new URL(request.url);
 

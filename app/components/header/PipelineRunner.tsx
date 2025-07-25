@@ -55,14 +55,11 @@ export function PipelineRunner({ onClose }: PipelineRunnerProps) {
 
         setAuditData(events);
 
-        // Check if pipeline is complete - stop polling if no INPROGRESS stages or execution_completed is present
-        const anyInProgress = events.some((e: any) => e.status === 'INPROGRESS');
-        const hasExecutionCompleted = events.some((e: any) => e.status === 'execution_completed');
+        // Check if pipeline is complete - pipeline is finished when the last object has status of FAILED or SUCCESS
         const lastEvent = events[events.length - 1];
-        const isLastStageComplete =
-          lastEvent && (lastEvent.status === 'execution_completed' || lastEvent.status.endsWith('_failed'));
+        const isLastStageComplete = lastEvent && (lastEvent.status === 'FAILED' || lastEvent.status === 'SUCCESS');
 
-        if (!anyInProgress || hasExecutionCompleted || isLastStageComplete) {
+        if (isLastStageComplete) {
           finished = true;
           setPipelineCompleted(true);
           break;
@@ -109,10 +106,14 @@ export function PipelineRunner({ onClose }: PipelineRunnerProps) {
           let statusIcon = 'i-ph:clock';
 
           if (typeof event.status === 'string') {
-            if (event.status.endsWith('_failed')) {
+            if (event.status.endsWith('_failed') || event.status === 'FAILED') {
               statusColor = 'text-red-500';
               statusIcon = 'i-ph:x-circle';
-            } else if (event.status.endsWith('_succeeded') || event.status === 'execution_completed') {
+            } else if (
+              event.status.endsWith('_succeeded') ||
+              event.status === 'execution_completed' ||
+              event.status === 'SUCCESS'
+            ) {
               statusColor = 'text-green-500';
               statusIcon = 'i-ph:check-circle';
             } else if (event.status === 'INPROGRESS') {

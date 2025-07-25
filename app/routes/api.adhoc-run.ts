@@ -44,7 +44,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
           type: 'Python',
           mode: 'cluster',
         },
-        dataplaneName: 'xdp-dataplane',
+        dataplaneName: 'bhuvan-tanaya-pipeline-dp',
       };
     }
 
@@ -66,7 +66,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
         'X-Tenant-Name': 'TestTenant',
         'X-User-ID': '5678',
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${(context?.cloudflare?.env as any)?.ACCELDATA_ACCESS_KEY || process.env.ACCELDATA_ACCESS_KEY || 'P8V8WI8JO9G7Z5W'}`,
+        accessKey: (context?.cloudflare?.env as any)?.ACCELDATA_ACCESS_KEY || process.env.ACCELDATA_ACCESS_KEY,
+        secretKey: (context?.cloudflare?.env as any)?.ACCELDATA_SECRET_KEY || process.env.ACCELDATA_SECRET_KEY,
       },
       body: JSON.stringify(adhocRunConfig),
     });

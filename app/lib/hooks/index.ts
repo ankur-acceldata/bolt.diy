@@ -10,3 +10,4 @@ export { useNotifications } from './useNotifications';
 export { useConnectionStatus } from './useConnectionStatus';
 export { useDebugStatus } from './useDebugStatus';
 export { useSync } from './useSync';
+export { useLogStream } from './useLogStream';

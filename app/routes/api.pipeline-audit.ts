@@ -30,14 +30,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
         'X-Tenant-ID': '1234',
         'X-Tenant-Name': 'TestTenant',
         'X-User-ID': '5678',
-        accessKey:
-          (context?.cloudflare?.env as any)?.ACCELDATA_ACCESS_KEY ||
-          process.env.ACCELDATA_ACCESS_KEY ||
-          'ALT6BIHE5NMKBDN',
-        secretKey:
-          (context?.cloudflare?.env as any)?.ACCELDATA_SECRET_KEY ||
-          process.env.ACCELDATA_SECRET_KEY ||
-          '3T8QZL5QOZ8KHXSO20OKETW5EI6JPM',
+        accessKey: (context?.cloudflare?.env as any)?.ACCELDATA_ACCESS_KEY || process.env.ACCELDATA_ACCESS_KEY,
+        secretKey: (context?.cloudflare?.env as any)?.ACCELDATA_SECRET_KEY || process.env.ACCELDATA_SECRET_KEY,
       },
     });
 
