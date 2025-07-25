@@ -420,9 +420,9 @@ export default function FeaturesTab() {
               </label>
               <input
                 type="text"
-                value={syncRemoteUrl || 'http://localhost:8080/api'}
+                value={syncRemoteUrl || 'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api'}
                 onChange={(e) => setSyncRemoteUrl(e.target.value)}
-                placeholder="http://localhost:8080/api"
+                placeholder="https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api"
                 className={classNames(
                   'w-full p-2 rounded-lg text-sm',
                   'bg-bolt-elements-background-depth-3 border border-bolt-elements-borderColor',
@@ -432,7 +432,8 @@ export default function FeaturesTab() {
                 )}
               />
               <p className="text-xs text-bolt-elements-textTertiary mt-1">
-                Direct URL to your Golang API server with Minio backend (default: http://localhost:8080/api)
+                Direct URL to your Golang API server with Minio backend (default:
+                https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api)
               </p>
             </div>
 

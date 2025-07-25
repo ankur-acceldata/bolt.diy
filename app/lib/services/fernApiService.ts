@@ -34,7 +34,10 @@ export class FernApiService {
   private _maxReconnectAttempts = 5;
   private _reconnectDelay = 1000;
 
-  constructor(baseUrl = 'http://localhost:8080/api', wsUrl = 'ws://localhost:8080/ws') {
+  constructor(
+    baseUrl = 'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api',
+    wsUrl = 'wss://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/ws',
+  ) {
     this._baseUrl = baseUrl;
     this._wsUrl = wsUrl;
   }

@@ -148,7 +148,7 @@ Error: ENOENT: no such file or directory, open 'certs/local.demo.xdp.acceldata.t
 ### CORS Errors with External APIs
 If you see CORS errors like:
 ```
-Access to fetch at 'http://localhost:8080/api/health' from origin 'https://local.demo.xdp.acceldata.tech:5173' has been blocked by CORS policy
+Access to fetch at 'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api/health' from origin 'https://local.demo.xdp.acceldata.tech:5173' has been blocked by CORS policy
 ```
 
 **Important**: Most `/api/*` endpoints are handled by **Remix**, not the Golang server. Only file sync operations should go to Golang.
@@ -164,8 +164,8 @@ Access to fetch at 'http://localhost:8080/api/health' from origin 'https://local
 
 **Proxy Configuration**:
 Only these endpoints are proxied to Golang server:
-- `/api/golang/*` → `http://localhost:8080/api/*` 
-- `/ws/golang/*` → `ws://localhost:8080/ws/*`
+- `/api/golang/*` → `https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api/*` 
+- `/ws/golang/*` → `wss://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/ws/*`
 
 If you're still seeing CORS errors:
 1. Make sure your Golang server is running on `localhost:8080`

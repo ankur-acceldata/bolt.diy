@@ -39,8 +39,8 @@ export function useSync() {
         fernSync.setAutoSync(syncAutoSync);
 
         // Parse URLs properly for config update
-        let configServerUrl = 'http://localhost:8080/api';
-        let configWsUrl = 'ws://localhost:8080/ws';
+        let configServerUrl = 'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api';
+        let configWsUrl = 'wss://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/ws';
 
         if (syncRemoteUrl) {
           if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
@@ -97,8 +97,8 @@ export function useSync() {
       logStore.logSystem('Initializing Fern API sync service...');
 
       // Parse remote URL for server and WebSocket URLs
-      let serverUrl = 'http://localhost:8080/api';
-      let wsUrl = 'ws://localhost:8080/ws';
+      let serverUrl = 'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api';
+      let wsUrl = 'wss://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/ws';
 
       if (syncRemoteUrl) {
         if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
