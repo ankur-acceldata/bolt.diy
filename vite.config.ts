@@ -122,7 +122,6 @@ export default defineConfig((config) => {
           ws: true,
         },
       },
-      allowedHosts: ['demo.xdp.acceldata.tech'],
     },
     define: {
       __COMMIT_HASH: JSON.stringify(gitInfo.commitHash),
