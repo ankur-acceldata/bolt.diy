@@ -13,6 +13,7 @@ import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } 
 import { cubicEasingFn } from '~/utils/easings';
 import { HistoryItem } from './HistoryItem';
 import { binDates } from './date-binning';
+import { navigateToHome, getBasePath } from '~/utils/api';
 import { useSearchFilter } from '~/lib/hooks/useSearchFilter';
 import { classNames } from '~/utils/classNames';
 
@@ -143,7 +144,7 @@ export const Menu = () => {
           if (chatId.get() === item.id) {
             // hard page navigation to clear the stores
             console.log('Navigating away from deleted chat');
-            window.location.pathname = '/';
+            navigateToHome(true);
           }
         })
         .catch((error) => {
@@ -208,7 +209,7 @@ export const Menu = () => {
       // Navigate if needed
       if (shouldNavigate) {
         console.log('Navigating away from deleted chat');
-        window.location.pathname = '/';
+        navigateToHome(true);
       }
     },
     [deleteChat, loadEntries, db],
@@ -369,7 +370,7 @@ export const Menu = () => {
           <div className="p-4 space-y-3">
             <div className="flex gap-2">
               <a
-                href="/"
+                href={getBasePath()}
                 className="flex-1 flex gap-2 items-center bg-bolt-elements-item-backgroundAccent opacity-20 dark:bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent font-medium dark:text-bolt-elements-item-contentAccent dark:opacity-80 hover:bg-bolt-elements-item-backgroundAccent hover:opacity-30 dark:hover:bg-bolt-elements-item-backgroundAccent dark:hover:opacity-40 rounded-lg px-4 py-2 transition-colors"
               >
                 <span className="inline-block i-ph:plus-circle h-4 w-4" />

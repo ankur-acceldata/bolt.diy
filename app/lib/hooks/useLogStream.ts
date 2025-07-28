@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createScopedLogger } from '~/utils/logger';
+import { getBasePath } from '~/utils/api';
 
 const logger = createScopedLogger('useLogStream');
 
@@ -72,7 +73,9 @@ export function useLogStream({
        * Construct absolute URL based on current location to avoid routing issues
        */
       const baseUrl = `${window.location.protocol}//${window.location.host}`;
-      const url = `${baseUrl}/ai-editor/api/log-stream?dataplaneId=${encodeURIComponent(dataplaneId)}&podName=${encodeURIComponent(podName)}&tailLines=${tailLines}`;
+      const basePath = getBasePath();
+      const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+      const url = `${baseUrl}${cleanBasePath}/api/log-stream?dataplaneId=${encodeURIComponent(dataplaneId)}&podName=${encodeURIComponent(podName)}&tailLines=${tailLines}`;
 
       logger.info('Connecting to log stream:', url);
 

@@ -7,6 +7,7 @@ import { useLocation } from '@remix-run/react';
 import { db, chatId } from '~/lib/persistence/useChatHistory';
 import { forkChat } from '~/lib/persistence/db';
 import { toast } from 'react-toastify';
+import { createChatUrl } from '~/utils/api';
 import { forwardRef } from 'react';
 import type { ForwardedRef } from 'react';
 import type { ProviderInfo } from '~/types/model';
@@ -42,7 +43,7 @@ export const Messages = forwardRef<HTMLDivElement, MessagesProps>(
         }
 
         const urlId = await forkChat(db, chatId.get()!, messageId);
-        window.location.href = `/chat/${urlId}`;
+        window.location.href = createChatUrl(urlId);
       } catch (error) {
         toast.error('Failed to fork chat: ' + (error as Error).message);
       }

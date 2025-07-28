@@ -37,7 +37,7 @@ function compareVersions(v1: string, v2: string): number {
 export const checkForUpdates = async (): Promise<UpdateCheckResult> => {
   try {
     // Get the current version from local package.json
-    const packageResponse = await fetch(`${import.meta.env.BASE_URL || '/ai-editor/'}package.json`);
+    const packageResponse = await fetch(`${import.meta.env.BASE_URL || '/'}package.json`);
 
     if (!packageResponse.ok) {
       throw new Error('Failed to fetch local package.json');

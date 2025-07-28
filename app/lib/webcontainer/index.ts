@@ -47,7 +47,7 @@ if (!import.meta.env.SSR) {
         const { workbenchStore } = await import('~/lib/stores/workbench');
 
         try {
-          const response = await fetch(`${import.meta.env.BASE_URL || '/ai-editor/'}inspector-script.js`);
+          const response = await fetch(`${import.meta.env.BASE_URL || '/'}inspector-script.js`);
           const inspectorScript = await response.text();
           await webcontainer.setPreviewScript(inspectorScript);
           console.log('DEBUG: Inspector script loaded successfully');

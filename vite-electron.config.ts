@@ -30,7 +30,7 @@ export default defineConfig((config) => {
         include: ['path', 'buffer', 'process'],
       }),
       remixVitePlugin({
-        basename: '/ai-editor/',
+        basename: process.env.BASE_PATH ? (process.env.BASE_PATH.endsWith('/') ? process.env.BASE_PATH : `${process.env.BASE_PATH}/`) : '/',
         future: {
           v3_fetcherPersist: true,
           v3_relativeSplatPath: true,

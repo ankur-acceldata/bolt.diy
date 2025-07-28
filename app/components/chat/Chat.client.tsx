@@ -172,7 +172,7 @@ export const ChatImpl = memo(
       data: chatData,
       setData,
     } = useChat({
-      api: import.meta.env.BASE_URL ? `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/chat` : '/ai-editor/api/chat',
+      api: import.meta.env.BASE_URL ? `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/chat` : '/api/chat',
       body: {
         apiKeys,
         files,

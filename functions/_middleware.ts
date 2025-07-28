@@ -15,6 +15,7 @@ interface EventContext {
 }
 
 export const onRequest = async ({ request, next, env }: EventContext): Promise<Response> => {
+  // Get BASE_PATH from environment with sensible fallback
   const BASE_PATH = env.BASE_PATH || '/ai-editor';
   const url = new URL(request.url);
 

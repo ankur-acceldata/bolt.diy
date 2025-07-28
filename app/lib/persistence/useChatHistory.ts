@@ -5,6 +5,7 @@ import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
+import { getBasePath, createChatUrl } from '~/utils/api';
 import { streamingState } from '~/lib/stores/streaming';
 import {
   getMessages,
@@ -471,7 +472,7 @@ ${value.content}
          * The snapshot will be created when files are uploaded or created
          */
 
-        window.location.href = `/chat/${newId}`;
+        window.location.href = createChatUrl(newId);
         toast.success('Chat imported successfully');
 
         // Set a timeout to clear upload state as fallback (in case AI doesn't complete)
@@ -525,7 +526,11 @@ function navigateChat(nextId: string) {
    * `navigate(`/chat/${nextId}`, { replace: true });`
    */
   const url = new URL(window.location.href);
-  url.pathname = `/chat/${nextId}`;
+
+  // Use getBasePath to respect base path configuration
+  const basePath = getBasePath();
+  const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+  url.pathname = `${cleanBasePath}/chat/${nextId}`;
 
   window.history.replaceState({}, '', url);
 }
