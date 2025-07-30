@@ -37,34 +37,111 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 
     logger.info(`Streaming logs from: ${endpoint}`);
 
+    // Print the exact curl command for debugging (for use in Postman or terminal)
+    const curlCommand = [
+      'curl',
+      '-N', // for streaming output
+      '-H',
+      `'accessKey: ${accessKey}'`,
+      '-H',
+      `'secretKey: ${secretKey}'`,
+      '-H',
+      "'Accept: text/event-stream'",
+      '-H',
+      "'Cache-Control: no-cache'",
+      `'${endpoint}'`,
+    ].join(' ');
+    logger.info(`CURL for Postman/terminal:\n${curlCommand}`);
+
     // Create a readable stream for SSE
     const stream = new ReadableStream({
       async start(controller) {
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         let timeoutId: NodeJS.Timeout | null = null;
 
-        try {
-          logger.info('Initiating connection to backend log stream...');
+        const connectWithRetry = async (retryCount = 0): Promise<Response> => {
+          const maxRetries = 3;
+          const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
 
-          const response = await fetch(endpoint, {
-            headers: {
-              accessKey,
-              secretKey,
-              Accept: 'text/event-stream',
-              'Cache-Control': 'no-cache',
-            },
-          });
+          try {
+            logger.info(`Initiating connection to backend log stream... (attempt ${retryCount + 1}/${maxRetries + 1})`);
 
-          logger.info(`Backend response status: ${response.status} ${response.statusText}`);
-          logger.info(`Backend response headers:`, Object.fromEntries(response.headers.entries()));
+            const response = await fetch(endpoint, {
+              headers: {
+                accessKey,
+                secretKey,
+                Accept: 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'User-Agent': 'Mozilla/5.0 (compatible; LogStreamClient/1.0)',
+                Connection: 'keep-alive',
+                Host: new URL(endpoint).host, // Helps some gateways
+              },
+              signal: request.signal, // Pass through client abort signal
+            });
 
-          if (!response.ok) {
-            const errorText = await response.text().catch(() => 'No error text available');
-            logger.error(`Backend connection failed: ${response.status} ${response.statusText}, Body: ${errorText}`);
-            throw new Error(
-              `Failed to connect to log stream: ${response.status} ${response.statusText} - ${errorText}`,
-            );
+            logger.info(`Backend response status: ${response.status} ${response.statusText}`);
+            logger.info(`Backend response headers:`, Object.fromEntries(response.headers.entries()));
+
+            if (!response.ok) {
+              const errorText = await response.text().catch(() => 'No error text available');
+              logger.error(`Backend connection failed: ${response.status} ${response.statusText}, Body: ${errorText}`);
+
+              // Handle specific error cases
+              if (response.status === 502) {
+                const errorMsg = `Pod logs unavailable (502 Bad Gateway). The pod "${podName}" may have completed execution, been terminated, or not yet started. This is common for short-lived jobs.`;
+
+                if (retryCount < maxRetries) {
+                  logger.info(`Retrying connection in ${retryDelay}ms... (${retryCount + 1}/${maxRetries})`);
+                  await new Promise((resolve) => setTimeout(resolve, retryDelay));
+
+                  return connectWithRetry(retryCount + 1);
+                }
+
+                throw new Error(errorMsg);
+              }
+
+              if (response.status === 404) {
+                throw new Error(
+                  `Pod "${podName}" not found in dataplane "${dataplaneId}". Please verify the pod name and dataplane ID.`,
+                );
+              }
+
+              if (response.status >= 500) {
+                const errorMsg = `Backend server error (${response.status}). Please try again later.`;
+
+                if (retryCount < maxRetries) {
+                  logger.info(`Retrying connection in ${retryDelay}ms... (${retryCount + 1}/${maxRetries})`);
+                  await new Promise((resolve) => setTimeout(resolve, retryDelay));
+
+                  return connectWithRetry(retryCount + 1);
+                }
+
+                throw new Error(errorMsg);
+              }
+
+              throw new Error(
+                `Failed to connect to log stream: ${response.status} ${response.statusText} - ${errorText}`,
+              );
+            }
+
+            return response;
+          } catch (error) {
+            if (
+              retryCount < maxRetries &&
+              (error instanceof TypeError || (error as Error).message?.includes('fetch'))
+            ) {
+              logger.info(`Network error, retrying in ${retryDelay}ms... (${retryCount + 1}/${maxRetries})`);
+              await new Promise((resolve) => setTimeout(resolve, retryDelay));
+
+              return connectWithRetry(retryCount + 1);
+            }
+
+            throw error;
           }
+        };
+
+        try {
+          const response = await connectWithRetry();
 
           if (!response.body) {
             logger.error('No response body from backend');
@@ -103,7 +180,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
             }
           };
 
-          // Start keep-alive timer
+          // Start keep-alive timer (corrected: 30 seconds = 30,000ms)
           timeoutId = setInterval(sendKeepAlive, 30000);
 
           try {
@@ -120,44 +197,58 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
               const chunk = decoder.decode(value, { stream: true });
               logger.debug(`Received chunk: ${chunk.substring(0, 200)}${chunk.length > 200 ? '...' : ''}`);
 
-              // Add to buffer for proper SSE parsing
-              buffer += chunk;
+              // Normalize CRLF and add to buffer for proper SSE parsing
+              buffer += chunk.replace(/\r\n/g, '\n');
 
-              // Process complete SSE messages
+              // Process complete lines
               const lines = buffer.split('\n');
-              buffer = lines.pop() || ''; // Keep incomplete line in buffer
+              buffer = lines.pop() ?? ''; // Keep incomplete line in buffer
 
-              for (const line of lines) {
-                if (line.startsWith('data: ')) {
+              for (const rawLine of lines) {
+                const line = rawLine.trimEnd();
+
+                // Match both "data:payload" and "data: payload" using robust regex
+                const match = /^data:\s?(.*)$/.exec(line);
+
+                if (match) {
                   try {
-                    // Extract the JSON data from the SSE format
-                    const dataStr = line.substring(6); // Remove 'data: ' prefix
+                    // Extract the log content from the matched regex group
+                    const logContent = match[1];
 
-                    // Try to parse as JSON first
-                    let logData;
-
-                    try {
-                      logData = JSON.parse(dataStr);
-                    } catch {
-                      // If not JSON, treat as plain text log
-                      logData = { log: dataStr, timestamp: new Date().toISOString() };
+                    // Skip empty data lines (they're SSE event separators)
+                    if (logContent.length === 0) {
+                      continue;
                     }
 
-                    // Forward the data in SSE format
+                    /*
+                     * Create LogEntry object and send immediately (don't accumulate)
+                     * This preserves the original backend chunking behavior
+                     */
+                    const logData = {
+                      log: logContent,
+                      timestamp: new Date().toISOString(),
+                    };
+
+                    // Forward the data in SSE format expected by frontend
                     const formattedChunk = `data: ${JSON.stringify(logData)}\n\n`;
                     controller.enqueue(new TextEncoder().encode(formattedChunk));
 
-                    logger.debug('Forwarded log data:', JSON.parse(logData));
+                    logger.debug('Forwarded log data:', logData);
                   } catch (parseError) {
-                    logger.error('Error parsing SSE data:', parseError);
+                    logger.error('Error processing SSE data:', parseError);
+
+                    // Send error as log entry
+                    const errorData = {
+                      error: `Parse error: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
+                      timestamp: new Date().toISOString(),
+                    };
+
+                    const errorChunk = `data: ${JSON.stringify(errorData)}\n\n`;
+                    controller.enqueue(new TextEncoder().encode(errorChunk));
                   }
-                } else if (line.trim() === '') {
-                  // Empty line - end of SSE message, send it through
-                  controller.enqueue(new TextEncoder().encode('\n'));
-                } else if (line.includes(':')) {
-                  // Other SSE fields (event, id, retry, etc.)
-                  controller.enqueue(new TextEncoder().encode(line + '\n'));
                 }
+
+                // Note: We don't need to forward other SSE fields since we're transforming the format
               }
             }
           } catch (readError) {
@@ -199,8 +290,9 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no', // Disable buffering in Nginx/Kong
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
