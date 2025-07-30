@@ -15,6 +15,7 @@ const buttonVariants = cva(
           'bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary hover:bg-bolt-elements-background-depth-2',
         ghost: 'hover:bg-bolt-elements-background-depth-1 hover:text-bolt-elements-textPrimary',
         link: 'text-bolt-elements-textPrimary underline-offset-4 hover:underline',
+        accent: 'border border-bolt-elements-borderColorActive bg-transparent text-bolt-elements-textPrimary hover:bg-bolt-elements-button-primary-background hover:text-bolt-elements-button-primary-text',
       },
       size: {
         default: 'h-9 px-4 py-2',

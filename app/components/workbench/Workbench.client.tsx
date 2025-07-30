@@ -15,6 +15,7 @@ import {
 } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { IconButton } from '~/components/ui/IconButton';
 import { PanelHeaderButton } from '~/components/ui/PanelHeaderButton';
+import { ButtonDropdown } from '~/components/ui/ButtonDropdown';
 import { Slider, type SliderOptions } from '~/components/ui/Slider';
 import { StatusIndicator } from '~/components/ui/StatusIndicator';
 import { workbenchStore, type WorkbenchViewType } from '~/lib/stores/workbench';
@@ -292,6 +293,10 @@ const FileModifiedDropdown = memo(
 
 export const Workbench = memo(
   ({ chatStarted, isStreaming, metadata, updateChatMestaData, selectedTemplate }: WorkspaceProps) => {
+    // Handle Edit Configuration callback
+    const handleEditConfiguration = () => {
+      console.log('Edit Configuration clicked');
+    };
     renderLogger.trace('Workbench');
 
     const [isSyncing, setIsSyncing] = useState(false);
@@ -600,13 +605,32 @@ export const Workbench = memo(
                   <div className="ml-auto" />
                   {selectedView === 'code' && (
                     <div className="flex overflow-y-auto">
-                      <PanelHeaderButton
-                        className="mr-1 text-sm"
-                        onClick={handleExecuteAdhocRun}
-                        disabled={isExecuting}
-                      >
-                        {isExecuting ? <div className="i-ph:spinner animate-spin" /> : <div className="i-ph:play" />}
-                      </PanelHeaderButton>
+                      <div className="flex items-center mr-1">
+                        <ButtonDropdown
+                          onMainClick={handleExecuteAdhocRun}
+                          disabled={isExecuting}
+                          variant="accent"
+                          size="sm"
+                          className="px-1.5 py-0.5 text-sm focus:ring-0 focus:ring-offset-0"
+                          dropdownTriggerClassName="px-1"
+                          options={[
+                            {
+                              label: 'Edit Config',
+                              value: 'edit-config',
+                              icon: 'i-ph:gear',
+                              onClick: handleEditConfiguration,
+                            },
+                          ]}
+                          align="end"
+                          showArrow={true}
+                        >
+                          {isExecuting ? (
+                            <div className="i-ph:spinner animate-spin" />
+                          ) : (
+                            <div className="i-ph:play text-bolt-elements-button-primary-text" />
+                          )}
+                        </ButtonDropdown>
+                      </div>
                       {/* <PanelHeaderButton
                       className="mr-1 text-sm"
                       onClick={() => {

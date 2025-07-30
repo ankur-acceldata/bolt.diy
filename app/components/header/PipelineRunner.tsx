@@ -210,7 +210,7 @@ export function PipelineRunner({ onClose }: PipelineRunnerProps) {
 
   return (
     <>
-      <Button onClick={handleRunPipeline} disabled={isRunningPipeline} variant="outline" size="sm" className="mr-2">
+      <Button onClick={handleRunPipeline} disabled={isRunningPipeline} variant="accent" size="sm" className="mr-2">
         {isRunningPipeline ? (
           <>
             <div className="i-ph-spinner-gap-bold animate-spin w-4 h-4 mr-2" />
