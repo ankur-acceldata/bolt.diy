@@ -17,6 +17,7 @@ export function useSync() {
     connected: false,
   });
   const [isInitialized, setIsInitialized] = useState(false);
+  const [currentProjectId, setCurrentProjectId] = useState<string>('');
   const initializationRef = useRef(false);
 
   // Initialize sync when enabled
@@ -102,6 +103,9 @@ export function useSync() {
         chatId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         logStore.logSystem(`Generated new project ID: ${chatId}`);
       }
+
+      logStore.logSystem(`Using project ID: ${chatId}`);
+      setCurrentProjectId(chatId);
 
       // Use Fern API sync service for Golang/Minio integration
       logStore.logSystem('Initializing Fern API sync service...');
@@ -203,6 +207,7 @@ export function useSync() {
     try {
       await disposeFernSync();
       setIsInitialized(false);
+      setCurrentProjectId('');
       setSyncStatus({
         isRunning: false,
         lastSync: null,
@@ -258,6 +263,7 @@ export function useSync() {
   return {
     isInitialized,
     syncStatus,
+    currentProjectId,
     forceSync,
     getSyncStatus,
     disposeSync,

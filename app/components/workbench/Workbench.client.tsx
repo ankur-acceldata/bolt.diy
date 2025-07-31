@@ -305,8 +305,15 @@ export const Workbench = memo(
     const [isExecuting, setIsExecuting] = useState(false);
 
     // Initialize sync and settings hooks
-    const { forceSync, isInitialized: syncInitialized, syncStatus } = useSync();
+    const { forceSync, isInitialized: syncInitialized, syncStatus, currentProjectId } = useSync();
     const { syncEnabled } = useSettings();
+
+    // Log the current project ID for debugging
+    useEffect(() => {
+      if (currentProjectId) {
+        console.log('Workbench using project ID:', currentProjectId);
+      }
+    }, [currentProjectId]);
 
     // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
 
@@ -370,7 +377,7 @@ export const Workbench = memo(
                   'mvn exec:java -Dexec.mainClass="Main"',
                   "echo 'Java execution completed successfully'",
                 ],
-                codeSourceUrl: 'applications/java-spark-app',
+                codeSourceUrl: 'home/projects',
               };
             case 'python-application':
             default:
@@ -382,7 +389,7 @@ export const Workbench = memo(
                   'python3 success_test.py',
                   "echo 'Python execution completed successfully'",
                 ],
-                codeSourceUrl: 'applications/python-spark-app',
+                codeSourceUrl: 'home/projects',
               };
           }
         };
@@ -403,6 +410,25 @@ export const Workbench = memo(
     );
 
     const handleExecuteAdhocRun = useCallback(async () => {
+      // Check if sync is enabled and initialized - this is mandatory
+      if (!syncEnabled) {
+        toast.error('File sync is required for adhoc runs. Please enable sync in Settings → Features');
+        return;
+      }
+
+      if (!syncInitialized) {
+        toast.error('Sync is still initializing. Please wait for sync to complete before running adhoc jobs.');
+        return;
+      }
+
+      if (!currentProjectId) {
+        toast.error('Project ID not available. Please wait for sync initialization to complete.');
+        return;
+      }
+
+      // Use the project ID from sync - no fallback since sync is mandatory
+      const projectId = currentProjectId;
+
       setIsExecuting(true);
 
       try {
@@ -411,6 +437,8 @@ export const Workbench = memo(
 
         console.log('Adhoc Run Execution Config:', {
           selectedTemplate,
+          projectId,
+          syncInitialized,
           extractedCommands: extractShellCommands(),
           finalConfig: execConfig,
         });
@@ -422,8 +450,8 @@ export const Workbench = memo(
             codeSource: {
               type: 'MINIO',
               config: {
-                // TODO: this is the path to the application, We need to get from minio response or anything we know where the code is being stored
-                url: execConfig.codeSourceUrl,
+                // Use project ID in the code source URL for project-specific storage
+                url: `${execConfig.codeSourceUrl}/${projectId}`,
               },
             },
             stages: execConfig.stages,
@@ -476,7 +504,7 @@ export const Workbench = memo(
       } finally {
         setIsExecuting(false);
       }
-    }, [selectedTemplate, getExecutionConfig]);
+    }, [selectedTemplate, getExecutionConfig, syncEnabled, syncInitialized, currentProjectId]);
 
     /*
      * useEffect(() => {
@@ -608,7 +636,7 @@ export const Workbench = memo(
                       <div className="flex items-center mr-1">
                         <ButtonDropdown
                           onMainClick={handleExecuteAdhocRun}
-                          disabled={isExecuting}
+                          disabled={isExecuting || !currentProjectId}
                           variant="accent"
                           size="sm"
                           className="px-1.5 py-0.5 text-sm focus:ring-0 focus:ring-offset-0"
