@@ -366,7 +366,37 @@ export class FernApiService {
         const host = window.location.host;
         const absoluteWsUrl = wsUrl.startsWith('/') ? `${protocol}//${host}${wsUrl}` : wsUrl;
 
-        this._websocket = new WebSocket(absoluteWsUrl);
+        // Check if dev mode is enabled
+        const isDev = localStorage.getItem('dev') === 'true';
+
+        if (!isDev) {
+          // Production mode: Use Kubernetes authentication
+          function getCookie(name: string) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+
+            if (parts.length === 2) {
+              return parts.pop()?.split(';').shift();
+            }
+
+            return '';
+          }
+
+          function base64urlEncode(str: string) {
+            const base64 = btoa(str);
+
+            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+          }
+
+          const accessToken = getCookie('access_token') || '';
+          const encodedToken = base64urlEncode(accessToken);
+          const protocols = [`base64url.bearer.authorization.k8s.io.${encodedToken}`, 'base64.binary.k8s.io'];
+
+          this._websocket = new WebSocket(absoluteWsUrl, protocols);
+        } else {
+          // Dev mode: Use regular WebSocket without authentication
+          this._websocket = new WebSocket(absoluteWsUrl);
+        }
 
         this._websocket.onopen = () => {
           logStore.logSystem('WebSocket connected to Fern API');
