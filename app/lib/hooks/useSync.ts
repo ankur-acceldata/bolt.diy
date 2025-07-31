@@ -39,14 +39,18 @@ export function useSync() {
         fernSync.setAutoSync(syncAutoSync);
 
         // Parse URLs properly for config update
-        let configServerUrl = 'http://localhost:8080/api';
-        let configWsUrl = 'ws://localhost:8080/ws';
+        let configServerUrl = '/api/fern-fs';
+        let configWsUrl = '/ws/fern-fs';
 
         if (syncRemoteUrl) {
           if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
             configWsUrl = syncRemoteUrl;
             configServerUrl =
               syncRemoteUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '') + '/api';
+          } else if (syncRemoteUrl.startsWith('/')) {
+            // Proxy URL - use as is
+            configServerUrl = syncRemoteUrl;
+            configWsUrl = syncRemoteUrl.replace('/api/fern-fs', '/ws/fern-fs');
           } else {
             // Add /api to server URL if not present
             configServerUrl = syncRemoteUrl.endsWith('/api') ? syncRemoteUrl : syncRemoteUrl + '/api';
@@ -103,14 +107,18 @@ export function useSync() {
       logStore.logSystem('Initializing Fern API sync service...');
 
       // Parse remote URL for server and WebSocket URLs
-      let serverUrl = 'http://localhost:8080/api';
-      let wsUrl = 'ws://localhost:8080/ws';
+      let serverUrl = '/api/fern-fs';
+      let wsUrl = '/ws/fern-fs';
 
       if (syncRemoteUrl) {
         if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
           wsUrl = syncRemoteUrl;
           serverUrl =
             syncRemoteUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '') + '/api';
+        } else if (syncRemoteUrl.startsWith('/')) {
+          // Proxy URL - use as is
+          serverUrl = syncRemoteUrl;
+          wsUrl = syncRemoteUrl.replace('/api/fern-fs', '/ws/fern-fs');
         } else {
           // Add /api to server URL if not present
           serverUrl = syncRemoteUrl.endsWith('/api') ? syncRemoteUrl : syncRemoteUrl + '/api';

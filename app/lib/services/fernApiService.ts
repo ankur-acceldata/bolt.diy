@@ -35,7 +35,7 @@ export class FernApiService {
   private _reconnectDelay = 1000;
   private _projectId: string | null = null;
 
-  constructor(baseUrl = 'http://localhost:8080/api', wsUrl = 'ws://localhost:8080/ws') {
+  constructor(baseUrl = '/api/fern-fs', wsUrl = '/ws/fern-fs') {
     this._baseUrl = baseUrl;
     this._wsUrl = wsUrl;
   }
@@ -361,7 +361,12 @@ export class FernApiService {
           wsUrl = `${wsUrl}${separator}projectId=${encodeURIComponent(this._projectId)}`;
         }
 
-        this._websocket = new WebSocket(wsUrl);
+        // Convert relative WebSocket URL to absolute URL with proper protocol
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const absoluteWsUrl = wsUrl.startsWith('/') ? `${protocol}//${host}${wsUrl}` : wsUrl;
+
+        this._websocket = new WebSocket(absoluteWsUrl);
 
         this._websocket.onopen = () => {
           logStore.logSystem('WebSocket connected to Fern API');

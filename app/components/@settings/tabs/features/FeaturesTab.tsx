@@ -420,9 +420,9 @@ export default function FeaturesTab() {
               </label>
               <input
                 type="text"
-                value={syncRemoteUrl || 'http://localhost:8080/api'}
+                value={syncRemoteUrl || '/api/fern-fs'}
                 onChange={(e) => setSyncRemoteUrl(e.target.value)}
-                placeholder="http://localhost:8080/api"
+                placeholder="/api/fern-fs"
                 className={classNames(
                   'w-full p-2 rounded-lg text-sm',
                   'bg-bolt-elements-background-depth-3 border border-bolt-elements-borderColor',

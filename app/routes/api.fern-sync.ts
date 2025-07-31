@@ -9,7 +9,9 @@ import { json } from '@remix-run/cloudflare';
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const action = formData.get('action') as string;
-  const serverUrl = (formData.get('serverUrl') as string) || 'http://localhost:8080';
+  const serverUrl =
+    (formData.get('serverUrl') as string) ||
+    (process.env.NODE_ENV === 'production' ? 'http://ad-fern-fs:80' : 'http://localhost:8080');
 
   try {
     switch (action) {

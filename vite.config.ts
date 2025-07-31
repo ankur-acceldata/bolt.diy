@@ -84,6 +84,20 @@ export default defineConfig((config) => {
   const BASE_PATH = env.BASE_PATH || '/ai-editor';
   const BASE_URL = BASE_PATH.endsWith('/') ? BASE_PATH : `${BASE_PATH}/`;
 
+  // Fern-FS proxy configuration from environment variable
+  const getFernFsUrls = (baseUrl: string) => {
+    const httpUrl = baseUrl.startsWith('http') ? baseUrl : `http://${baseUrl}`;
+    const wsUrl = httpUrl.replace('http://', 'ws://').replace('https://', 'ws://');
+
+    return { httpUrl, wsUrl };
+  };
+
+  const devFernFsUrl = env.FERN_FS_URL || 'localhost:8080';
+  const prodFernFsUrl = env.FERN_FS_PROD_URL || 'ad-fern-fs:80';
+
+  const devUrls = getFernFsUrls(devFernFsUrl);
+  const prodUrls = getFernFsUrls(prodFernFsUrl);
+
   // Check if we have SSL certificates for HTTPS
   const httpsConfig =
     LISTEN_HOST && existsSync(`certs/${LISTEN_HOST}.pem`) && existsSync(`certs/${LISTEN_HOST}-key.pem`)
@@ -120,16 +134,24 @@ export default defineConfig((config) => {
         // Make HMR work when using custom host
         hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
         proxy: {
-          // Golang/Minio file sync endpoints only
-          '/api/golang': {
-            target: 'http://localhost:8080/api',
+          // Fern-FS file sync endpoints only
+          '/api/fern-fs': {
+            target: devUrls.httpUrl,
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/golang/, '/api'),
+            rewrite: (path) => path.replace(/^\/api\/fern-fs/, '/api'),
+            configure: (proxy) => {
+              proxy.on('error', (err) => {
+                console.log('Proxy error:', err);
+              });
+              proxy.on('proxyReq', (proxyReq, req) => {
+                console.log('Proxying request:', req.method, req.url, '->', proxyReq.path);
+              });
+            },
           },
-          '/ws/golang': {
-            target: 'ws://localhost:8080/ws',
+          '/ws/fern-fs': {
+            target: devUrls.wsUrl,
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/ws\/golang/, '/ws'),
+            rewrite: (path) => path.replace(/^\/ws\/fern-fs/, '/ws'),
             ws: true,
           },
         },
@@ -238,16 +260,24 @@ export default defineConfig((config) => {
       // Make HMR work when using custom host
       hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
       proxy: {
-        // Golang/Minio file sync endpoints only
-        '/api/golang': {
-          target: 'http://ad-fern-fs:80',
+        // Fern-FS file sync endpoints only
+        '/api/fern-fs': {
+          target: config.mode === 'production' ? prodUrls.httpUrl : devUrls.httpUrl,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/golang/, '/api'),
+          rewrite: (path) => path.replace(/^\/api\/fern-fs/, '/api'),
+          configure: (proxy) => {
+            proxy.on('error', (err) => {
+              console.log('Proxy error:', err);
+            });
+            proxy.on('proxyReq', (proxyReq, req) => {
+              console.log('Proxying request:', req.method, req.url, '->', proxyReq.path);
+            });
+          },
         },
-        '/ws/golang': {
-          target: 'ws://ad-fern-fs:80',
+        '/ws/fern-fs': {
+          target: config.mode === 'production' ? prodUrls.wsUrl : devUrls.wsUrl,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/ws\/golang/, '/ws'),
+          rewrite: (path) => path.replace(/^\/ws\/fern-fs/, '/ws'),
           ws: true,
         },
       },
