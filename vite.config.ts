@@ -92,11 +92,8 @@ export default defineConfig((config) => {
     return { httpUrl, wsUrl };
   };
 
-  const devFernFsUrl = env.FERN_FS_URL || 'localhost:8080';
-  const prodFernFsUrl = env.FERN_FS_PROD_URL || 'ad-fern-fs:80';
-
-  const devUrls = getFernFsUrls(devFernFsUrl);
-  const prodUrls = getFernFsUrls(prodFernFsUrl);
+  const fernFsUrl = env.FERN_FS_URL || (config.mode === 'production' ? 'ad-fern-fs:80' : 'localhost:8080');
+  const proxyUrls = getFernFsUrls(fernFsUrl);
 
   // Check if we have SSL certificates for HTTPS
   const httpsConfig =
@@ -136,7 +133,7 @@ export default defineConfig((config) => {
         proxy: {
           // Fern-FS file sync endpoints only
           '/api/fern-fs': {
-            target: devUrls.httpUrl,
+            target: proxyUrls.httpUrl,
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api\/fern-fs/, '/api'),
             configure: (proxy) => {
@@ -149,7 +146,7 @@ export default defineConfig((config) => {
             },
           },
           '/ws/fern-fs': {
-            target: devUrls.wsUrl,
+            target: proxyUrls.wsUrl,
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/ws\/fern-fs/, '/ws'),
             ws: true,
@@ -262,7 +259,7 @@ export default defineConfig((config) => {
       proxy: {
         // Fern-FS file sync endpoints only
         '/api/fern-fs': {
-          target: config.mode === 'production' ? prodUrls.httpUrl : devUrls.httpUrl,
+          target: proxyUrls.httpUrl,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/fern-fs/, '/api'),
           configure: (proxy) => {
@@ -275,7 +272,7 @@ export default defineConfig((config) => {
           },
         },
         '/ws/fern-fs': {
-          target: config.mode === 'production' ? prodUrls.wsUrl : devUrls.wsUrl,
+          target: proxyUrls.wsUrl,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/ws\/fern-fs/, '/ws'),
           ws: true,
