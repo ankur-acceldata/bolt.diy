@@ -33,6 +33,11 @@ export class FernSyncService {
     if (options.serverUrl || options.wsUrl) {
       fernApiService.updateConfig(options.serverUrl, options.wsUrl);
     }
+
+    // Set project ID (chatId)
+    if (options.chatId) {
+      fernApiService.setProjectId(options.chatId);
+    }
   }
 
   async initialize(): Promise<void> {
@@ -156,6 +161,7 @@ export class FernSyncService {
 
   setChatId(chatId: string): void {
     this._options.chatId = chatId;
+    fernApiService.setProjectId(chatId);
   }
 
   async getLockedFiles(): Promise<string[]> {

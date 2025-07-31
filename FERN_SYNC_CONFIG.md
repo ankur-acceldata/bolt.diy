@@ -127,7 +127,7 @@ The Golang server provides these endpoints for file operations:
 ### Verification Steps
 
 1. **Check Minio**: Visit http://localhost:9001 (Minio console)
-2. **Check Golang API**: Visit https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api/health
+2. **Check Golang API**: Visit http://localhost:8080/api/health
 3. **Check Sync Status**: View Event Logs in bolt.diy settings
 4. **Check Files**: Verify files appear in Minio bucket
 

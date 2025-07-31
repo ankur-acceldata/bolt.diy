@@ -122,12 +122,12 @@ export default defineConfig((config) => {
         proxy: {
           // Golang/Minio file sync endpoints only
           '/api/golang': {
-            target: 'http://ad-fern-fs:80',
+            target: 'http://localhost:8080/api',
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api\/golang/, '/api'),
           },
           '/ws/golang': {
-            target: 'ws://ad-fern-fs:80',
+            target: 'ws://localhost:8080/ws',
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/ws\/golang/, '/ws'),
             ws: true,

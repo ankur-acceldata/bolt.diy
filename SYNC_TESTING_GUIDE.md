@@ -192,11 +192,11 @@ npm run dev
 
 Test these endpoints to verify server functionality:
 
-- `GET https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api/health` - Server health check
-- `GET https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api/files` - List all files
-- `POST https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api/files/{path}` - Upload file
-- `GET https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api/sync/manifest` - Get sync manifest
-- `WS wss://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/ws` - WebSocket connection
+- `GET http://localhost:8080/api/health` - Server health check
+- `GET http://localhost:8080/api/files` - List all files
+- `POST http://localhost:8080/api/files/{path}` - Upload file
+- `GET http://localhost:8080/api/sync/manifest` - Get sync manifest
+- `WS ws://localhost:8080/ws` - WebSocket connection
 
 ## Performance Expectations
 

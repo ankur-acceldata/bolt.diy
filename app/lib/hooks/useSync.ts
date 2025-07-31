@@ -39,8 +39,8 @@ export function useSync() {
         fernSync.setAutoSync(syncAutoSync);
 
         // Parse URLs properly for config update
-        let configServerUrl = 'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api';
-        let configWsUrl = 'wss://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/ws';
+        let configServerUrl = 'http://localhost:8080/api';
+        let configWsUrl = 'ws://localhost:8080/ws';
 
         if (syncRemoteUrl) {
           if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
@@ -91,14 +91,20 @@ export function useSync() {
   const initializeSync = async () => {
     try {
       // Try to get chatId, but don't require it for global sync
-      const chatId = getCurrentChatId() || 'global-sync';
+      let chatId = getCurrentChatId();
+
+      // Generate a new project ID if none exists
+      if (!chatId || chatId === 'default') {
+        chatId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        logStore.logSystem(`Generated new project ID: ${chatId}`);
+      }
 
       // Use Fern API sync service for Golang/Minio integration
       logStore.logSystem('Initializing Fern API sync service...');
 
       // Parse remote URL for server and WebSocket URLs
-      let serverUrl = 'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api';
-      let wsUrl = 'wss://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/ws';
+      let serverUrl = 'http://localhost:8080/api';
+      let wsUrl = 'ws://localhost:8080/ws';
 
       if (syncRemoteUrl) {
         if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {

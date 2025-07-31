@@ -191,10 +191,7 @@ const getInitialSettings = () => {
     syncEnabled: getStoredBoolean(SETTINGS_KEYS.SYNC_ENABLED, true),
     syncAutoSync: getStoredBoolean(SETTINGS_KEYS.SYNC_AUTO_SYNC, true),
     syncInterval: getStoredNumber(SETTINGS_KEYS.SYNC_INTERVAL, 5000),
-    syncRemoteUrl: getStoredString(
-      SETTINGS_KEYS.SYNC_REMOTE_URL,
-      'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api',
-    ),
+    syncRemoteUrl: getStoredString(SETTINGS_KEYS.SYNC_REMOTE_URL, 'http://localhost:8080/api'),
   };
 };
 

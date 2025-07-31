@@ -33,13 +33,25 @@ export class FernApiService {
   private _reconnectAttempts = 0;
   private _maxReconnectAttempts = 5;
   private _reconnectDelay = 1000;
+  private _projectId: string | null = null;
 
-  constructor(
-    baseUrl = 'https://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/api',
-    wsUrl = 'wss://demo.xdp.acceldata.tech/dp/bhuvan-tanaya-pipeline-dp/fern-fs/ws',
-  ) {
+  constructor(baseUrl = 'http://localhost:8080/api', wsUrl = 'ws://localhost:8080/ws') {
     this._baseUrl = baseUrl;
     this._wsUrl = wsUrl;
+  }
+
+  /**
+   * Set the project ID for all API calls
+   */
+  setProjectId(projectId: string): void {
+    this._projectId = projectId;
+  }
+
+  /**
+   * Get the current project ID
+   */
+  getProjectId(): string | null {
+    return this._projectId;
   }
 
   /**
@@ -98,11 +110,17 @@ export class FernApiService {
    */
   async getFiles(): Promise<FernFile[]> {
     try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this._projectId) {
+        headers['X-Project-ID'] = this._projectId;
+      }
+
       const response = await fetch(`${this._baseUrl}/files`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -123,11 +141,17 @@ export class FernApiService {
    */
   async getFile(path: string): Promise<FernFile | null> {
     try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this._projectId) {
+        headers['X-Project-ID'] = this._projectId;
+      }
+
       const response = await fetch(`${this._baseUrl}/files/${encodeURIComponent(path)}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (response.status === 404) {
@@ -150,14 +174,21 @@ export class FernApiService {
    */
   async saveFile(path: string, content: string): Promise<void> {
     try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this._projectId) {
+        headers['X-Project-ID'] = this._projectId;
+      }
+
       const response = await fetch(`${this._baseUrl}/files/${encodeURIComponent(path)}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           content,
           path,
+          projectId: this._projectId,
         }),
       });
 
@@ -177,11 +208,17 @@ export class FernApiService {
    */
   async deleteFile(path: string): Promise<void> {
     try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this._projectId) {
+        headers['X-Project-ID'] = this._projectId;
+      }
+
       const response = await fetch(`${this._baseUrl}/files/${encodeURIComponent(path)}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -200,14 +237,21 @@ export class FernApiService {
    */
   async moveFile(oldPath: string, newPath: string): Promise<void> {
     try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this._projectId) {
+        headers['X-Project-ID'] = this._projectId;
+      }
+
       const response = await fetch(`${this._baseUrl}/files/move`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           oldPath,
           newPath,
+          projectId: this._projectId,
         }),
       });
 
@@ -227,11 +271,17 @@ export class FernApiService {
    */
   async getManifest(): Promise<FernFileManifest> {
     try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this._projectId) {
+        headers['X-Project-ID'] = this._projectId;
+      }
+
       const response = await fetch(`${this._baseUrl}/sync/manifest`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -303,7 +353,15 @@ export class FernApiService {
   connectWebSocket(onMessage?: (data: any) => void, onError?: (error: Event) => void): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        this._websocket = new WebSocket(this._wsUrl);
+        // Include project ID in WebSocket URL if available
+        let wsUrl = this._wsUrl;
+
+        if (this._projectId) {
+          const separator = wsUrl.includes('?') ? '&' : '?';
+          wsUrl = `${wsUrl}${separator}projectId=${encodeURIComponent(this._projectId)}`;
+        }
+
+        this._websocket = new WebSocket(wsUrl);
 
         this._websocket.onopen = () => {
           logStore.logSystem('WebSocket connected to Fern API');
