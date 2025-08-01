@@ -132,7 +132,7 @@ export default defineConfig((config) => {
         hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
         proxy: {
           // Fern-FS file sync endpoints only
-          '/api/fern-fs': {
+          '/ai-editor/api/fern-fs': {
             target: proxyUrls.httpUrl,
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api\/fern-fs/, '/api'),
@@ -145,7 +145,7 @@ export default defineConfig((config) => {
               });
             },
           },
-          '/ws/fern-fs': {
+          '/ai-editor/ws/fern-fs': {
             target: proxyUrls.wsUrl,
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/ws\/fern-fs/, '/ws'),
@@ -258,7 +258,7 @@ export default defineConfig((config) => {
       hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
       proxy: {
         // Fern-FS file sync endpoints only
-        '/api/fern-fs': {
+        '/ai-editor/api/fern-fs': {
           target: proxyUrls.httpUrl,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/fern-fs/, '/api'),
@@ -271,7 +271,7 @@ export default defineConfig((config) => {
             });
           },
         },
-        '/ws/fern-fs': {
+        '/ai-editor/ws/fern-fs': {
           target: proxyUrls.wsUrl,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/ws\/fern-fs/, '/ws'),

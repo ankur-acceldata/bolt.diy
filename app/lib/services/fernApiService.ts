@@ -35,7 +35,7 @@ export class FernApiService {
   private _reconnectDelay = 1000;
   private _projectId: string | null = null;
 
-  constructor(baseUrl = '/api/fern-fs', wsUrl = '/ws/fern-fs') {
+  constructor(baseUrl = '/ai-editor/api/fern-fs', wsUrl = '/ai-editor/ws/fern-fs') {
     this._baseUrl = baseUrl;
     this._wsUrl = wsUrl;
   }
@@ -59,10 +59,10 @@ export class FernApiService {
    */
   async isServerAvailable(): Promise<boolean> {
     try {
-      console.log('Checking server availability at:', `${this._baseUrl}/ai-editor/health`);
+      console.log('Checking server availability at:', `${this._baseUrl}/health`);
 
       // Create a promise that resolves with the fetch result
-      const fetchPromise = fetch(`${this._baseUrl}/ai-editor/health`, {
+      const fetchPromise = fetch(`${this._baseUrl}/health`, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -118,7 +118,7 @@ export class FernApiService {
         headers['X-Project-ID'] = this._projectId;
       }
 
-      const response = await fetch(`${this._baseUrl}/ai-editor/files`, {
+      const response = await fetch(`${this._baseUrl}/files`, {
         method: 'GET',
         headers,
       });
@@ -149,7 +149,7 @@ export class FernApiService {
         headers['X-Project-ID'] = this._projectId;
       }
 
-      const response = await fetch(`${this._baseUrl}/ai-editor/files/${encodeURIComponent(path)}`, {
+      const response = await fetch(`${this._baseUrl}/files/${encodeURIComponent(path)}`, {
         method: 'GET',
         headers,
       });
@@ -182,7 +182,7 @@ export class FernApiService {
         headers['X-Project-ID'] = this._projectId;
       }
 
-      const response = await fetch(`${this._baseUrl}/ai-editor/files/${encodeURIComponent(path)}`, {
+      const response = await fetch(`${this._baseUrl}/files/${encodeURIComponent(path)}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -216,7 +216,7 @@ export class FernApiService {
         headers['X-Project-ID'] = this._projectId;
       }
 
-      const response = await fetch(`${this._baseUrl}/ai-editor/files/${encodeURIComponent(path)}`, {
+      const response = await fetch(`${this._baseUrl}/files/${encodeURIComponent(path)}`, {
         method: 'DELETE',
         headers,
       });
@@ -245,7 +245,7 @@ export class FernApiService {
         headers['X-Project-ID'] = this._projectId;
       }
 
-      const response = await fetch(`${this._baseUrl}/ai-editor/files/move`, {
+      const response = await fetch(`${this._baseUrl}/files/move`, {
         method: 'PUT',
         headers,
         body: JSON.stringify({
@@ -279,7 +279,7 @@ export class FernApiService {
         headers['X-Project-ID'] = this._projectId;
       }
 
-      const response = await fetch(`${this._baseUrl}/ai-editor/sync/manifest`, {
+      const response = await fetch(`${this._baseUrl}/sync/manifest`, {
         method: 'GET',
         headers,
       });

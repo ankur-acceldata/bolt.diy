@@ -31,7 +31,7 @@ export class FernSyncService {
 
     // Configure API service
     if (options.serverUrl || options.wsUrl) {
-      fernApiService.updateConfig(options.serverUrl, options.wsUrl);
+      fernApiService.updateConfig('/ai-editor/api/fern-fs', '/ai-editor/ws/fern-fs');
     }
 
     // Set project ID (chatId)
