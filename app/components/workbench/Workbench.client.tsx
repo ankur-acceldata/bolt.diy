@@ -30,6 +30,7 @@ import { chatStore } from '~/lib/stores/chat';
 import type { ElementInfo } from './Inspector';
 import { useSync } from '~/lib/hooks/useSync';
 import { useSettings } from '~/lib/hooks/useSettings';
+import { debugProjectId } from '~/utils/fileLocks';
 
 const logger = createScopedLogger('Workbench');
 
@@ -325,6 +326,7 @@ export const Workbench = memo(
     useEffect(() => {
       if (currentProjectId) {
         console.log('Workbench using project ID:', currentProjectId);
+        debugProjectId('Workbench.client.tsx - useSync initialization');
       }
     }, [currentProjectId]);
 

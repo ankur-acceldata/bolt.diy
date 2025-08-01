@@ -29,6 +29,7 @@ import { filesToArtifacts } from '~/utils/fileUtils';
 import { supabaseConnection } from '~/lib/stores/supabase';
 import { defaultDesignScheme, type DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
+import { debugProjectId } from '~/utils/fileLocks';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -120,7 +121,12 @@ export const ChatImpl = memo(
     useShortcuts();
 
     // Initialize sync functionality
-    useSync();
+    const { currentProjectId } = useSync();
+
+    // Debug project ID consistency
+    useEffect(() => {
+      debugProjectId('Chat.client.tsx - useSync initialization');
+    }, [currentProjectId]);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [chatStarted, setChatStarted] = useState(initialMessages.length > 0);

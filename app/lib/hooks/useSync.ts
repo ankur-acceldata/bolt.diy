@@ -2,11 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useSettings } from './useSettings';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { getCurrentChatId } from '~/utils/fileLocks';
+import { getCurrentChatId, getProjectId } from '~/utils/fileLocks';
 import { logStore } from '~/lib/stores/logs';
 import { initializeFernSync, disposeFernSync, getFernSyncService } from '~/lib/sync/fernSyncService';
 
 // Use Fern API sync service for Golang/Minio integration
+
+// Global initialization state to prevent race conditions
+let globalInitializationPromise: Promise<void> | null = null;
+let globalIsInitialized = false;
+let globalCurrentProjectId = '';
+let globalInitializationRef = false;
 
 export function useSync() {
   const { syncEnabled, syncAutoSync, syncInterval, syncRemoteUrl } = useSettings();
@@ -16,16 +22,18 @@ export function useSync() {
     pendingChanges: 0,
     connected: false,
   });
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [currentProjectId, setCurrentProjectId] = useState<string>('');
-  const initializationRef = useRef(false);
+  const [isInitialized, setIsInitialized] = useState(globalIsInitialized);
+  const [currentProjectId, setCurrentProjectId] = useState<string>(globalCurrentProjectId);
+  const initializationRef = useRef(globalInitializationRef);
 
   // Initialize sync when enabled
   useEffect(() => {
-    if (syncEnabled && !initializationRef.current) {
+    if (syncEnabled && !globalInitializationRef) {
+      globalInitializationRef = true;
       initializationRef.current = true;
       initializeSync();
-    } else if (!syncEnabled && initializationRef.current) {
+    } else if (!syncEnabled && globalInitializationRef) {
+      globalInitializationRef = false;
       initializationRef.current = false;
       disposeSync();
     }
@@ -94,118 +102,135 @@ export function useSync() {
   }, [syncEnabled, isInitialized]);
 
   const initializeSync = async () => {
-    try {
-      // Try to get chatId, but don't require it for global sync
-      let chatId = getCurrentChatId();
+    // Prevent multiple simultaneous initializations
+    if (globalInitializationPromise) {
+      logStore.logSystem('Sync initialization already in progress, waiting...');
+      await globalInitializationPromise;
+      setIsInitialized(globalIsInitialized);
+      setCurrentProjectId(globalCurrentProjectId);
 
-      // Generate a new project ID if none exists
-      if (!chatId || chatId === 'default') {
-        chatId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        logStore.logSystem(`Generated new project ID: ${chatId}`);
-      }
-
-      logStore.logSystem(`Using project ID: ${chatId}`);
-      setCurrentProjectId(chatId);
-
-      // Use Fern API sync service for Golang/Minio integration
-      logStore.logSystem('Initializing Fern API sync service...');
-
-      // Parse remote URL for server and WebSocket URLs
-      let serverUrl = '/api/fern-fs';
-      let wsUrl = '/ws/fern-fs';
-
-      if (syncRemoteUrl) {
-        if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
-          wsUrl = syncRemoteUrl;
-          serverUrl =
-            syncRemoteUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '') + '/api';
-        } else if (syncRemoteUrl.startsWith('/')) {
-          // Proxy URL - use as is
-          serverUrl = syncRemoteUrl;
-          wsUrl = syncRemoteUrl.replace('/api/fern-fs', '/ws/fern-fs');
-        } else {
-          // Add /api to server URL if not present
-          serverUrl = syncRemoteUrl.endsWith('/api') ? syncRemoteUrl : syncRemoteUrl + '/api';
-          wsUrl = syncRemoteUrl.replace('http://', 'ws://').replace('https://', 'wss://').replace('/api', '') + '/ws';
-        }
-      }
-
-      const syncIntegration = await initializeFernSync({
-        workbenchStore,
-        chatId,
-        serverUrl,
-        wsUrl,
-        autoSync: syncAutoSync,
-        syncInterval,
-      });
-
-      // Set up event listeners for Fern sync service
-      syncIntegration.on('sync-started', () => {
-        logStore.logSystem('Sync started');
-        setSyncStatus((prev) => ({ ...prev, isRunning: true }));
-      });
-
-      syncIntegration.on('sync-completed', (data: any) => {
-        logStore.logSystem(`Sync completed: ${data.changesApplied || 0} changes applied`);
-        setSyncStatus((prev) => ({
-          ...prev,
-          isRunning: false,
-          lastSync: Date.now(),
-          pendingChanges: 0,
-        }));
-
-        // Removed toast - using status indicator instead
-      });
-
-      syncIntegration.on('sync-error', (error: any) => {
-        logStore.logError('Sync error', error);
-        setSyncStatus((prev) => ({ ...prev, isRunning: false }));
-
-        // Only show critical errors
-        if (error.message.includes('server not available') || error.message.includes('connection failed')) {
-          toast.error(`Sync error: ${error.message}`);
-        }
-      });
-
-      syncIntegration.on('connection-changed', (connected: boolean) => {
-        setSyncStatus((prev) => ({ ...prev, connected }));
-        logStore.logSystem(`Sync connection ${connected ? 'established' : 'lost'}`);
-
-        // Removed toast - using status indicator instead
-      });
-
-      syncIntegration.on('file-saved', (data: any) => {
-        logStore.logSystem(`Auto-saved file: ${data.path}`);
-
-        // Subtle notification for auto-save is already handled in the service
-      });
-
-      syncIntegration.on('auto-save-error', (data: any) => {
-        logStore.logError(`Auto-save failed for ${data.path}`, data.error);
-
-        // Removed toast - using status indicator instead
-      });
-
-      syncIntegration.on('remote-change', (data: any) => {
-        logStore.logSystem(`Remote file change: ${data.operation} on ${data.path}`);
-
-        // Removed toast - using status indicator instead
-      });
-
-      setIsInitialized(true);
-      logStore.logSystem('Fern API sync service initialized successfully');
-
-      // Removed toast - using status indicator instead
-    } catch (error) {
-      logStore.logError('Failed to initialize sync', error);
-      toast.error(`Failed to initialize sync: ${(error as Error).message}`);
-      setIsInitialized(false);
+      return;
     }
+
+    globalInitializationPromise = (async () => {
+      try {
+        // Use centralized project ID manager for consistency
+        const chatId = getCurrentChatId();
+        const projectId = getProjectId(chatId);
+
+        logStore.logSystem(`Using project ID: ${projectId} for chat: ${chatId}`);
+        globalCurrentProjectId = projectId;
+        setCurrentProjectId(projectId);
+
+        // Use Fern API sync service for Golang/Minio integration
+        logStore.logSystem('Initializing Fern API sync service...');
+
+        // Parse remote URL for server and WebSocket URLs
+        let serverUrl = '/api/fern-fs';
+        let wsUrl = '/ws/fern-fs';
+
+        if (syncRemoteUrl) {
+          if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
+            wsUrl = syncRemoteUrl;
+            serverUrl =
+              syncRemoteUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '') + '/api';
+          } else if (syncRemoteUrl.startsWith('/')) {
+            // Proxy URL - use as is
+            serverUrl = syncRemoteUrl;
+            wsUrl = syncRemoteUrl.replace('/api/fern-fs', '/ws/fern-fs');
+          } else {
+            // Add /api to server URL if not present
+            serverUrl = syncRemoteUrl.endsWith('/api') ? syncRemoteUrl : syncRemoteUrl + '/api';
+            wsUrl = syncRemoteUrl.replace('http://', 'ws://').replace('https://', 'wss://').replace('/api', '') + '/ws';
+          }
+        }
+
+        const syncIntegration = await initializeFernSync({
+          workbenchStore,
+          chatId: projectId, // Use the consistent project ID
+          serverUrl,
+          wsUrl,
+          autoSync: syncAutoSync,
+          syncInterval,
+        });
+
+        // Set up event listeners for Fern sync service
+        syncIntegration.on('sync-started', () => {
+          logStore.logSystem('Sync started');
+          setSyncStatus((prev) => ({ ...prev, isRunning: true }));
+        });
+
+        syncIntegration.on('sync-completed', (data: any) => {
+          logStore.logSystem(`Sync completed: ${data.changesApplied || 0} changes applied`);
+          setSyncStatus((prev) => ({
+            ...prev,
+            isRunning: false,
+            lastSync: Date.now(),
+            pendingChanges: 0,
+          }));
+
+          // Removed toast - using status indicator instead
+        });
+
+        syncIntegration.on('sync-error', (error: any) => {
+          logStore.logError('Sync error', error);
+          setSyncStatus((prev) => ({ ...prev, isRunning: false }));
+
+          // Only show critical errors
+          if (error.message.includes('server not available') || error.message.includes('connection failed')) {
+            toast.error(`Sync error: ${error.message}`);
+          }
+        });
+
+        syncIntegration.on('connection-changed', (connected: boolean) => {
+          setSyncStatus((prev) => ({ ...prev, connected }));
+          logStore.logSystem(`Sync connection ${connected ? 'established' : 'lost'}`);
+
+          // Removed toast - using status indicator instead
+        });
+
+        syncIntegration.on('file-saved', (data: any) => {
+          logStore.logSystem(`Auto-saved file: ${data.path}`);
+
+          // Subtle notification for auto-save is already handled in the service
+        });
+
+        syncIntegration.on('auto-save-error', (data: any) => {
+          logStore.logError(`Auto-save failed for ${data.path}`, data.error);
+
+          // Removed toast - using status indicator instead
+        });
+
+        syncIntegration.on('remote-change', (data: any) => {
+          logStore.logSystem(`Remote file change: ${data.operation} on ${data.path}`);
+
+          // Removed toast - using status indicator instead
+        });
+
+        globalIsInitialized = true;
+        setIsInitialized(true);
+        logStore.logSystem('Fern API sync service initialized successfully');
+
+        // Removed toast - using status indicator instead
+      } catch (error) {
+        logStore.logError('Failed to initialize sync', error);
+        toast.error(`Failed to initialize sync: ${(error as Error).message}`);
+        globalIsInitialized = false;
+        setIsInitialized(false);
+      } finally {
+        globalInitializationPromise = null;
+      }
+    })();
+
+    await globalInitializationPromise;
   };
 
   const disposeSync = async () => {
     try {
       await disposeFernSync();
+      globalIsInitialized = false;
+      globalCurrentProjectId = '';
+      globalInitializationRef = false;
       setIsInitialized(false);
       setCurrentProjectId('');
       setSyncStatus({
