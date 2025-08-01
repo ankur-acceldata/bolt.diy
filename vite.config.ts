@@ -80,8 +80,8 @@ export default defineConfig((config) => {
   const PORT = Number(env.PORT || 5173);
   const LISTEN_HOST = HOST ? `local.${HOST}` : undefined;
 
-  // Get base path from environment variable with sensible fallback
-  const BASE_PATH = env.BASE_PATH || env.VITE_BASE_PATH || '';
+  // Get base path from environment variable with /ai-editor as default
+  const BASE_PATH = env.BASE_PATH || env.VITE_BASE_PATH || '/ai-editor';
   const BASE_URL = BASE_PATH ? (BASE_PATH.endsWith('/') ? BASE_PATH : `${BASE_PATH}/`) : '/';
 
   // Fern-FS proxy configuration from environment variable

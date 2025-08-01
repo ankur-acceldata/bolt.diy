@@ -62,8 +62,8 @@ function getConfigFromSources(): Partial<AppConfig> {
  * Normalize and validate configuration
  */
 function normalizeConfig(config: Partial<AppConfig>): AppConfig {
-  // Set defaults
-  const basePath = config.basePath || '/';
+  // Set defaults - use /ai-editor as default base path
+  const basePath = config.basePath || '/ai-editor';
   const baseUrl = basePath.endsWith('/') ? basePath : `${basePath}/`;
   const protocol = config.protocol || (config.isDevelopment ? 'http:' : 'https:');
   const port = config.port || (config.isDevelopment ? 5173 : undefined);
