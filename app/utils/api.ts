@@ -1,53 +1,27 @@
 /**
- * Utility function to construct API URLs with the correct base path
- * This ensures all API calls respect the base path configuration
+ * Utility functions for URL construction with base path support
+ * Note: API calls now use a fetch interceptor that automatically adds base path
+ * These utilities are mainly for asset URLs and navigation
  */
 
 /**
- * Get the base path from the environment or detect from current URL
+ * Get the base path from environment variables only
+ * No URL detection or complex logic - just env vars
  */
 export function getBasePath(): string {
-  // First try to get from Vite's BASE_URL environment variable
+  // First try Vite's BASE_URL (available in browser)
   if (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
-    return import.meta.env.BASE_URL;
+    const baseUrl = import.meta.env.BASE_URL;
+    return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   }
 
-  // Second, try to detect from current URL in browser by finding the path before known routes
-  if (typeof window !== 'undefined') {
-    const currentPath = window.location.pathname;
-
-    // Look for known routes and extract the base path before them
-    const knownRoutes = ['/chat/', '/api/', '/git', '/settings'];
-
-    for (const route of knownRoutes) {
-      const routeIndex = currentPath.indexOf(route);
-
-      if (routeIndex > 0) {
-        // Found a known route, extract base path before it
-        const basePath = currentPath.substring(0, routeIndex);
-        return basePath.endsWith('/') ? basePath : `${basePath}/`;
-      }
-    }
-
-    /*
-     * If we're at the root or a simple path, try to detect if there's a base path
-     * by checking if the path looks like it could have a base (contains non-root segments)
-     */
-    const pathSegments = currentPath.split('/').filter(Boolean);
-
-    if (pathSegments.length === 1 && pathSegments[0] !== '') {
-      // Likely a base path like /ai-editor
-      return `/${pathSegments[0]}/`;
-    }
-  }
-
-  // Fallback: check if BASE_PATH environment variable is available (for Node.js contexts)
+  // Fallback to BASE_PATH environment variable (Node.js contexts)
   if (typeof process !== 'undefined' && process.env?.BASE_PATH) {
     const basePath = process.env.BASE_PATH;
     return basePath.endsWith('/') ? basePath : `${basePath}/`;
   }
 
-  // Final fallback to root path
+  // Final fallback to root
   return '/';
 }
 
@@ -99,16 +73,6 @@ export function apiUrl(path: string): string {
   const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
 
   return `${cleanBasePath}${normalizedPath}`;
-}
-
-/**
- * Enhanced fetch wrapper that automatically handles base path for API calls
- * @param path - The API path
- * @param init - Fetch options
- * @returns Promise<Response>
- */
-export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(apiUrl(path), init);
 }
 
 /**

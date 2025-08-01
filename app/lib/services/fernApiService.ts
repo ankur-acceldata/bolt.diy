@@ -35,7 +35,7 @@ export class FernApiService {
   private _reconnectDelay = 1000;
   private _projectId: string | null = null;
 
-  constructor(baseUrl = '/ai-editor/api/fern-fs', wsUrl = '/ai-editor/ws/fern-fs') {
+  constructor(baseUrl = '/api/fern-fs', wsUrl = '/ws/fern-fs') {
     this._baseUrl = baseUrl;
     this._wsUrl = wsUrl;
   }

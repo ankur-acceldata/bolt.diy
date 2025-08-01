@@ -7,7 +7,6 @@ import { path } from '~/utils/path';
 import { useState } from 'react';
 import type { ActionCallbackData } from '~/lib/runtime/message-parser';
 import { chatId } from '~/lib/persistence/useChatHistory';
-import { apiFetch } from '~/utils/api';
 
 export function useVercelDeploy() {
   const [isDeploying, setIsDeploying] = useState(false);
@@ -139,7 +138,7 @@ export function useVercelDeploy() {
       // Use chatId instead of artifact.id
       const existingProjectId = localStorage.getItem(`vercel-project-${currentChatId}`);
 
-      const response = await apiFetch('/api/vercel-deploy', {
+      const response = await fetch('/api/vercel-deploy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

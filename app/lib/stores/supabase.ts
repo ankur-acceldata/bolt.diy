@@ -1,6 +1,5 @@
 import { atom } from 'nanostores';
 import type { SupabaseUser, SupabaseStats, SupabaseApiKey, SupabaseCredentials } from '~/types/supabase';
-import { apiFetch } from '~/utils/api';
 
 export interface SupabaseProject {
   id: string;
@@ -117,7 +116,7 @@ export async function fetchSupabaseStats(token: string) {
 
   try {
     // Use the internal API route instead of direct Supabase API call
-    const response = await apiFetch('/api/supabase', {
+    const response = await fetch('/api/supabase', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -149,7 +148,7 @@ export async function fetchProjectApiKeys(projectId: string, token: string) {
   isFetchingApiKeys.set(true);
 
   try {
-    const response = await apiFetch('/api/supabase/variables', {
+    const response = await fetch('/api/supabase/variables', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

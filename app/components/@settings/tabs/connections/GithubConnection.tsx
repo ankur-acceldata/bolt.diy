@@ -6,7 +6,6 @@ import { classNames } from '~/utils/classNames';
 import Cookies from 'js-cookie';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '~/components/ui/Collapsible';
 import { Button } from '~/components/ui/Button';
-import { apiFetch } from '~/utils/api';
 
 interface GitHubUserResponse {
   login: string;
@@ -111,7 +110,7 @@ export default function GitHubConnection() {
       console.log('Fetching GitHub user with token:', token.substring(0, 5) + '...');
 
       // Use server-side API endpoint instead of direct GitHub API call
-      const response = await apiFetch(`/api/system/git-info?action=getUser`, {
+      const response = await fetch(`/api/system/git-info?action=getUser`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

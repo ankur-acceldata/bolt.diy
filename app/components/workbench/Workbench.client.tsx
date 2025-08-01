@@ -30,7 +30,6 @@ import { chatStore } from '~/lib/stores/chat';
 import type { ElementInfo } from './Inspector';
 import { useSync } from '~/lib/hooks/useSync';
 import { useSettings } from '~/lib/hooks/useSettings';
-import { apiFetch } from '~/utils/api';
 
 const logger = createScopedLogger('Workbench');
 
@@ -479,7 +478,7 @@ export const Workbench = memo(
           dataplaneName: 'bhuvan-tanaya-pipeline-dp', // TODO: fetch this post event bus integration
         };
 
-        const response = await apiFetch('/api/adhoc-run', {
+        const response = await fetch('/api/adhoc-run', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

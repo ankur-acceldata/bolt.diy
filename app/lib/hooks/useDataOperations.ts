@@ -3,7 +3,6 @@ import { toast } from 'react-toastify';
 import { ImportExportService } from '~/lib/services/importExportService';
 import { useIndexedDB } from '~/lib/hooks/useIndexedDB';
 import { generateId } from 'ai';
-import { apiFetch } from '~/utils/api';
 
 interface UseDataOperationsProps {
   /**
@@ -991,7 +990,7 @@ export function useDataOperations({
       showProgress('Retrieving API keys', 25);
 
       // Create a fetch request to get API keys from server
-      const response = await apiFetch('/api/export-api-keys');
+      const response = await fetch('/api/export-api-keys');
 
       if (!response.ok) {
         throw new Error('Failed to retrieve API keys from server');

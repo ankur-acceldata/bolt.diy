@@ -4,7 +4,6 @@ import { classNames } from '~/utils/classNames';
 import { supabaseConnection } from '~/lib/stores/supabase';
 import { useStore } from '@nanostores/react';
 import { useState } from 'react';
-import { apiFetch } from '~/utils/api';
 
 interface Props {
   alert: SupabaseAlert;
@@ -45,7 +44,7 @@ export function SupabaseChatAlert({ alert, clearAlert, postMessage }: Props) {
     setIsExecuting(true);
 
     try {
-      const response = await apiFetch('/api/supabase/query', {
+      const response = await fetch('/api/supabase/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

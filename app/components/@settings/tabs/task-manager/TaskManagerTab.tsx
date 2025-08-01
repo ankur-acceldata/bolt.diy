@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import { toast } from 'react-toastify'; // Import toast
 import { useUpdateCheck } from '~/lib/hooks/useUpdateCheck';
-import { apiFetch } from '~/utils/api';
+
 import { tabConfigurationStore, type TabConfig } from '~/lib/stores/tabConfigurationStore';
 import { useStore } from 'zustand';
 
@@ -425,9 +425,9 @@ const TaskManagerTab: React.FC = () => {
 
       // Try to fetch system metrics once as detection
       try {
-        const response = await apiFetch('/api/system/memory-info');
-        const diskResponse = await apiFetch('/api/system/disk-info');
-        const processResponse = await apiFetch('/api/system/process-info');
+        const response = await fetch('/api/system/memory-info');
+        const diskResponse = await fetch('/api/system/disk-info');
+        const processResponse = await fetch('/api/system/process-info');
 
         // If all these return errors or not found, system monitoring is not supported
         if (!response.ok && !diskResponse.ok && !processResponse.ok) {
@@ -502,7 +502,7 @@ const TaskManagerTab: React.FC = () => {
 
       const attemptMeasurement = async (): Promise<number> => {
         const start = performance.now();
-        const response = await apiFetch('/api/health', {
+        const response = await fetch('/api/health', {
           method: 'HEAD',
           headers,
         });
@@ -568,7 +568,7 @@ const TaskManagerTab: React.FC = () => {
       };
 
       try {
-        const response = await apiFetch('/api/system/memory-info');
+        const response = await fetch('/api/system/memory-info');
 
         if (response.ok) {
           systemMemoryInfo = await response.json();
@@ -591,7 +591,7 @@ const TaskManagerTab: React.FC = () => {
       let processInfo: ProcessInfo[] | undefined;
 
       try {
-        const response = await apiFetch('/api/system/process-info');
+        const response = await fetch('/api/system/process-info');
 
         if (response.ok) {
           processInfo = await response.json();
@@ -605,7 +605,7 @@ const TaskManagerTab: React.FC = () => {
       let diskInfo: DiskInfo[] | undefined;
 
       try {
-        const response = await apiFetch('/api/system/disk-info');
+        const response = await fetch('/api/system/disk-info');
 
         if (response.ok) {
           diskInfo = await response.json();

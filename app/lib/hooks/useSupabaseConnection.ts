@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useStore } from '@nanostores/react';
 import { logStore } from '~/lib/stores/logs';
-import { apiFetch } from '~/utils/api';
+
 import {
   supabaseConnection,
   isConnecting,
@@ -45,7 +45,7 @@ export function useSupabaseConnection() {
     try {
       const cleanToken = connection.token.trim();
 
-      const response = await apiFetch('/api/supabase', {
+      const response = await fetch('/api/supabase', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

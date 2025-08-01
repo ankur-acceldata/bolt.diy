@@ -1,5 +1,3 @@
-import { apiFetch } from '~/utils/api';
-
 export interface ConnectionStatus {
   connected: boolean;
   latency: number;
@@ -33,10 +31,8 @@ export const checkConnection = async (): Promise<ConnectionStatus> => {
       try {
         const start = performance.now();
 
-        // Use apiFetch for API endpoints, regular fetch for static assets
-        const response = endpoint.startsWith('/api/')
-          ? await apiFetch(endpoint, { method: 'HEAD', cache: 'no-cache' })
-          : await fetch(endpoint, { method: 'HEAD', cache: 'no-cache' });
+        // Use fetch for all requests (interceptor handles base path for API endpoints)
+        const response = await fetch(endpoint, { method: 'HEAD', cache: 'no-cache' });
         const end = performance.now();
 
         if (response.ok) {
