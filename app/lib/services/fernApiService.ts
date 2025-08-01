@@ -4,6 +4,7 @@
  */
 
 import { logStore } from '~/lib/stores/logs';
+import { getBasePath } from '~/lib/config';
 
 export interface FernFile {
   path: string;
@@ -350,11 +351,28 @@ export class FernApiService {
   /**
    * Connect to WebSocket for real-time sync
    */
+  /**
+   * Apply base path to WebSocket URL (similar to fetch interceptor)
+   */
+  private _applyBasePathToWsUrl(url: string): string {
+    // Skip if URL is already absolute or doesn't need base path
+    if (!url.startsWith('/') || url.startsWith('http') || url.startsWith('ws')) {
+      return url;
+    }
+
+    const basePath = getBasePath();
+    const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+
+    return `${cleanBasePath}${url}`;
+  }
+
   connectWebSocket(onMessage?: (data: any) => void, onError?: (error: Event) => void): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        // Apply base path to WebSocket URL (same logic as fetch interceptor)
+        let wsUrl = this._applyBasePathToWsUrl(this._wsUrl);
+
         // Include project ID in WebSocket URL if available
-        let wsUrl = this._wsUrl;
 
         if (this._projectId) {
           const separator = wsUrl.includes('?') ? '&' : '?';
