@@ -135,7 +135,7 @@ export default defineConfig((config) => {
           '/ai-editor/api/fern-fs': {
             target: proxyUrls.httpUrl,
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/fern-fs/, '/api'),
+            rewrite: (path) => path.replace(/^\/ai-editor\/api\/fern-fs/, '/api'),
             configure: (proxy) => {
               proxy.on('error', (err) => {
                 console.log('Proxy error:', err);
@@ -148,7 +148,7 @@ export default defineConfig((config) => {
           '/ai-editor/ws/fern-fs': {
             target: proxyUrls.wsUrl,
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/ws\/fern-fs/, '/ws'),
+            rewrite: (path) => path.replace(/^\/ai-editor\/ws\/fern-fs/, '/ws'),
             ws: true,
           },
         },
@@ -261,7 +261,7 @@ export default defineConfig((config) => {
         '/ai-editor/api/fern-fs': {
           target: proxyUrls.httpUrl,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/fern-fs/, '/api'),
+          rewrite: (path) => path.replace(/^\/ai-editor\/api\/fern-fs/, '/api'),
           configure: (proxy) => {
             proxy.on('error', (err) => {
               console.log('Proxy error:', err);
@@ -274,7 +274,7 @@ export default defineConfig((config) => {
         '/ai-editor/ws/fern-fs': {
           target: proxyUrls.wsUrl,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/ws\/fern-fs/, '/ws'),
+          rewrite: (path) => path.replace(/^\/ai-editor\/ws\/fern-fs/, '/ws'),
           ws: true,
         },
       },
