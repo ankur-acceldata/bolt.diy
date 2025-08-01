@@ -1,13 +1,26 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { classNames } from '~/utils/classNames';
 import { useLogStream } from '~/lib/hooks/useLogStream';
 import { analyzeLogMessage } from '~/utils/logLevelDetection';
 import type { LogViewerProps } from '~/types/logStream';
 
-export function LogViewer({ dataplaneId, podName, isOpen, onClose }: LogViewerProps) {
+export function LogViewer({
+  dataplaneId,
+  podName,
+  isOpen,
+  onClose,
+  onSendMessage,
+  onSetChatInput,
+  model,
+  provider,
+}: LogViewerProps) {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const autoSendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSendCountRef = useRef<number>(0);
+  const lastLogCountRef = useRef<number>(0);
+
+  const [autoSendEnabled, setAutoSendEnabled] = useState(false);
 
   const { logs, isConnected, isConnecting, isInitializing, error, connect, clearLogs } = useLogStream({
     dataplaneId,
@@ -22,21 +35,109 @@ export function LogViewer({ dataplaneId, podName, isOpen, onClose }: LogViewerPr
     }
   }, []);
 
+  const sendLogsToChat = useCallback(
+    (forceAutoSend = false) => {
+      if (logs.length === 0) {
+        return;
+      }
+
+      // Format logs for chat message
+      const logMessages = logs
+        .filter((entry) => !entry.keepAlive) // Filter out keep-alive messages
+        .map((entry) => {
+          const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+          const content = entry.error ? `[ERROR] ${entry.error}` : entry.log || '';
+
+          return `[${timestamp}] ${content}`;
+        })
+        .join('\n');
+
+      // Format the message properly with model/provider prefix for AI to understand
+      const logContent = `I need help analyzing these execution logs from my application:\n\n**Pod:** ${podName}\n**Dataplane:** ${dataplaneId}\n\n\`\`\`\n${logMessages}\n\`\`\`\n\nPlease help me understand what's happening and suggest any fixes if there are errors.`;
+
+      // Include model and provider context if available
+      const messageContent =
+        model && provider ? `[Model: ${model}]\n\n[Provider: ${provider}]\n\n${logContent}` : logContent;
+
+      // Determine which mode to use
+      const isAutoSendMode = forceAutoSend || autoSendEnabled;
+
+      if (isAutoSendMode && onSendMessage) {
+        // Auto-send mode: send message immediately
+        onSendMessage(messageContent);
+
+        // Increment auto-send count if this was an auto-send
+        if (autoSendEnabled) {
+          autoSendCountRef.current += 1;
+        }
+      } else if (!isAutoSendMode && onSetChatInput) {
+        // Manual mode: just set the input text
+        onSetChatInput(messageContent);
+      }
+    },
+    [onSendMessage, onSetChatInput, logs, podName, dataplaneId, autoSendEnabled, model, provider],
+  );
+
+  // Auto-send logic
+  const scheduleAutoSend = useCallback(() => {
+    if (!autoSendEnabled || !onSendMessage || logs.length === 0 || autoSendCountRef.current >= 5) {
+      return;
+    }
+
+    // Clear any existing timeout
+    if (autoSendTimeoutRef.current) {
+      clearTimeout(autoSendTimeoutRef.current);
+    }
+
+    // Schedule auto-send after 4-5 seconds of no new logs
+    autoSendTimeoutRef.current = setTimeout(() => {
+      sendLogsToChat(true); // Force auto-send mode
+    }, 4500); // 4.5 seconds
+  }, [autoSendEnabled, onSendMessage, logs.length, sendLogsToChat]);
+
+  // Reset auto-send count when auto-send is toggled or logs are cleared
+  const toggleAutoSend = useCallback(() => {
+    setAutoSendEnabled(!autoSendEnabled);
+    autoSendCountRef.current = 0;
+
+    if (autoSendTimeoutRef.current) {
+      clearTimeout(autoSendTimeoutRef.current);
+      autoSendTimeoutRef.current = null;
+    }
+  }, [autoSendEnabled]);
+
   useEffect(() => {
     scrollToBottom();
   }, [logs, scrollToBottom]);
+
+  // Handle auto-send when logs change
+  useEffect(() => {
+    const currentLogCount = logs.length;
+
+    // If logs have increased and auto-send is enabled
+    if (currentLogCount > lastLogCountRef.current && autoSendEnabled && autoSendCountRef.current < 5) {
+      scheduleAutoSend();
+    }
+
+    lastLogCountRef.current = currentLogCount;
+  }, [logs.length, autoSendEnabled, scheduleAutoSend]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSendTimeoutRef.current) {
+        clearTimeout(autoSendTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!isOpen) {
     return null;
   }
 
   return (
-    <motion.div
-      initial={{ height: 0 }}
-      animate={{ height: isOpen ? 'auto' : 0 }}
-      className="bg-bolt-elements-background-depth-1 border-t border-bolt-elements-borderColor"
-    >
-      <div className="h-80 flex flex-col">
+    <div className="h-full bg-bolt-elements-background-depth-1 border-t border-bolt-elements-borderColor">
+      <div className="h-full flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 bg-bolt-elements-background-depth-2 border-b border-bolt-elements-borderColor">
           <div className="flex items-center gap-2">
@@ -86,8 +187,45 @@ export function LogViewer({ dataplaneId, podName, isOpen, onClose }: LogViewerPr
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {onSendMessage && (
+              <>
+                <button
+                  onClick={toggleAutoSend}
+                  className={classNames(
+                    'text-xs px-2 py-1 rounded transition-colors border',
+                    autoSendEnabled
+                      ? 'bg-green-500 hover:bg-green-600 text-white border-green-500'
+                      : 'bg-bolt-elements-background-depth-3 hover:bg-bolt-elements-background-depth-4 text-bolt-elements-textSecondary border-bolt-elements-borderColor',
+                  )}
+                  title={
+                    autoSendEnabled
+                      ? `Auto-send enabled (${5 - autoSendCountRef.current} remaining)`
+                      : 'Enable auto-send logs to chat'
+                  }
+                >
+                  {autoSendEnabled ? '🔄 Auto' : 'Auto'}
+                </button>
+                <button
+                  onClick={() => sendLogsToChat(false)} // Force manual mode
+                  disabled={logs.length === 0}
+                  className="text-xs px-2 py-1 bg-accent-500 hover:bg-accent-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={logs.length === 0 ? 'No logs to send' : 'Add logs to chat input'}
+                >
+                  Send to Chat
+                </button>
+              </>
+            )}
             <button
-              onClick={clearLogs}
+              onClick={() => {
+                clearLogs();
+                autoSendCountRef.current = 0;
+                lastLogCountRef.current = 0;
+
+                if (autoSendTimeoutRef.current) {
+                  clearTimeout(autoSendTimeoutRef.current);
+                  autoSendTimeoutRef.current = null;
+                }
+              }}
               className="text-xs px-2 py-1 bg-bolt-elements-background-depth-3 hover:bg-bolt-elements-background-depth-4 text-bolt-elements-textSecondary rounded transition-colors"
               title="Clear logs"
             >
@@ -210,6 +348,6 @@ export function LogViewer({ dataplaneId, podName, isOpen, onClose }: LogViewerPr
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

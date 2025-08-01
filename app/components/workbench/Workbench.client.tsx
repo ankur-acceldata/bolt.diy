@@ -46,6 +46,10 @@ interface WorkspaceProps {
     id: string;
     name: string;
   };
+  onSendMessage?: (message: string) => void;
+  onSetChatInput?: (message: string) => void;
+  model?: string;
+  provider?: string;
 }
 
 const viewTransition = { ease: cubicEasingFn };
@@ -292,7 +296,17 @@ const FileModifiedDropdown = memo(
 );
 
 export const Workbench = memo(
-  ({ chatStarted, isStreaming, metadata, updateChatMestaData, selectedTemplate }: WorkspaceProps) => {
+  ({
+    chatStarted,
+    isStreaming,
+    metadata,
+    updateChatMestaData,
+    selectedTemplate,
+    onSendMessage,
+    onSetChatInput,
+    model,
+    provider,
+  }: WorkspaceProps) => {
     // Handle Edit Configuration callback
     const handleEditConfiguration = () => {
       console.log('Edit Configuration clicked');
@@ -410,16 +424,20 @@ export const Workbench = memo(
     );
 
     const handleExecuteAdhocRun = useCallback(async () => {
-      // Check if sync is enabled and initialized - this is mandatory
-      if (!syncEnabled) {
-        toast.error('File sync is required for adhoc runs. Please enable sync in Settings → Features');
-        return;
-      }
+      /*
+       * Check if sync is enabled and initialized - this is mandatory
+       * if (!syncEnabled) {
+       *   toast.error('File sync is required for adhoc runs. Please enable sync in Settings → Features');
+       *   return;
+       * }
+       */
 
-      if (!syncInitialized) {
-        toast.error('Sync is still initializing. Please wait for sync to complete before running adhoc jobs.');
-        return;
-      }
+      /*
+       * if (!syncInitialized) {
+       *   toast.error('Sync is still initializing. Please wait for sync to complete before running adhoc jobs.');
+       *   return;
+       * }
+       */
 
       if (!currentProjectId) {
         toast.error('Project ID not available. Please wait for sync initialization to complete.');
@@ -726,6 +744,10 @@ export const Workbench = memo(
                       onEditorChange={onEditorChange}
                       onFileSave={onFileSave}
                       onFileReset={onFileReset}
+                      onSendMessage={onSendMessage}
+                      onSetChatInput={onSetChatInput}
+                      model={model}
+                      provider={provider}
                     />
                   </View>
                   <View

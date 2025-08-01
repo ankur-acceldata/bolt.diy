@@ -39,6 +39,10 @@ interface EditorPanelProps {
   onFileSelect?: (value?: string) => void;
   onFileSave?: OnEditorSave;
   onFileReset?: () => void;
+  onSendMessage?: (message: string) => void;
+  onSetChatInput?: (message: string) => void;
+  model?: string;
+  provider?: string;
 }
 
 const DEFAULT_EDITOR_SIZE = 100 - DEFAULT_TERMINAL_SIZE;
@@ -58,11 +62,17 @@ export const EditorPanel = memo(
     onEditorScroll,
     onFileSave,
     onFileReset,
+    onSendMessage,
+    onSetChatInput,
+    model,
+    provider,
   }: EditorPanelProps) => {
     renderLogger.trace('EditorPanel');
 
     const theme = useStore(themeStore);
     const showTerminal = useStore(workbenchStore.showTerminal);
+    const showLogViewer = useStore(workbenchStore.showLogViewer);
+    const logViewerConfig = useStore(workbenchStore.logViewerConfig);
 
     const activeFileSegments = useMemo(() => {
       if (!editorDocument) {
@@ -179,14 +189,23 @@ export const EditorPanel = memo(
             </Panel>
           </PanelGroup>
         </Panel>
-        <PanelResizeHandle />
-        {/* <TerminalTabs /> */}
-        <LogViewer
-          dataplaneId={useStore(workbenchStore.logViewerConfig)?.dataplaneId}
-          podName={useStore(workbenchStore.logViewerConfig)?.podName}
-          isOpen={useStore(workbenchStore.showLogViewer)}
-          onClose={() => workbenchStore.toggleLogViewer(false)}
-        />
+        {showLogViewer && (
+          <>
+            <PanelResizeHandle />
+            <Panel defaultSize={30} minSize={15} maxSize={60}>
+              <LogViewer
+                dataplaneId={logViewerConfig?.dataplaneId}
+                podName={logViewerConfig?.podName}
+                isOpen={showLogViewer}
+                onClose={() => workbenchStore.toggleLogViewer(false)}
+                onSendMessage={onSendMessage}
+                onSetChatInput={onSetChatInput}
+                model={model}
+                provider={provider}
+              />
+            </Panel>
+          </>
+        )}
       </PanelGroup>
     );
   },

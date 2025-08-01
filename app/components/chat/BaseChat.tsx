@@ -3,6 +3,7 @@
  * Preventing TS checks with files presented in the video for a better presentation.
  */
 import type { JSONValue, Message } from 'ai';
+import { generateId } from 'ai';
 import React, { type RefCallback, useEffect, useState } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
@@ -52,6 +53,7 @@ interface BaseChatProps {
   enhancingPrompt?: boolean;
   promptEnhanced?: boolean;
   input?: string;
+  setInput?: (input: string) => void;
   model?: string;
   setModel?: (model: string) => void;
   provider?: ProviderInfo;
@@ -99,6 +101,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setProvider,
       providerList,
       input = '',
+      setInput,
       enhancingPrompt,
       handleInputChange,
 
@@ -514,6 +517,27 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 isStreaming={isStreaming}
                 setSelectedElement={setSelectedElement}
                 selectedTemplate={selectedTemplate}
+                model={model}
+                provider={provider?.name}
+                onSendMessage={(message: string) => {
+                  if (append) {
+                    append({
+                      id: generateId(),
+                      role: 'user',
+                      content: [
+                        {
+                          type: 'text',
+                          text: message,
+                        },
+                      ] as any,
+                    });
+                  }
+                }}
+                onSetChatInput={(message: string) => {
+                  if (setInput) {
+                    setInput(message);
+                  }
+                }}
               />
             )}
           </ClientOnly>

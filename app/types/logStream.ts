@@ -79,6 +79,18 @@ export interface LogViewerProps {
 
   /** Callback when the viewer is closed */
   onClose: () => void;
+
+  /** Callback to send a message to chat (auto-send mode) */
+  onSendMessage?: (message: string) => void;
+
+  /** Callback to set input text in chat box (manual mode) */
+  onSetChatInput?: (message: string) => void;
+
+  /** Current model for proper message formatting */
+  model?: string;
+
+  /** Current provider for proper message formatting */
+  provider?: string;
 }
 
 /**

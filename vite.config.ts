@@ -87,7 +87,7 @@ export default defineConfig((config) => {
   // Fern-FS proxy configuration from environment variable
   const getFernFsUrls = (baseUrl: string) => {
     const httpUrl = baseUrl.startsWith('http') ? baseUrl : `http://${baseUrl}`;
-    const wsUrl = httpUrl.replace('http://', 'ws://').replace('https://', 'ws://');
+    const wsUrl = httpUrl.replace('http://', 'ws://').replace('https://', 'wss://');
 
     return { httpUrl, wsUrl };
   };
