@@ -15,12 +15,15 @@ interface EventContext {
 }
 
 export const onRequest = async ({ request, next, env }: EventContext): Promise<Response> => {
-  // Get BASE_PATH from environment with sensible fallback
-  const BASE_PATH = env.BASE_PATH || '/ai-editor';
+  /*
+   * Get BASE_PATH from environment - no hardcoded fallback
+   * If BASE_PATH is not set, the app should work at root
+   */
+  const BASE_PATH = env.BASE_PATH || '';
   const url = new URL(request.url);
 
   /* For development, also handle the case where BASE_PATH might be set via environment */
-  const actualBasePath = BASE_PATH.endsWith('/') ? BASE_PATH.slice(0, -1) : BASE_PATH;
+  const actualBasePath = BASE_PATH && BASE_PATH.endsWith('/') ? BASE_PATH.slice(0, -1) : BASE_PATH;
 
   // Helper function to add cross-origin isolation headers to any response
   const addCrossOriginHeaders = (response: Response) => {
@@ -48,18 +51,18 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
     return addCrossOriginHeaders(redirectResponse);
   };
 
-  /* Handle root redirect - redirect / to /ai-editor/ */
-  if (url.pathname === '/') {
+  /* Handle root redirect - only redirect if we have a base path */
+  if (url.pathname === '/' && actualBasePath) {
     return createRedirect(actualBasePath + '/');
   }
 
   /* Check if the request is for the base path (with or without trailing slash) */
-  if (url.pathname === actualBasePath) {
+  if (actualBasePath && url.pathname === actualBasePath) {
     return createRedirect(actualBasePath + '/');
   }
 
   /* Handle requests with base path FIRST - this prevents redirect loops */
-  if (url.pathname.startsWith(actualBasePath + '/')) {
+  if (actualBasePath && url.pathname.startsWith(actualBasePath + '/')) {
     const pathWithoutBase = url.pathname.slice(actualBasePath.length);
 
     /* Static assets that should be served with base path */
@@ -147,28 +150,38 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
     '/*.eot', // EOT fonts
   ];
 
-  /* Check if request is for a static asset without base path - redirect to base path */
-  const shouldRedirectToBasePath = staticAssetPaths.some((path) => {
-    if (path.startsWith('/*')) {
-      // Handle wildcard patterns like /*.css
-      const extension = path.substring(2);
-      return url.pathname.endsWith(extension);
+  /* Check if request is for a static asset without base path - redirect to base path only if we have one */
+  if (actualBasePath) {
+    const shouldRedirectToBasePath = staticAssetPaths.some((path) => {
+      if (path.startsWith('/*')) {
+        // Handle wildcard patterns like /*.css
+        const extension = path.substring(2);
+        return url.pathname.endsWith(extension);
+      }
+
+      return url.pathname.startsWith(path);
+    });
+
+    if (shouldRedirectToBasePath) {
+      /* Redirect static asset requests from /assets/... to /base-path/assets/... */
+      console.log(`Redirecting static asset from ${url.pathname} to ${actualBasePath + url.pathname}`);
+      return createRedirect(actualBasePath + url.pathname);
     }
-
-    return url.pathname.startsWith(path);
-  });
-
-  if (shouldRedirectToBasePath) {
-    /* Redirect static asset requests from /assets/... to /ai-editor/assets/... */
-    console.log(`Redirecting static asset from ${url.pathname} to ${actualBasePath + url.pathname}`);
-    return createRedirect(actualBasePath + url.pathname);
   }
 
-  /* API routes without base path should return 404 */
-  if (url.pathname.startsWith('/api/')) {
+  /* API routes without base path should only return 404 if we have a base path configured */
+  if (actualBasePath && url.pathname.startsWith('/api/')) {
     return new Response('API route accessed without base path', { status: 404 });
   }
 
-  /* If the request doesn't start with the base path and isn't a static asset, return 404 */
-  return new Response('Not found', { status: 404 });
+  /* If we have a base path and the request doesn't start with it, return 404 */
+  /* If no base path is configured, pass through to the app */
+  if (actualBasePath) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  /* No base path configured - pass through to the app */
+  const response = await next(request);
+
+  return addCrossOriginHeaders(response);
 };

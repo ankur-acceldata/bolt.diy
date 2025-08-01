@@ -14,8 +14,8 @@ RUN npm install -g pnpm && pnpm install
 # Copy the rest of your app's source code
 COPY . .
 
-# Expose the port the app runs on
-EXPOSE 5173
+# Expose the port the app runs on (default 5173, configurable via PORT arg)
+EXPOSE ${PORT:-5173}
 
 # Production image
 FROM base AS bolt-ai-production
@@ -37,6 +37,11 @@ ARG DEFAULT_NUM_CTX
 ARG ACCELDATA_ACCESS_KEY=XGHSG51IQYK1HH8
 ARG ACCELDATA_SECRET_KEY=RVYHR2NPKXHEO9U4ZOE42CC9JYJZUQ
 
+# Dynamic configuration args (no defaults)
+ARG BASE_PATH
+ARG HOST
+ARG PORT=5173
+
 ENV WRANGLER_SEND_METRICS=false \
     GROQ_API_KEY=${GROQ_API_KEY} \
     HuggingFace_KEY=${HuggingFace_API_KEY} \
@@ -53,6 +58,9 @@ ENV WRANGLER_SEND_METRICS=false \
     DEFAULT_NUM_CTX=${DEFAULT_NUM_CTX} \
     ACCELDATA_ACCESS_KEY=${ACCELDATA_ACCESS_KEY} \
     ACCELDATA_SECRET_KEY=${ACCELDATA_SECRET_KEY} \
+    BASE_PATH=${BASE_PATH} \
+    HOST=${HOST} \
+    PORT=${PORT} \
     RUNNING_IN_DOCKER=true
 
 # Pre-configure wrangler to disable metrics

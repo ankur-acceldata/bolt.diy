@@ -6,6 +6,7 @@
 import { logStore } from '~/lib/stores/logs';
 import { fernApiService, type SyncResult } from '~/lib/services/fernApiService';
 import type { WorkbenchStore } from '~/lib/stores/workbench';
+import { getBasePath } from '~/lib/config';
 
 export interface FernSyncOptions {
   workbenchStore: WorkbenchStore;
@@ -29,9 +30,15 @@ export class FernSyncService {
   constructor(options: FernSyncOptions) {
     this._options = options;
 
-    // Configure API service
+    // Configure API service with dynamic base path
     if (options.serverUrl || options.wsUrl) {
-      fernApiService.updateConfig('/ai-editor/api/fern-fs', '/ai-editor/ws/fern-fs');
+      fernApiService.updateConfig(options.serverUrl, options.wsUrl);
+    } else {
+      // Use dynamic base path from configuration
+      const basePath = getBasePath();
+      const apiUrl = `${basePath}api/fern-fs`;
+      const wsUrl = `${basePath}ws/fern-fs`;
+      fernApiService.updateConfig(apiUrl, wsUrl);
     }
 
     // Set project ID (chatId)

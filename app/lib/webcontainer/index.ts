@@ -47,7 +47,10 @@ if (!import.meta.env.SSR) {
         const { workbenchStore } = await import('~/lib/stores/workbench');
 
         try {
-          const response = await fetch(`${import.meta.env.BASE_URL || '/'}inspector-script.js`);
+          // Use dynamic base path for inspector script
+          const { getBaseUrl } = await import('~/lib/config');
+          const baseUrl = getBaseUrl();
+          const response = await fetch(`${baseUrl}inspector-script.js`);
           const inspectorScript = await response.text();
           await webcontainer.setPreviewScript(inspectorScript);
           console.log('DEBUG: Inspector script loaded successfully');

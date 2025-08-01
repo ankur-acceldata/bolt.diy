@@ -4,31 +4,28 @@
  * These utilities are mainly for asset URLs and navigation
  */
 
+import {
+  getBaseUrl as getConfigBaseUrl,
+  getApiUrl as getConfigApiUrl,
+  getAssetUrl as getConfigAssetUrl,
+  getFullBaseUrl,
+  getAppConfig,
+} from '~/lib/config';
+
 /**
- * Get the base path from environment variables only
- * No URL detection or complex logic - just env vars
+ * Get the base path from the unified configuration system
+ * @deprecated Use getBasePath from ~/lib/config instead
  */
 export function getBasePath(): string {
-  // First try Vite's BASE_URL (available in browser)
-  if (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
-    const baseUrl = import.meta.env.BASE_URL;
-    return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  }
-
-  // Fallback to BASE_PATH environment variable (Node.js contexts)
-  if (typeof process !== 'undefined' && process.env?.BASE_PATH) {
-    const basePath = process.env.BASE_PATH;
-    return basePath.endsWith('/') ? basePath : `${basePath}/`;
-  }
-
-  // Final fallback to root
-  return '/';
+  return getConfigBaseUrl();
 }
 
 /**
  * Get the current protocol, preferring HTTPS when available
  */
 export function getProtocol(): string {
+  const config = getAppConfig();
+
   if (typeof window !== 'undefined') {
     // Always prefer HTTPS in production-like environments
     if (
@@ -41,21 +38,15 @@ export function getProtocol(): string {
     return window.location.protocol;
   }
 
-  // Default to HTTPS for server-side rendering
-  return 'https:';
+  // Use protocol from config or default to HTTPS for server-side rendering
+  return config.protocol || 'https:';
 }
 
 /**
  * Get the full base URL including protocol and host
  */
 export function getBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    const protocol = getProtocol();
-    return `${protocol}//${window.location.host}${getBasePath()}`;
-  }
-
-  // Server-side fallback
-  return getBasePath();
+  return getFullBaseUrl();
 }
 
 /**
@@ -64,15 +55,8 @@ export function getBaseUrl(): string {
  * @returns The full API URL with base path
  */
 export function apiUrl(path: string): string {
-  const basePath = getBasePath();
-
-  // Ensure path starts with /
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-
-  // Remove trailing slash from base path and ensure proper joining
-  const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-
-  return `${cleanBasePath}${normalizedPath}`;
+  // Use the unified config system for API URLs
+  return getConfigApiUrl(path);
 }
 
 /**
@@ -81,13 +65,8 @@ export function apiUrl(path: string): string {
  * @returns The full asset URL with base path
  */
 export function assetUrl(assetPath: string): string {
-  const basePath = getBasePath();
-
-  // Ensure basePath ends with slash and assetPath doesn't start with slash for proper joining
-  const basePathWithSlash = basePath.endsWith('/') ? basePath : `${basePath}/`;
-  const normalizedAssetPath = assetPath.startsWith('/') ? assetPath.substring(1) : assetPath;
-
-  return `${basePathWithSlash}${normalizedAssetPath}`;
+  // Use the unified config system for asset URLs
+  return getConfigAssetUrl(assetPath);
 }
 
 /**
@@ -109,8 +88,8 @@ export function absoluteAssetUrl(assetPath: string): string {
  * Navigate to a path while respecting the base path configuration
  */
 export function navigateToPath(path: string, replace: boolean = false): void {
-  const basePath = getBasePath();
-  const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+  const config = getAppConfig();
+  const cleanBasePath = config.basePath;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const fullPath = `${cleanBasePath}${normalizedPath}`;
 
@@ -125,10 +104,8 @@ export function navigateToPath(path: string, replace: boolean = false): void {
  * Create a chat URL that respects the base path
  */
 export function createChatUrl(chatId: string): string {
-  const basePath = getBasePath();
-  const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-
-  return `${cleanBasePath}/chat/${chatId}`;
+  const config = getAppConfig();
+  return `${config.basePath}/chat/${chatId}`;
 }
 
 /**

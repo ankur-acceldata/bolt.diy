@@ -6,25 +6,13 @@
 let interceptorInstalled = false;
 let originalFetch: typeof fetch;
 
+import { getBasePath as getConfigBasePath } from './config';
+
 /**
- * Get the base path from environment variables only
- * No URL detection or complex logic - just env vars
+ * Get the base path from the unified configuration system
  */
 function getBasePath(): string {
-  // First try Vite's BASE_URL (available in browser)
-  if (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) {
-    const baseUrl = import.meta.env.BASE_URL;
-    return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  }
-
-  // Fallback to BASE_PATH environment variable (Node.js contexts)
-  if (typeof process !== 'undefined' && process.env?.BASE_PATH) {
-    const basePath = process.env.BASE_PATH;
-    return basePath.endsWith('/') ? basePath : `${basePath}/`;
-  }
-
-  // Final fallback to root
-  return '/';
+  return getConfigBasePath();
 }
 
 /**

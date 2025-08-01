@@ -75,14 +75,14 @@ export default defineConfig((config) => {
   // Load environment variables including non-VITE_ prefixed ones
   const env = loadEnv(config.mode || 'development', process.cwd(), '');
 
-  // Extract host configuration from environment
+  // Extract host configuration from environment (no defaults)
   const HOST = env.HOST;
   const PORT = Number(env.PORT || 5173);
   const LISTEN_HOST = HOST ? `local.${HOST}` : undefined;
 
-  // Get base path from environment variable with fallback
-  const BASE_PATH = env.BASE_PATH || '/ai-editor';
-  const BASE_URL = BASE_PATH.endsWith('/') ? BASE_PATH : `${BASE_PATH}/`;
+  // Get base path from environment variable with sensible fallback
+  const BASE_PATH = env.BASE_PATH || env.VITE_BASE_PATH || '';
+  const BASE_URL = BASE_PATH ? (BASE_PATH.endsWith('/') ? BASE_PATH : `${BASE_PATH}/`) : '/';
 
   // Fern-FS proxy configuration from environment variable
   const getFernFsUrls = (baseUrl: string) => {
@@ -130,28 +130,49 @@ export default defineConfig((config) => {
 
         // Make HMR work when using custom host
         hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
-        proxy: {
-          // Fern-FS file sync endpoints only
-          '/ai-editor/api/fern-fs': {
-            target: proxyUrls.httpUrl,
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/ai-editor\/api\/fern-fs/, '/api'),
-            configure: (proxy) => {
-              proxy.on('error', (err) => {
-                console.log('Proxy error:', err);
-              });
-              proxy.on('proxyReq', (proxyReq, req) => {
-                console.log('Proxying request:', req.method, req.url, '->', proxyReq.path);
-              });
-            },
-          },
-          '/ai-editor/ws/fern-fs': {
-            target: proxyUrls.wsUrl,
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/ai-editor\/ws\/fern-fs/, '/ws'),
-            ws: true,
-          },
-        },
+        proxy: (() => {
+          const proxyConfig: Record<string, any> = {};
+
+          if (BASE_PATH) {
+            // Fern-FS file sync endpoints with base path
+            proxyConfig[`${BASE_PATH}/api/fern-fs`] = {
+              target: proxyUrls.httpUrl,
+              changeOrigin: true,
+              rewrite: (path: string) =>
+                path.replace(new RegExp(`^${BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/fern-fs`), '/api'),
+              configure: (proxy: any) => {
+                proxy.on('error', (err: any) => {
+                  console.log('Proxy error:', err);
+                });
+                proxy.on('proxyReq', (proxyReq: any, req: any) => {
+                  console.log('Proxying request:', req.method, req.url, '->', proxyReq.path);
+                });
+              },
+            };
+            proxyConfig[`${BASE_PATH}/ws/fern-fs`] = {
+              target: proxyUrls.wsUrl,
+              changeOrigin: true,
+              rewrite: (path: string) =>
+                path.replace(new RegExp(`^${BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/ws/fern-fs`), '/ws'),
+              ws: true,
+            };
+          } else {
+            // Default proxy when no base path
+            proxyConfig['/api/fern-fs'] = {
+              target: proxyUrls.httpUrl,
+              changeOrigin: true,
+              rewrite: (path: string) => path.replace(/^\/api\/fern-fs/, '/api'),
+            };
+            proxyConfig['/ws/fern-fs'] = {
+              target: proxyUrls.wsUrl,
+              changeOrigin: true,
+              rewrite: (path: string) => path.replace(/^\/ws\/fern-fs/, '/ws'),
+              ws: true,
+            };
+          }
+
+          return proxyConfig;
+        })(),
       },
       define: {
         __COMMIT_HASH: JSON.stringify(gitInfo.commitHash),
@@ -170,6 +191,12 @@ export default defineConfig((config) => {
         __PKG_PEER_DEPENDENCIES: JSON.stringify(pkg.peerDependencies),
         __PKG_OPTIONAL_DEPENDENCIES: JSON.stringify(pkg.optionalDependencies),
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
+        __COMMIT_HASH__: JSON.stringify(gitInfo.commitHash || 'unknown'),
+        __COMMIT_DATE__: JSON.stringify(gitInfo.commitTime || 'unknown'),
+        __APP_VERSION__: JSON.stringify(process.env.npm_package_version || 'unknown'),
+        'import.meta.env.VITE_BASE_PATH': JSON.stringify(BASE_PATH),
+        'import.meta.env.VITE_HOST': JSON.stringify(HOST),
+        'import.meta.env.VITE_PORT': JSON.stringify(PORT.toString()),
 
         // Ensure BASE_URL is available in client-side code for proper asset path handling
         'import.meta.env.BASE_URL': JSON.stringify(BASE_URL),
@@ -214,6 +241,7 @@ export default defineConfig((config) => {
         UnoCSS(),
         tsconfigPaths(),
         chrome129IssuePlugin(),
+        basePathDevPlugin(BASE_PATH),
         config.mode === 'production' && optimizeCssModules({ apply: 'build' }),
       ],
       envPrefix: [
@@ -256,28 +284,49 @@ export default defineConfig((config) => {
 
       // Make HMR work when using custom host
       hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
-      proxy: {
-        // Fern-FS file sync endpoints only
-        '/ai-editor/api/fern-fs': {
-          target: proxyUrls.httpUrl,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/ai-editor\/api\/fern-fs/, '/api'),
-          configure: (proxy) => {
-            proxy.on('error', (err) => {
-              console.log('Proxy error:', err);
-            });
-            proxy.on('proxyReq', (proxyReq, req) => {
-              console.log('Proxying request:', req.method, req.url, '->', proxyReq.path);
-            });
-          },
-        },
-        '/ai-editor/ws/fern-fs': {
-          target: proxyUrls.wsUrl,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/ai-editor\/ws\/fern-fs/, '/ws'),
-          ws: true,
-        },
-      },
+      proxy: (() => {
+        const proxyConfig: Record<string, any> = {};
+
+        if (BASE_PATH) {
+          // Fern-FS file sync endpoints with base path
+          proxyConfig[`${BASE_PATH}/api/fern-fs`] = {
+            target: proxyUrls.httpUrl,
+            changeOrigin: true,
+            rewrite: (path: string) =>
+              path.replace(new RegExp(`^${BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/fern-fs`), '/api'),
+            configure: (proxy: any) => {
+              proxy.on('error', (err: any) => {
+                console.log('Proxy error:', err);
+              });
+              proxy.on('proxyReq', (proxyReq: any, req: any) => {
+                console.log('Proxying request:', req.method, req.url, '->', proxyReq.path);
+              });
+            },
+          };
+          proxyConfig[`${BASE_PATH}/ws/fern-fs`] = {
+            target: proxyUrls.wsUrl,
+            changeOrigin: true,
+            rewrite: (path: string) =>
+              path.replace(new RegExp(`^${BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/ws/fern-fs`), '/ws'),
+            ws: true,
+          };
+        } else {
+          // Default proxy when no base path
+          proxyConfig['/api/fern-fs'] = {
+            target: proxyUrls.httpUrl,
+            changeOrigin: true,
+            rewrite: (path: string) => path.replace(/^\/api\/fern-fs/, '/api'),
+          };
+          proxyConfig['/ws/fern-fs'] = {
+            target: proxyUrls.wsUrl,
+            changeOrigin: true,
+            rewrite: (path: string) => path.replace(/^\/ws\/fern-fs/, '/ws'),
+            ws: true,
+          };
+        }
+
+        return proxyConfig;
+      })(),
     },
     define: {
       __COMMIT_HASH: JSON.stringify(gitInfo.commitHash),
@@ -358,6 +407,56 @@ export default defineConfig((config) => {
     },
   };
 });
+
+function basePathDevPlugin(basePath: string) {
+  return {
+    name: 'base-path-dev-plugin',
+    configureServer(server: ViteDevServer) {
+      if (!basePath) {
+        return; // No base path, no need for middleware
+      }
+
+      // Simple middleware to handle redirects only
+      server.middlewares.use((req, res, next) => {
+        const url = req.url || '';
+
+        // Only handle requests that DON'T have the base path
+        if (url.startsWith(basePath)) {
+          // Already has base path, let it through
+          next();
+          return;
+        }
+
+        // Root redirect
+        if (url === '/') {
+          console.log(`[BasePathDev] Redirecting root to: ${basePath}/`);
+          res.writeHead(301, { Location: `${basePath}/` });
+          res.end();
+
+          return;
+        }
+
+        // Static asset redirect (only if not already having base path)
+        if (
+          url.startsWith('/assets/') ||
+          url.startsWith('/build/') ||
+          url.startsWith('/@vite/') ||
+          url.match(/\.(css|js|svg|png|jpg|jpeg|ico|woff|woff2|ttf|eot)$/)
+        ) {
+          const redirectUrl = `${basePath}${url}`;
+          console.log(`[BasePathDev] Redirecting asset: ${url} -> ${redirectUrl}`);
+          res.writeHead(301, { Location: redirectUrl });
+          res.end();
+
+          return;
+        }
+
+        // For all other requests, let them through (Remix will handle)
+        next();
+      });
+    },
+  };
+}
 
 function chrome129IssuePlugin() {
   return {
