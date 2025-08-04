@@ -104,7 +104,7 @@ export const LOG_STREAM_CONSTANTS = {
   KEEP_ALIVE_INTERVAL: 30000,
 
   /** Default initialization delay before first connection attempt (ms) */
-  DEFAULT_INITIAL_DELAY: 10000,
+  DEFAULT_INITIAL_DELAY: 20000,
 
   /** Maximum retry attempts for failed connections */
   MAX_RETRY_ATTEMPTS: 3,

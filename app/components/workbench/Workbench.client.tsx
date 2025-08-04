@@ -5,6 +5,7 @@ import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
 interface JobConfig {
   baseImage: string;
   dataplaneName: string;
+  dataplaneId: string;
   stages: string[];
   depends: {
     dataStores: Array<{
@@ -412,8 +413,8 @@ export const Workbench = memo(
     }, []);
 
     const getJobConfigFromXdp = useCallback(
-      (stages: string[]): Promise<JobConfig> => {
-        return bus.sendMessageWithResponse<{ stages: string[] }, JobConfig>(
+      async (stages: string[]): Promise<JobConfig> => {
+        const response = await bus.sendMessageWithResponse<{ stages: string[] }, JobConfig[] | JobConfig>(
           {
             type: MessageType.ADHOC_RUN,
             payload: {
@@ -422,9 +423,20 @@ export const Workbench = memo(
           },
           {
             responseType: MessageType.ADHOC_RUN_RESPONSE,
-            timeout: 10000,
+            timeout: 100000,
           },
         );
+
+        // Handle both array and single object responses
+        if (Array.isArray(response)) {
+          if (response.length === 0) {
+            throw new Error('No job configuration received from XDP');
+          }
+
+          return response[0]; // Return the first (and likely only) JobConfig object
+        }
+
+        return response; // Return the single JobConfig object
       },
       [bus],
     );
@@ -511,9 +523,17 @@ export const Workbench = memo(
         // Get job configuration from XDP with the local stages
         const jobConfig = await getJobConfigFromXdp(localConfig.stages);
 
-        // Destructure for cleaner usage
-        const { baseImage, dataplaneName, stages, depends, executionConfig } = jobConfig;
-        const { adhocRunType, codeSourceUrl, type } = localConfig;
+        // Destructure for cleaner usage, handling nulls/undefined with defaults
+        const {
+          baseImage = '',
+          dataplaneName = '',
+          dataplaneId = '',
+          stages = [],
+          depends = { dataStores: [] },
+          executionConfig = {},
+        } = jobConfig || {};
+
+        const { adhocRunType = '', codeSourceUrl = '', type = '' } = localConfig || {};
 
         logger.info('Adhoc Run Execution Config:', {
           selectedTemplate,
@@ -523,7 +543,7 @@ export const Workbench = memo(
           mergedConfig: {
             template: { adhocRunType, type }, // Local template config
 
-            job: { baseImage, dataplaneName, stages, executionConfig }, // Job config from XDP
+            job: { baseImage, dataplaneName, dataplaneId, stages, executionConfig }, // Job config from XDP
 
             codeSource: `${codeSourceUrl}/${projectId}`, // Combined
           },
@@ -546,6 +566,7 @@ export const Workbench = memo(
             depends: depends || { dataStores: [] },
           },
           dataplaneName: dataplaneName || '',
+          dataplaneId: dataplaneId || '',
         };
 
         logger.info('Final payload being sent:', JSON.stringify(payload, null, 2));
@@ -578,7 +599,8 @@ export const Workbench = memo(
         if (result.success && result.data) {
           // Extract pod name and dataplane ID from the API response
           const podName = result.data?.data?.podName || result.data?.name || result.data?.id;
-          const dataplaneId = result.data?.data?.dataplaneId || result.data?.dataplane?.id || result.data?.dataplane;
+
+          // const dataplaneId = result.data?.data?.dataplaneId || result.data?.dataplane?.id || result.data?.dataplane;
 
           logger.info('Extracted from adhoc-run response:', { podName, dataplaneId, responseData: result.data });
 
