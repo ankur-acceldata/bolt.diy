@@ -84,6 +84,11 @@ export default defineConfig((config) => {
   const BASE_PATH = env.BASE_PATH || env.VITE_BASE_PATH || '/ai-editor';
   const BASE_URL = BASE_PATH ? (BASE_PATH.endsWith('/') ? BASE_PATH : `${BASE_PATH}/`) : '/';
 
+  // Normalize base path for proxy configuration (ensure leading slash, no trailing slash)
+  const normalizedBasePath = BASE_PATH
+    ? (BASE_PATH.startsWith('/') ? BASE_PATH : `/${BASE_PATH}`).replace(/\/+$/, '')
+    : '';
+
   // Fern-FS proxy configuration from environment variable
   const getFernFsUrls = (baseUrl: string) => {
     const httpUrl = baseUrl.startsWith('http') ? baseUrl : `http://${baseUrl}`;
@@ -133,13 +138,16 @@ export default defineConfig((config) => {
         proxy: (() => {
           const proxyConfig: Record<string, any> = {};
 
-          if (BASE_PATH) {
+          if (normalizedBasePath) {
             // Fern-FS file sync endpoints with base path
-            proxyConfig[`${BASE_PATH}/api/fern-fs`] = {
+            proxyConfig[`${normalizedBasePath}/api/fern-fs`] = {
               target: proxyUrls.httpUrl,
               changeOrigin: true,
               rewrite: (path: string) =>
-                path.replace(new RegExp(`^${BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/fern-fs`), '/api'),
+                path.replace(
+                  new RegExp(`^${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/fern-fs`),
+                  '/api',
+                ),
               configure: (proxy: any) => {
                 proxy.on('error', (err: any) => {
                   console.log('Proxy error:', err);
@@ -149,11 +157,14 @@ export default defineConfig((config) => {
                 });
               },
             };
-            proxyConfig[`${BASE_PATH}/ws/fern-fs`] = {
+            proxyConfig[`${normalizedBasePath}/ws/fern-fs`] = {
               target: proxyUrls.wsUrl,
               changeOrigin: true,
               rewrite: (path: string) =>
-                path.replace(new RegExp(`^${BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/ws/fern-fs`), '/ws'),
+                path.replace(
+                  new RegExp(`^${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/ws/fern-fs`),
+                  '/ws',
+                ),
               ws: true,
             };
           } else {
@@ -287,13 +298,16 @@ export default defineConfig((config) => {
       proxy: (() => {
         const proxyConfig: Record<string, any> = {};
 
-        if (BASE_PATH) {
+        if (normalizedBasePath) {
           // Fern-FS file sync endpoints with base path
-          proxyConfig[`${BASE_PATH}/api/fern-fs`] = {
+          proxyConfig[`${normalizedBasePath}/api/fern-fs`] = {
             target: proxyUrls.httpUrl,
             changeOrigin: true,
             rewrite: (path: string) =>
-              path.replace(new RegExp(`^${BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/fern-fs`), '/api'),
+              path.replace(
+                new RegExp(`^${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/fern-fs`),
+                '/api',
+              ),
             configure: (proxy: any) => {
               proxy.on('error', (err: any) => {
                 console.log('Proxy error:', err);
@@ -303,11 +317,14 @@ export default defineConfig((config) => {
               });
             },
           };
-          proxyConfig[`${BASE_PATH}/ws/fern-fs`] = {
+          proxyConfig[`${normalizedBasePath}/ws/fern-fs`] = {
             target: proxyUrls.wsUrl,
             changeOrigin: true,
             rewrite: (path: string) =>
-              path.replace(new RegExp(`^${BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/ws/fern-fs`), '/ws'),
+              path.replace(
+                new RegExp(`^${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/ws/fern-fs`),
+                '/ws',
+              ),
             ws: true,
           };
         } else {
