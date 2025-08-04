@@ -1,5 +1,6 @@
 import { memo, useMemo, useEffect, useCallback } from 'react';
 import { useStore } from '@nanostores/react';
+import { createScopedLogger } from '~/utils/logger';
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { FileMap } from '~/lib/stores/files';
 import type { EditorDocument } from '~/components/editor/codemirror/CodeMirrorEditor';
@@ -10,6 +11,8 @@ import { InlineDiffComparison } from './DiffView';
 import { WORK_DIR } from '~/utils/constants';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useSnapshotFileDiff } from '~/lib/hooks/useSnapshotFileDiff';
+
+const logger = createScopedLogger('DiffPanel');
 
 interface DiffPanelProps {
   fileHistory: Record<string, FileHistory>;
@@ -260,7 +263,7 @@ export const DiffPanel = memo(({ fileHistory }: DiffPanelProps) => {
       </div>
     );
   } catch (error) {
-    console.error('DiffPanel render error:', error);
+    logger.error('DiffPanel render error:', error);
     return (
       <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-red-400">
         <div className="text-center">

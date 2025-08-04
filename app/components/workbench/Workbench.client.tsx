@@ -1,6 +1,40 @@
 import { useStore } from '@nanostores/react';
 import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
 
+// Job Configuration types from XDP
+interface JobConfig {
+  baseImage: string;
+  dataplaneName: string;
+  stages: string[];
+  depends: {
+    dataStores: Array<{
+      dataStoreId: number;
+    }>;
+  };
+  executionConfig: {
+    imagePullSecrets: string[];
+    imagePullPolicy: string;
+    dynamicAllocation: {
+      enabled: boolean;
+      initialExecutors: number;
+      minExecutors: number;
+      maxExecutors: number;
+      shuffleTrackingTimeout: number;
+    };
+    driver: {
+      cores: number;
+      memory: string;
+      memoryOverhead: string;
+    };
+    executor: {
+      cores: number;
+      memory: string;
+      memoryOverhead: string;
+    };
+    sparkConfig: Record<string, any>;
+  };
+}
+
 // import { computed } from 'nanostores';
 import { memo, useCallback, useEffect, useState, useMemo } from 'react';
 import { toast } from 'react-toastify';
@@ -23,7 +57,8 @@ import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { EditorPanel } from './EditorPanel';
-import useViewport from '~/lib/hooks';
+import useViewport, { useCommunicationBusChild } from '~/lib/hooks';
+import { MessageType } from '~/types/communicationBus';
 import { PushToGitHubDialog } from '~/components/@settings/tabs/connections/components/PushToGitHubDialog';
 import { usePreviewStore } from '~/lib/stores/previews';
 import { chatStore } from '~/lib/stores/chat';
@@ -309,7 +344,7 @@ export const Workbench = memo(
   }: WorkspaceProps) => {
     // Handle Edit Configuration callback
     const handleEditConfiguration = () => {
-      console.log('Edit Configuration clicked');
+      logger.info('Edit Configuration clicked');
     };
     renderLogger.trace('Workbench');
 
@@ -321,11 +356,12 @@ export const Workbench = memo(
     // Initialize sync and settings hooks
     const { forceSync, isInitialized: syncInitialized, syncStatus, currentProjectId } = useSync();
     const { syncEnabled } = useSettings();
+    const bus = useCommunicationBusChild();
 
     // Log the current project ID for debugging
     useEffect(() => {
       if (currentProjectId) {
-        console.log('Workbench using project ID:', currentProjectId);
+        logger.info('Workbench using project ID:', currentProjectId);
         debugProjectId('Workbench.client.tsx - useSync initialization');
       }
     }, [currentProjectId]);
@@ -374,6 +410,24 @@ export const Workbench = memo(
 
       return shellCommands;
     }, []);
+
+    const getJobConfigFromXdp = useCallback(
+      (stages: string[]): Promise<JobConfig> => {
+        return bus.sendMessageWithResponse<{ stages: string[] }, JobConfig>(
+          {
+            type: MessageType.ADHOC_RUN,
+            payload: {
+              stages,
+            },
+          },
+          {
+            responseType: MessageType.ADHOC_RUN_RESPONSE,
+            timeout: 10000,
+          },
+        );
+      },
+      [bus],
+    );
 
     // Helper function to get execution configuration based on template
     const getExecutionConfig = useCallback(
@@ -451,34 +505,50 @@ export const Workbench = memo(
       setIsExecuting(true);
 
       try {
-        // Get execution configuration based on selected template
-        const execConfig = getExecutionConfig(selectedTemplate);
+        // Get local execution configuration based on selected template
+        const localConfig = getExecutionConfig(selectedTemplate);
 
-        console.log('Adhoc Run Execution Config:', {
+        // Get job configuration from XDP with the local stages
+        const jobConfig = await getJobConfigFromXdp(localConfig.stages);
+
+        // Destructure for cleaner usage
+        const { baseImage, dataplaneName, stages, depends, executionConfig } = jobConfig;
+        const { adhocRunType, codeSourceUrl, type } = localConfig;
+
+        logger.info('Adhoc Run Execution Config:', {
           selectedTemplate,
           projectId,
           syncInitialized,
           extractedCommands: extractShellCommands(),
-          finalConfig: execConfig,
+          mergedConfig: {
+            template: { adhocRunType, type }, // Local template config
+
+            job: { baseImage, dataplaneName, stages, executionConfig }, // Job config from XDP
+
+            codeSource: `${codeSourceUrl}/${projectId}`, // Combined
+          },
         });
 
         const payload = {
           config: {
-            adhocRunType: execConfig.adhocRunType,
-            image: 'docker.io/apache/spark:4.0.0', // TODO: Discuss on how to take user input for base image
+            adhocRunType: adhocRunType || '',
+            image: baseImage || '',
             codeSource: {
               type: 'MINIO',
               config: {
-                // Use project ID in the code source URL for project-specific storage
-                url: `${execConfig.codeSourceUrl}/${projectId}`,
+                url: `${codeSourceUrl}/${projectId}`,
               },
             },
-            stages: execConfig.stages,
-            type: execConfig.type,
-            mode: 'cluster', // MODE can be cluster
+            stages: stages || [],
+            type: type || '',
+            mode: 'cluster',
+            executionConfig: executionConfig || {},
+            depends: depends || { dataStores: [] },
           },
-          dataplaneName: 'bhuvan-tanaya-pipeline-dp', // TODO: fetch this post event bus integration
+          dataplaneName: dataplaneName || '',
         };
+
+        logger.info('Final payload being sent:', JSON.stringify(payload, null, 2));
 
         const response = await fetch('/api/adhoc-run', {
           method: 'POST',
@@ -507,23 +577,21 @@ export const Workbench = memo(
          */
         if (result.success && result.data) {
           // Extract pod name and dataplane ID from the API response
-          const podName =
-            result.data?.data?.podName || result.data?.name || result.data?.id || `adhoc-run-spar-${Date.now()}`;
-          const dataplaneId =
-            result.data?.data?.dataplaneId || result.data?.dataplane?.id || result.data?.dataplane || '135';
+          const podName = result.data?.data?.podName || result.data?.name || result.data?.id;
+          const dataplaneId = result.data?.data?.dataplaneId || result.data?.dataplane?.id || result.data?.dataplane;
 
-          console.log('Extracted from adhoc-run response:', { podName, dataplaneId, responseData: result.data });
+          logger.info('Extracted from adhoc-run response:', { podName, dataplaneId, responseData: result.data });
 
           // Open log viewer with extracted parameters
           workbenchStore.toggleLogViewer(true, { dataplaneId: String(dataplaneId), podName: String(podName) });
         }
       } catch (error) {
-        console.error('Execute adhoc run error:', error);
+        logger.error('Execute adhoc run error:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to execute adhoc run');
       } finally {
         setIsExecuting(false);
       }
-    }, [selectedTemplate, getExecutionConfig, syncEnabled, syncInitialized, currentProjectId]);
+    }, [selectedTemplate, getExecutionConfig, getJobConfigFromXdp, syncEnabled, syncInitialized, currentProjectId]);
 
     /*
      * useEffect(() => {
@@ -605,7 +673,7 @@ export const Workbench = memo(
         await forceSync();
         toast.success('Files synced successfully to Golang API and Minio storage');
       } catch (error) {
-        console.error('Error syncing files:', error);
+        logger.error('Error syncing files:', error);
         toast.error('Failed to sync files to Golang API');
       } finally {
         setIsSyncing(false);
@@ -769,7 +837,7 @@ export const Workbench = memo(
             onClose={() => setIsPushDialogOpen(false)}
             onPush={async (repoName, username, token, isPrivate) => {
               try {
-                console.log('Dialog onPush called with isPrivate =', isPrivate);
+                logger.info('Dialog onPush called with isPrivate =', isPrivate);
 
                 const commitMessage = prompt('Please enter a commit message:', 'Initial commit') || 'Initial commit';
                 const repoUrl = await workbenchStore.pushToGitHub(repoName, commitMessage, username, token, isPrivate);
@@ -783,7 +851,7 @@ export const Workbench = memo(
 
                 return repoUrl;
               } catch (error) {
-                console.error('Error pushing to GitHub:', error);
+                logger.error('Error pushing to GitHub:', error);
                 toast.error('Failed to push to GitHub');
                 throw error;
               }

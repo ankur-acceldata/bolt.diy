@@ -1,5 +1,8 @@
 import { memo, useMemo, useState, useEffect, useCallback } from 'react';
 import { useStore } from '@nanostores/react';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('DiffView');
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { FileMap } from '~/lib/stores/files';
 import type { EditorDocument } from '~/components/editor/codemirror/CodeMirrorEditor';
@@ -298,7 +301,7 @@ const processChanges = (beforeCode: string, afterCode: string) => {
       isBinary: false,
     };
   } catch (error) {
-    console.error('Error processing changes:', error);
+    logger.error('Error processing changes:', error);
     return {
       beforeLines: [],
       afterLines: [],

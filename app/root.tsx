@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ClientOnly } from 'remix-utils/client-only';
+import { useCommunicationBusChild } from './lib/hooks/useCommunicationBus';
 
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
@@ -67,6 +68,12 @@ export const Head = createHead(() => (
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const theme = useStore(themeStore);
+
+  // Initialize communication bus for iframe child
+  useCommunicationBusChild({
+    logLevel: 'error',
+    targetOrigin: '*',
+  });
 
   useEffect(() => {
     document.querySelector('html')?.setAttribute('data-theme', theme);
