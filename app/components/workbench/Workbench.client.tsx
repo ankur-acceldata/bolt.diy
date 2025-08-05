@@ -343,10 +343,6 @@ export const Workbench = memo(
     model,
     provider,
   }: WorkspaceProps) => {
-    // Handle Edit Configuration callback
-    const handleEditConfiguration = () => {
-      logger.info('Edit Configuration clicked');
-    };
     renderLogger.trace('Workbench');
 
     const [isSyncing, setIsSyncing] = useState(false);
@@ -412,7 +408,7 @@ export const Workbench = memo(
       return shellCommands;
     }, []);
 
-    const getJobConfigFromXdp = useCallback(
+    const getEditedJobConfigFromXdp = useCallback(
       async (stages: string[]): Promise<JobConfig> => {
         const response = await bus.sendMessageWithResponse<{ stages: string[] }, JobConfig[] | JobConfig>(
           {
@@ -423,6 +419,35 @@ export const Workbench = memo(
           },
           {
             responseType: MessageType.ADHOC_RUN_RESPONSE,
+            timeout: 100000,
+          },
+        );
+
+        // Handle both array and single object responses
+        if (Array.isArray(response)) {
+          if (response.length === 0) {
+            throw new Error('No job configuration received from XDP');
+          }
+
+          return response[0]; // Return the first (and likely only) JobConfig object
+        }
+
+        return response; // Return the single JobConfig object
+      },
+      [bus],
+    );
+
+    const getJobConfigFromXdp = useCallback(
+      async (stages: string[]): Promise<JobConfig> => {
+        const response = await bus.sendMessageWithResponse<{ stages: string[] }, JobConfig[] | JobConfig>(
+          {
+            type: MessageType.GET_DEFAULT_ADHOC_RUN_CONFIG,
+            payload: {
+              stages,
+            },
+          },
+          {
+            responseType: MessageType.GET_DEFAULT_ADHOC_RUN_CONFIG,
             timeout: 100000,
           },
         );
@@ -490,130 +515,141 @@ export const Workbench = memo(
       [extractShellCommands],
     );
 
-    const handleExecuteAdhocRun = useCallback(async () => {
-      /*
-       * Check if sync is enabled and initialized - this is mandatory
-       * if (!syncEnabled) {
-       *   toast.error('File sync is required for adhoc runs. Please enable sync in Settings → Features');
-       *   return;
-       * }
-       */
-
-      /*
-       * if (!syncInitialized) {
-       *   toast.error('Sync is still initializing. Please wait for sync to complete before running adhoc jobs.');
-       *   return;
-       * }
-       */
-
-      if (!currentProjectId) {
-        toast.error('Project ID not available. Please wait for sync initialization to complete.');
-        return;
-      }
-
-      // Use the project ID from sync - no fallback since sync is mandatory
-      const projectId = currentProjectId;
-
-      setIsExecuting(true);
-
-      try {
-        // Get local execution configuration based on selected template
-        const localConfig = getExecutionConfig(selectedTemplate);
-
-        // Get job configuration from XDP with the local stages
-        const jobConfig = await getJobConfigFromXdp(localConfig.stages);
-
-        // Destructure for cleaner usage, handling nulls/undefined with defaults
-        const {
-          baseImage = '',
-          dataplaneName = '',
-          dataplaneId = '',
-          stages = [],
-          depends = { dataStores: [] },
-          executionConfig = {},
-        } = jobConfig || {};
-
-        const { adhocRunType = '', codeSourceUrl = '', type = '' } = localConfig || {};
-
-        logger.info('Adhoc Run Execution Config:', {
-          selectedTemplate,
-          projectId,
-          syncInitialized,
-          extractedCommands: extractShellCommands(),
-          mergedConfig: {
-            template: { adhocRunType, type }, // Local template config
-
-            job: { baseImage, dataplaneName, dataplaneId, stages, executionConfig }, // Job config from XDP
-
-            codeSource: `${codeSourceUrl}/${projectId}`, // Combined
-          },
-        });
-
-        const payload = {
-          config: {
-            adhocRunType: adhocRunType || '',
-            image: baseImage || '',
-            codeSource: {
-              type: 'MINIO',
-              config: {
-                url: `${codeSourceUrl}/${projectId}`,
-              },
-            },
-            stages: stages || [],
-            type: type || '',
-            mode: 'cluster',
-            executionConfig: executionConfig || {},
-            depends: depends || { dataStores: [] },
-          },
-          dataplaneName: dataplaneName || '',
-          dataplaneId: dataplaneId || '',
-        };
-
-        logger.info('Final payload being sent:', JSON.stringify(payload, null, 2));
-
-        const response = await fetch('/api/adhoc-run', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const result = (await response.json()) as {
-          error?: string;
-          message?: string;
-          data?: any;
-          success?: boolean;
-        };
-
-        if (!response.ok) {
-          throw new Error(result.error || `Execution failed: ${response.status}`);
-        }
-
-        toast.success(result.message || 'Adhoc run executed successfully!');
+    const handleExecuteAdhocRun = useCallback(
+      async (isEditAndRun: boolean = false) => {
+        /*
+         * Check if sync is enabled and initialized - this is mandatory
+         * if (!syncEnabled) {
+         *   toast.error('File sync is required for adhoc runs. Please enable sync in Settings → Features');
+         *   return;
+         * }
+         */
 
         /*
-         * Extract information for log streaming
-         * Expected format from example: wss://demo.xdp.acceldata.tech/xdp-cp-service/api/dataplane/135/logs/adhoc-run-spar-1753369519227/stream?tailLines=100
+         * if (!syncInitialized) {
+         *   toast.error('Sync is still initializing. Please wait for sync to complete before running adhoc jobs.');
+         *   return;
+         * }
          */
-        if (result.success && result.data) {
-          // Extract pod name and dataplane ID from the API response
-          const podName = result.data?.data?.podName || result.data?.name || result.data?.id;
 
-          // const dataplaneId = result.data?.data?.dataplaneId || result.data?.dataplane?.id || result.data?.dataplane;
-
-          logger.info('Extracted from adhoc-run response:', { podName, dataplaneId, responseData: result.data });
-
-          // Open log viewer with extracted parameters
-          workbenchStore.toggleLogViewer(true, { dataplaneId: String(dataplaneId), podName: String(podName) });
+        if (!currentProjectId) {
+          toast.error('Project ID not available. Please wait for sync initialization to complete.');
+          return;
         }
-      } catch (error) {
-        logger.error('Execute adhoc run error:', error);
-        toast.error(error instanceof Error ? error.message : 'Failed to execute adhoc run');
-      } finally {
-        setIsExecuting(false);
-      }
-    }, [selectedTemplate, getExecutionConfig, getJobConfigFromXdp, syncEnabled, syncInitialized, currentProjectId]);
+
+        // Use the project ID from sync - no fallback since sync is mandatory
+        const projectId = currentProjectId;
+
+        setIsExecuting(true);
+
+        try {
+          // Get local execution configuration based on selected template
+          const localConfig = getExecutionConfig(selectedTemplate);
+
+          let jobConfig;
+
+          // Get job configuration from XDP with the local stages
+          if (!isEditAndRun) {
+            jobConfig = await getJobConfigFromXdp(localConfig.stages);
+          } else {
+            jobConfig = await getEditedJobConfigFromXdp(localConfig.stages);
+          }
+
+          // Destructure for cleaner usage, handling nulls/undefined with defaults
+          const {
+            baseImage = '',
+            dataplaneName = '',
+            dataplaneId = '',
+            stages = [],
+            depends = { dataStores: [] },
+            executionConfig = {},
+          } = jobConfig || {};
+
+          logger.info('Job Config:', JSON.stringify(jobConfig, null, 2));
+
+          const { adhocRunType = '', codeSourceUrl = '', type = '' } = localConfig || {};
+
+          logger.info('Adhoc Run Execution Config:', {
+            selectedTemplate,
+            projectId,
+            syncInitialized,
+            extractedCommands: extractShellCommands(),
+            mergedConfig: {
+              template: { adhocRunType, type }, // Local template config
+
+              job: { baseImage, dataplaneName, dataplaneId, stages, executionConfig }, // Job config from XDP
+
+              codeSource: `${codeSourceUrl}/${projectId}`, // Combined
+            },
+          });
+
+          const payload = {
+            config: {
+              adhocRunType: adhocRunType || '',
+              image: baseImage || '',
+              codeSource: {
+                type: 'MINIO',
+                config: {
+                  url: `${codeSourceUrl}/${projectId}`,
+                },
+              },
+              stages: stages || [],
+              type: type || '',
+              mode: 'cluster',
+              executionConfig: executionConfig || {},
+              depends: depends || { dataStores: [] },
+            },
+            dataplaneName: dataplaneName || '',
+            dataplaneId: dataplaneId || '',
+          };
+
+          logger.info('Final payload being sent:', JSON.stringify(payload, null, 2));
+
+          const response = await fetch('/api/adhoc-run', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const result = (await response.json()) as {
+            error?: string;
+            message?: string;
+            data?: any;
+            success?: boolean;
+          };
+
+          if (!response.ok) {
+            throw new Error(result.error || `Execution failed: ${response.status}`);
+          }
+
+          toast.success(result.message || 'Adhoc run executed successfully!');
+
+          /*
+           * Extract information for log streaming
+           * Expected format from example: wss://demo.xdp.acceldata.tech/xdp-cp-service/api/dataplane/135/logs/adhoc-run-spar-1753369519227/stream?tailLines=100
+           */
+          if (result.success && result.data) {
+            // Extract pod name and dataplane ID from the API response
+            const podName = result.data?.data?.podName || result.data?.name || result.data?.id;
+
+            // const dataplaneId = result.data?.data?.dataplaneId || result.data?.dataplane?.id || result.data?.dataplane;
+
+            logger.info('Extracted from adhoc-run response:', { podName, dataplaneId, responseData: result.data });
+
+            // Open log viewer with extracted parameters
+            workbenchStore.toggleLogViewer(true, { dataplaneId: String(dataplaneId), podName: String(podName) });
+          }
+        } catch (error) {
+          logger.error('Execute adhoc run error:', error);
+          toast.error(error instanceof Error ? error.message : 'Failed to execute adhoc run');
+        } finally {
+          setIsExecuting(false);
+        }
+      },
+      [selectedTemplate, getExecutionConfig, getJobConfigFromXdp, syncEnabled, syncInitialized, currentProjectId],
+    );
 
     /*
      * useEffect(() => {
@@ -752,10 +788,10 @@ export const Workbench = memo(
                           dropdownTriggerClassName="px-2 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive"
                           options={[
                             {
-                              label: 'Edit Config',
+                              label: 'Edit Config & Run',
                               value: 'edit-config',
-                              icon: 'i-ph:gear',
-                              onClick: handleEditConfiguration,
+                              icon: 'i-ph:gear text-bolt-elements-item-contentAccent',
+                              onClick: () => handleExecuteAdhocRun(true),
                             },
                           ]}
                           align="end"
