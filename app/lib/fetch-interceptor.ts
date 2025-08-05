@@ -1,5 +1,5 @@
 /**
- * Fetch interceptor that automatically adds base path to API calls
+ * Fetch interceptor that automatically adds base path and authorization headers to API calls
  * This eliminates the need for developers to use a special apiFetch function
  */
 
@@ -7,6 +7,7 @@ let interceptorInstalled = false;
 let originalFetch: typeof fetch;
 
 import { getBasePath as getConfigBasePath } from './config';
+import { AuthUtils } from './auth';
 
 /**
  * Get the base path from the unified configuration system
@@ -48,6 +49,47 @@ function applyBasePath(url: string): string {
 }
 
 /**
+ * Check if a URL should have authorization headers applied
+ */
+function shouldApplyAuthHeaders(url: string): boolean {
+  // Only apply to relative API paths
+  if (url.startsWith('/api/')) {
+    return true;
+  }
+
+  // Don't apply to absolute URLs (external APIs)
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//')) {
+    return false;
+  }
+
+  return false;
+}
+
+/**
+ * Apply authorization headers to request init if needed
+ */
+function applyAuthHeaders(url: string, init?: RequestInit): RequestInit {
+  if (!shouldApplyAuthHeaders(url)) {
+    return init || {};
+  }
+
+  const authHeaders = AuthUtils.getAuthHeaders();
+  const headers = new Headers(init?.headers);
+
+  // Only add auth headers if they have values and don't already exist
+  Object.entries(authHeaders).forEach(([key, value]) => {
+    if (value && !headers.has(key)) {
+      headers.set(key, value);
+    }
+  });
+
+  return {
+    ...init,
+    headers,
+  };
+}
+
+/**
  * Install the fetch interceptor
  * This should be called early in the application lifecycle
  */
@@ -82,13 +124,17 @@ export function installFetchInterceptor(): void {
     // Apply base path if needed
     const finalUrl = applyBasePath(url);
 
-    // Call original fetch with the modified URL
+    // Apply authorization headers if needed
+    const finalInit = applyAuthHeaders(url, init);
+
+    // Call original fetch with the modified URL and headers
     if (typeof input === 'string') {
-      return originalFetch(finalUrl, init);
+      return originalFetch(finalUrl, finalInit);
     } else if (input instanceof URL) {
-      return originalFetch(new URL(finalUrl), init);
+      return originalFetch(new URL(finalUrl), finalInit);
     } else if (input instanceof Request) {
-      // Create a new request with the modified URL
+      // Create a new request with the modified URL and headers
+      const enhancedInit = applyAuthHeaders(url, init);
       const newRequest = new Request(finalUrl, {
         method: input.method,
         headers: input.headers,
@@ -101,11 +147,12 @@ export function installFetchInterceptor(): void {
         referrerPolicy: input.referrerPolicy,
         integrity: input.integrity,
         signal: input.signal,
-        ...init, // Allow init to override request properties
+        ...enhancedInit, // Apply auth headers and allow init to override
       });
+
       return originalFetch(newRequest);
     } else {
-      return originalFetch(finalUrl, init);
+      return originalFetch(finalUrl, finalInit);
     }
   };
 
@@ -137,3 +184,8 @@ export function isInterceptorInstalled(): boolean {
 export function getOriginalFetch(): typeof fetch | undefined {
   return originalFetch;
 }
+
+/**
+ * Re-export AuthUtils for backward compatibility
+ */
+export { AuthUtils } from './auth';

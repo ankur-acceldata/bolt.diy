@@ -780,7 +780,7 @@ export const Workbench = memo(
                     <div className="flex overflow-y-auto">
                       <div className="flex items-center mr-1">
                         <ButtonDropdown
-                          onMainClick={handleExecuteAdhocRun}
+                          onMainClick={() => handleExecuteAdhocRun(false)}
                           disabled={isExecuting || !currentProjectId}
                           variant="accent"
                           size="sm"
