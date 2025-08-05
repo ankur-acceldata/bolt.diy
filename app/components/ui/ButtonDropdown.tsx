@@ -93,7 +93,15 @@ export const ButtonDropdown = memo<ButtonDropdownProps>(
           {...buttonProps}
           variant={variant}
           size={size}
-          className={classNames('rounded-r-none !border-r-0 -mr-px', className)}
+          className={classNames(
+            'rounded-r-none !border-r-0 -mr-px',
+            {
+              // Enhanced background for accent variant
+              'bg-bolt-elements-button-primary-backgroundHover hover:bg-bolt-elements-button-primary-backgroundHover hover:opacity-90':
+                variant === 'accent',
+            },
+            className,
+          )}
           disabled={disabled}
           onClick={onMainClick}
         >
@@ -108,10 +116,14 @@ export const ButtonDropdown = memo<ButtonDropdownProps>(
               variant={variant}
               size={size}
               className={classNames(
-                'rounded-l-none px-1.5 min-w-0 !border-l-0',
+                'rounded-l-none px-1.5 min-w-0 border-l border-l-bolt-elements-borderColor',
                 'focus:ring-0 focus:ring-offset-0 focus:outline-none',
-                '!bg-transparent active:!bg-transparent focus:!bg-transparent',
                 'transition-colors',
+                {
+                  // Enhanced background for accent variant
+                  'bg-bolt-elements-button-primary-backgroundHover hover:bg-bolt-elements-button-primary-backgroundHover hover:opacity-90':
+                    variant === 'accent',
+                },
                 dropdownTriggerClassName,
               )}
               disabled={disabled}
@@ -122,7 +134,7 @@ export const ButtonDropdown = memo<ButtonDropdownProps>(
               {showArrow && (
                 <div
                   className={classNames(
-                    'i-ph:caret-down w-3 h-3 text-bolt-elements-button-primary-text opacity-75 transition-transform',
+                    'i-ph:caret-down w-4 h-4 text-bolt-elements-item-contentAccent transition-transform',
                     isOpen ? 'rotate-180' : '',
                   )}
                 />

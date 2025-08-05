@@ -11,12 +11,12 @@ const Checkbox = React.forwardRef<
     ref={ref}
     className={classNames(
       'peer h-4 w-4 shrink-0 rounded-sm border transition-colors',
-      'bg-transparent dark:bg-transparent',
-      'border-gray-400 dark:border-gray-600',
-      'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-bolt-elements-borderColorActive focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950',
+      'bg-bolt-elements-bg-depth-1 [background:var(--bolt-elements-bg-depth-1)]',
+      'border-bolt-elements-borderColor',
+      'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-bolt-elements-borderColorActive',
       'disabled:cursor-not-allowed disabled:opacity-50',
-      'data-[state=checked]:bg-bolt-elements-item-contentAccent dark:data-[state=checked]:bg-bolt-elements-item-contentAccent',
-      'data-[state=checked]:border-bolt-elements-borderColorActive dark:data-[state=checked]:border-bolt-elements-borderColorActive',
+      'data-[state=checked]:bg-bolt-elements-item-contentAccent data-[state=checked]:[background:var(--bolt-elements-item-contentAccent)]',
+      'data-[state=checked]:border-bolt-elements-borderColorActive',
       'data-[state=checked]:text-white',
       className,
     )}

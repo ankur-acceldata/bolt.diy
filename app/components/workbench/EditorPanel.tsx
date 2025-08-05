@@ -69,7 +69,8 @@ export const EditorPanel = memo(
   }: EditorPanelProps) => {
     renderLogger.trace('EditorPanel');
 
-    const theme = useStore(themeStore);
+    const themeConfig = useStore(themeStore);
+    const theme = themeConfig.mode;
     const showTerminal = useStore(workbenchStore.showTerminal);
     const showLogViewer = useStore(workbenchStore.showLogViewer);
     const logViewerConfig = useStore(workbenchStore.logViewerConfig);

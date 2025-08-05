@@ -149,7 +149,7 @@ const FileModifiedDropdown = memo(
               <Popover.Button className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-2 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-item-contentDefault">
                 <span>File Changes</span>
                 {hasChanges && (
-                  <span className="w-5 h-5 rounded-full bg-accent-500/20 text-accent-500 text-xs flex items-center justify-center border border-accent-500/30">
+                  <span className="w-5 h-5 rounded-full bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent text-xs flex items-center justify-center border border-bolt-elements-borderColorActive/30">
                     {modifiedFiles.length}
                   </span>
                 )}
@@ -312,7 +312,7 @@ const FileModifiedDropdown = memo(
                         onClick={() => {
                           navigator.clipboard.writeText(filteredFiles.map(([filePath]) => filePath).join('\n'));
                           toast('File list copied to clipboard', {
-                            icon: <div className="i-ph:check-circle text-accent-500" />,
+                            icon: <div className="i-ph:check-circle text-bolt-elements-item-contentAccent" />,
                           });
                         }}
                         className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-1 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary"
@@ -727,7 +727,7 @@ export const Workbench = memo(
             )}
           >
             <div className="absolute inset-0 px-2 lg:px-4">
-              <div className="h-full flex flex-col bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor shadow-sm rounded-lg overflow-hidden">
+              <div className="h-full flex flex-col bg-bolt-elements-bg-depth-1 border border-bolt-elements-borderColor shadow-sm rounded-lg overflow-hidden">
                 <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
                   <button
                     className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
@@ -748,8 +748,8 @@ export const Workbench = memo(
                           disabled={isExecuting || !currentProjectId}
                           variant="accent"
                           size="sm"
-                          className="px-1.5 py-0.5 text-sm focus:ring-0 focus:ring-offset-0"
-                          dropdownTriggerClassName="px-1"
+                          className="px-2 py-1 text-sm focus:ring-0 focus:ring-offset-0 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive shadow-sm"
+                          dropdownTriggerClassName="px-2 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive"
                           options={[
                             {
                               label: 'Edit Config',
@@ -762,9 +762,9 @@ export const Workbench = memo(
                           showArrow={true}
                         >
                           {isExecuting ? (
-                            <div className="i-ph:spinner animate-spin" />
+                            <div className="i-ph:spinner animate-spin text-bolt-elements-item-contentAccent" />
                           ) : (
-                            <div className="i-ph:play text-bolt-elements-button-primary-text" />
+                            <div className="i-ph:play text-bolt-elements-item-contentAccent" />
                           )}
                         </ButtonDropdown>
                       </div>
@@ -779,14 +779,14 @@ export const Workbench = memo(
                     </PanelHeaderButton> */}
                       <div className="flex items-center gap-2">
                         <PanelHeaderButton
-                          className="mr-1 text-sm"
+                          className="mr-1 text-sm bg-bolt-elements-bg-depth-3 border border-bolt-elements-borderColor text-bolt-elements-textSecondary hover:bg-bolt-elements-bg-depth-4 hover:text-bolt-elements-textPrimary shadow-sm"
                           onClick={handleSyncFiles}
                           disabled={isSyncing || !syncInitialized}
                         >
                           {isSyncing ? (
-                            <div className="i-ph:spinner animate-spin" />
+                            <div className="i-ph:spinner animate-spin text-bolt-elements-item-contentAccent" />
                           ) : (
-                            <div className="i-ph:cloud-arrow-up" />
+                            <div className="i-ph:cloud-arrow-up text-bolt-elements-item-contentAccent" />
                           )}
                           Sync
                         </PanelHeaderButton>

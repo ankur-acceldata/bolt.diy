@@ -67,7 +67,7 @@ export const Head = createHead(() => (
 ));
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const theme = useStore(themeStore);
+  const themeConfig = useStore(themeStore);
 
   // Initialize communication bus for iframe child
   useCommunicationBusChild({
@@ -76,8 +76,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    document.querySelector('html')?.setAttribute('data-theme', theme);
-  }, [theme]);
+    const html = document.querySelector('html');
+
+    if (!html) {
+      return;
+    }
+
+    // Set theme mode attribute
+    html.setAttribute('data-theme', themeConfig.mode);
+
+    // Remove all existing color theme classes
+    html.classList.remove('color-blue', 'color-green', 'color-purple', 'color-orange');
+
+    // Add color theme class if not default
+    if (themeConfig.color !== 'default') {
+      html.classList.add(`color-${themeConfig.color}`);
+    }
+  }, [themeConfig]);
 
   return (
     <>
@@ -91,11 +106,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 import { logStore } from './lib/stores/logs';
 
 export default function App() {
-  const theme = useStore(themeStore);
+  const themeConfig = useStore(themeStore);
 
   useEffect(() => {
     logStore.logSystem('Application initialized', {
-      theme,
+      theme: themeConfig,
       platform: navigator.platform,
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),

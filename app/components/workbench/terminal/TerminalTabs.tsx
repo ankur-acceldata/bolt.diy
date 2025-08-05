@@ -16,7 +16,8 @@ export const DEFAULT_TERMINAL_SIZE = 25;
 
 export const TerminalTabs = memo(() => {
   const showTerminal = useStore(workbenchStore.showTerminal);
-  const theme = useStore(themeStore);
+  const themeConfig = useStore(themeStore);
+  const theme = themeConfig.mode;
 
   const terminalRefs = useRef<Array<TerminalRef | null>>([]);
   const terminalPanelRef = useRef<ImperativePanelHandle>(null);

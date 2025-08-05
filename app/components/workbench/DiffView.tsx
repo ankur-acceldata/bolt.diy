@@ -602,7 +602,8 @@ export const InlineDiffComparison = memo(({ beforeCode, afterCode, filename, lan
 
   // Use state to hold the shared highlighter instance
   const [highlighter, setHighlighter] = useState<any>(null);
-  const theme = useStore(themeStore);
+  const themeConfig = useStore(themeStore);
+  const theme = themeConfig.mode;
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);

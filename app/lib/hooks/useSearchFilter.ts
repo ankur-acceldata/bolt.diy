@@ -14,15 +14,23 @@ export function useSearchFilter({
   debounceMs = 300,
 }: UseSearchFilterOptions) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [inputValue, setInputValue] = useState('');
 
   const debouncedSetSearch = useCallback(debounce(setSearchQuery, debounceMs), []);
 
   const handleSearchChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      debouncedSetSearch(event.target.value);
+      const value = event.target.value;
+      setInputValue(value);
+      debouncedSetSearch(value);
     },
     [debouncedSetSearch],
   );
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+    setInputValue('');
+  }, []);
 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -46,7 +54,9 @@ export function useSearchFilter({
 
   return {
     searchQuery,
+    inputValue,
     filteredItems,
     handleSearchChange,
+    clearSearch,
   };
 }
