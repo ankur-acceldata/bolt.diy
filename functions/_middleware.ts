@@ -8,6 +8,10 @@ interface Env {
   BASE_PATH?: string;
 }
 
+import { createScopedLogger } from '../app/utils/logger';
+
+const logger = createScopedLogger('CloudflareMiddleware');
+
 interface EventContext {
   request: Request;
   next: (request?: Request) => Promise<Response>;
@@ -103,7 +107,7 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
 
     if (isStaticAssetPath) {
       /* Static assets with base path - pass through to be served directly */
-      console.log(`Serving static asset: ${url.pathname}`);
+      logger.debug(`Serving static asset: ${url.pathname}`);
 
       const response = await next(request);
 
@@ -112,7 +116,7 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
 
     /* API routes with base path - pass through to Remix WITHOUT modification */
     if (pathWithoutBase.startsWith('/api/')) {
-      console.log('Passing API route with base path to Remix:', url.pathname);
+      logger.debug('Passing API route with base path to Remix:', url.pathname);
 
       const response = await next(request);
 
@@ -164,7 +168,7 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
 
     if (shouldRedirectToBasePath) {
       /* Redirect static asset requests from /assets/... to /base-path/assets/... */
-      console.log(`Redirecting static asset from ${url.pathname} to ${actualBasePath + url.pathname}`);
+      logger.info(`Redirecting static asset from ${url.pathname} to ${actualBasePath + url.pathname}`);
       return createRedirect(actualBasePath + url.pathname);
     }
   }

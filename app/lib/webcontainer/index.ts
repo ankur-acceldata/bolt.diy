@@ -1,6 +1,9 @@
 import { WebContainer } from '@webcontainer/api';
+import { createScopedLogger } from '~/utils/logger';
 import { WORK_DIR_NAME } from '~/utils/constants';
 import { cleanStackTrace } from '~/utils/stacktrace';
+
+const logger = createScopedLogger('WebContainer');
 
 interface WebContainerContext {
   loaded: boolean;
@@ -19,21 +22,21 @@ export let webcontainer: Promise<WebContainer> = new Promise(() => {
 });
 
 if (!import.meta.env.SSR) {
-  console.log('DEBUG: WebContainer initialization starting - not SSR');
-  console.log('DEBUG: Current URL:', window.location.href);
-  console.log('DEBUG: In iframe?', window !== window.parent);
-  console.log('DEBUG: Cross-origin isolated:', crossOriginIsolated);
-  console.log('DEBUG: SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
+  logger.debug('WebContainer initialization starting - not SSR');
+  logger.debug('Current URL:', window.location.href);
+  logger.debug('In iframe?', window !== window.parent);
+  logger.debug('Cross-origin isolated:', crossOriginIsolated);
+  logger.debug('SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
 
   // Detect iframe context and adjust configuration
   const isInIframe = window !== window.parent;
-  console.log('DEBUG: Iframe context detected:', isInIframe);
+  logger.debug('Iframe context detected:', isInIframe);
 
   webcontainer =
     import.meta.hot?.data.webcontainer ??
     Promise.resolve()
       .then(() => {
-        console.log('DEBUG: Starting WebContainer boot with coep: require-corp');
+        logger.debug('Starting WebContainer boot with coep: require-corp');
         return WebContainer.boot({
           coep: 'require-corp',
           workdirName: WORK_DIR_NAME,
@@ -41,7 +44,7 @@ if (!import.meta.env.SSR) {
         });
       })
       .then(async (webcontainer) => {
-        console.log('DEBUG: WebContainer booted successfully');
+        logger.info('WebContainer booted successfully');
         webcontainerContext.loaded = true;
 
         const { workbenchStore } = await import('~/lib/stores/workbench');
@@ -53,14 +56,14 @@ if (!import.meta.env.SSR) {
           const response = await fetch(`${baseUrl}inspector-script.js`);
           const inspectorScript = await response.text();
           await webcontainer.setPreviewScript(inspectorScript);
-          console.log('DEBUG: Inspector script loaded successfully');
+          logger.debug('Inspector script loaded successfully');
         } catch (error) {
-          console.warn('DEBUG: Failed to load inspector script:', error);
+          logger.warn('Failed to load inspector script:', error);
         }
 
         // Listen for preview errors
         webcontainer.on('preview-message', (message) => {
-          console.log('WebContainer preview message:', message);
+          logger.debug('WebContainer preview message:', message);
 
           // Handle both uncaught exceptions and unhandled promise rejections
           if (message.type === 'PREVIEW_UNCAUGHT_EXCEPTION' || message.type === 'PREVIEW_UNHANDLED_REJECTION') {
@@ -76,12 +79,12 @@ if (!import.meta.env.SSR) {
           }
         });
 
-        console.log('DEBUG: WebContainer fully initialized');
+        logger.info('WebContainer fully initialized');
 
         return webcontainer;
       })
       .catch((error) => {
-        console.error('DEBUG: WebContainer boot failed:', error);
+        logger.error('WebContainer boot failed:', error);
         webcontainerContext.loaded = false;
         throw error;
       });
@@ -90,5 +93,5 @@ if (!import.meta.env.SSR) {
     import.meta.hot.data.webcontainer = webcontainer;
   }
 } else {
-  console.log('DEBUG: SSR mode - skipping WebContainer initialization');
+  logger.debug('SSR mode - skipping WebContainer initialization');
 }

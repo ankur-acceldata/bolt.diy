@@ -11,7 +11,7 @@ import styles from './Markdown.module.scss';
 import ThoughtBox from './ThoughtBox';
 import type { ProviderInfo } from '~/types/model';
 
-const logger = createScopedLogger('MarkdownComponent');
+const logger = createScopedLogger('Markdown');
 
 interface MarkdownProps {
   children: string;
@@ -54,7 +54,7 @@ export const Markdown = memo(
               try {
                 elementData = JSON.parse(elementDataAttr);
               } catch (e) {
-                console.error('Failed to parse element data:', e);
+                logger.error('Failed to parse element data:', e);
               }
             }
 
@@ -155,7 +155,7 @@ export const Markdown = memo(
                       ] as any,
                       role: 'user',
                     });
-                    console.log('Message appended:', message);
+                    logger.debug('Message appended:', message);
                   } else if (type === 'implement' && append && setChatMode) {
                     setChatMode('build');
                     append({
@@ -173,7 +173,7 @@ export const Markdown = memo(
                       const url = new URL(href, window.location.origin);
                       window.open(url.toString(), '_blank', 'noopener,noreferrer');
                     } catch (error) {
-                      console.error('Invalid URL:', href, error);
+                      logger.error('Invalid URL:', href, error);
                     }
                   }
                 }}

@@ -140,7 +140,7 @@ export class ActionRunner {
         return this.#executeAction(actionId, isStreaming);
       })
       .catch((error) => {
-        console.error('Action failed:', error);
+        logger.error('Action failed:', error);
       });
 
     await this.#currentExecutionPromise;
@@ -275,13 +275,13 @@ export class ActionRunner {
       unreachable('Expected file action');
     }
 
-    console.log('DEBUG: Starting file action:', { filePath: action.filePath, contentLength: action.content.length });
+    logger.debug('Starting file action:', { filePath: action.filePath, contentLength: action.content.length });
 
     const webcontainer = await this.#webcontainer;
-    console.log('DEBUG: WebContainer obtained, workdir:', webcontainer.workdir);
+    logger.debug('WebContainer obtained, workdir:', webcontainer.workdir);
 
     const relativePath = nodePath.relative(webcontainer.workdir, action.filePath);
-    console.log('DEBUG: Calculated relative path:', relativePath);
+    logger.debug('Calculated relative path:', relativePath);
 
     let folder = nodePath.dirname(relativePath);
 
@@ -290,22 +290,22 @@ export class ActionRunner {
 
     if (folder !== '.') {
       try {
-        console.log('DEBUG: Creating folder:', folder);
+        logger.debug('Creating folder:', folder);
         await webcontainer.fs.mkdir(folder, { recursive: true });
         logger.debug('Created folder', folder);
       } catch (error) {
-        console.error('DEBUG: Failed to create folder:', folder, error);
+        logger.error('Failed to create folder:', folder, error);
         logger.error('Failed to create folder\n\n', error);
       }
     }
 
     try {
-      console.log('DEBUG: Writing file:', relativePath, 'with content length:', action.content.length);
+      logger.debug('Writing file:', relativePath, 'with content length:', action.content.length);
       await webcontainer.fs.writeFile(relativePath, action.content);
-      console.log('DEBUG: File written successfully:', relativePath);
+      logger.debug('File written successfully:', relativePath);
       logger.debug(`File written ${relativePath}`);
     } catch (error) {
-      console.error('DEBUG: Failed to write file:', relativePath, error);
+      logger.error('Failed to write file:', relativePath, error);
       logger.error('Failed to write file\n\n', error);
     }
   }

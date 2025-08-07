@@ -1,6 +1,6 @@
 import { atom } from 'nanostores';
-import { logStore } from './logs';
 import { createScopedLogger } from '~/utils/logger';
+import { logStore } from './logs';
 
 const logger = createScopedLogger('ThemeStore');
 
@@ -150,7 +150,7 @@ export function toggleTheme() {
       localStorage.setItem('bolt_user_profile', JSON.stringify(profile));
     }
   } catch (error) {
-    console.error('Error updating user profile theme:', error);
+    logger.error('Error updating user profile theme:', error);
   }
 
   logStore.logSystem(`Theme changed to ${newTheme.mode} mode with ${newTheme.color} color`);
@@ -182,7 +182,7 @@ export function setColorTheme(color: ColorTheme) {
       localStorage.setItem('bolt_user_profile', JSON.stringify(profile));
     }
   } catch (error) {
-    console.error('Error updating user profile color theme:', error);
+    logger.error('Error updating user profile color theme:', error);
   }
 
   logStore.logSystem(`Color theme changed to ${color}`);
@@ -213,7 +213,7 @@ export function setTheme(theme: ThemeConfig) {
       localStorage.setItem('bolt_user_profile', JSON.stringify(profile));
     }
   } catch (error) {
-    console.error('Error updating user profile theme:', error);
+    logger.error('Error updating user profile theme:', error);
   }
 
   logStore.logSystem(`Theme changed to ${theme.mode} mode with ${theme.color} color`);

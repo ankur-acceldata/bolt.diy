@@ -1,8 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { createScopedLogger } from '~/utils/logger';
 import { classNames } from '~/utils/classNames';
 import { useLogStream } from '~/lib/hooks/useLogStream';
 import { analyzeLogMessage } from '~/utils/logLevelDetection';
 import type { LogViewerProps } from '~/types/logStream';
+
+const logger = createScopedLogger('LogViewer');
 
 export function LogViewer({
   dataplaneId,
@@ -32,7 +35,7 @@ export function LogViewer({
   // Clear logs when configuration changes (new job) or when opening for the first time
   useEffect(() => {
     if (isOpen && dataplaneId && podName) {
-      console.log('LogViewer: Clearing logs for new job configuration:', { dataplaneId, podName });
+      logger.info('LogViewer: Clearing logs for new job configuration:', { dataplaneId, podName });
       clearLogs();
     }
   }, [isOpen, dataplaneId, podName, clearLogs]);
@@ -241,7 +244,7 @@ export function LogViewer({
             </button>
             <button
               onClick={() => {
-                console.log('LogViewer: Manual reconnect - clearing logs and reconnecting');
+                logger.info('LogViewer: Manual reconnect - clearing logs and reconnecting');
                 clearLogs();
                 connect();
               }}
