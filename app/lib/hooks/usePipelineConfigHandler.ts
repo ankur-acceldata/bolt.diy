@@ -1,36 +1,44 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useCommunicationBusChild } from '~/lib/hooks';
 import { MessageType } from '~/types/communicationBus';
 import { createScopedLogger } from '~/utils/logger';
 import { description } from '~/lib/persistence';
+import { extractShellCommands } from '~/lib/utils/shellCommands';
+import { getJobConfigFromXdp } from '~/lib/services/jobConfigService';
 
 const logger = createScopedLogger('usePipelineConfigHandler');
 
 interface UsePipelineConfigHandlerProps {
-  extractShellCommands: () => string[];
-  getJobConfigFromXdp: (stages: string[]) => Promise<any>;
   currentProjectId?: string;
 }
 
-export function usePipelineConfigHandler({
-  extractShellCommands,
-  getJobConfigFromXdp,
-  currentProjectId,
-}: UsePipelineConfigHandlerProps) {
+export function usePipelineConfigHandler({ currentProjectId }: UsePipelineConfigHandlerProps) {
   const bus = useCommunicationBusChild();
+  const projectIdRef = useRef(currentProjectId);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Update ref when currentProjectId changes
+  projectIdRef.current = currentProjectId;
 
   useEffect(() => {
+    // Clean up previous listener if it exists
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
+
+    logger.info('Setting up GET_PIPELINE_CONFIG listener');
+
     const unsubscribe = bus.on(MessageType.GET_PIPELINE_CONFIG, async (payload, message) => {
       try {
-        logger.info('Received GET_PIPELINE_CONFIG request:', payload);
+        logger.info('Received GET_PIPELINE_CONFIG request');
 
         // Extract shell commands and get job config similar to adhoc run flow
         const stages = extractShellCommands();
-        const jobConfig = await getJobConfigFromXdp(stages);
+        const jobConfig = await getJobConfigFromXdp(bus, stages);
 
         // Build pipeline config response
         const projectName = (description.get() ?? 'project').toLowerCase().split(' ').join('_');
-        const codeSourceUrl = `applications/${currentProjectId || 'default-project'}`;
+        const codeSourceUrl = `applications/${projectIdRef.current || 'default-project'}`;
 
         const pipelineConfig = {
           name: projectName,
@@ -39,7 +47,7 @@ export function usePipelineConfigHandler({
           imageFromUrl: jobConfig.baseImage || '',
         };
 
-        logger.info('Sending GET_PIPELINE_CONFIG_RESPONSE:', pipelineConfig);
+        logger.info('Sending GET_PIPELINE_CONFIG_RESPONSE');
 
         // Send response back to parent
         bus.sendMessage({
@@ -59,6 +67,13 @@ export function usePipelineConfigHandler({
       }
     });
 
-    return unsubscribe;
-  }, [bus, extractShellCommands, getJobConfigFromXdp, currentProjectId]);
+    unsubscribeRef.current = unsubscribe;
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+    };
+  }, [bus]); // Only depend on bus, use ref for currentProjectId
 }

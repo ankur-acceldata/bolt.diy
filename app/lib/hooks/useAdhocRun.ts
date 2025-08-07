@@ -1,217 +1,17 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useCommunicationBusChild } from '~/lib/hooks';
-import { MessageType } from '~/types/communicationBus';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { createScopedLogger } from '~/utils/logger';
-import type { JobConfig } from '~/types/jobConfig';
+import { extractShellCommands } from '~/lib/utils/shellCommands';
+import { getEditedJobConfigFromXdp, getJobConfigFromXdp } from '~/lib/services/jobConfigService';
+import { getExecutionConfig } from '~/lib/utils/executionConfig';
 
 const logger = createScopedLogger('useAdhocRun');
-
-interface TemplateConfig {
-  adhocRunType: string;
-  type: string;
-  stages: string[];
-  fallbackStages: string[];
-  codeSourceUrl: string;
-}
 
 export function useAdhocRun() {
   const [isExecuting, setIsExecuting] = useState(false);
   const bus = useCommunicationBusChild();
-
-  /**
-   * Helper function to extract shell commands from bolt actions
-   * Only extracts commands from the latest AI message artifact
-   */
-  const extractShellCommands = useCallback(() => {
-    const artifacts = workbenchStore.artifacts.get();
-    const artifactIdList = workbenchStore.artifactIdList;
-    const shellCommands: string[] = [];
-
-    logger.info('DEBUG: Starting shell command extraction:', {
-      artifactIdListLength: artifactIdList.length,
-      artifactIds: artifactIdList,
-      totalArtifacts: Object.keys(artifacts).length,
-    });
-
-    // If no artifacts, return empty array
-    if (artifactIdList.length === 0) {
-      logger.warn('No artifacts available for command extraction - artifactIdList is empty');
-      return shellCommands;
-    }
-
-    // Get the latest artifact messageId (most recent)
-    const latestMessageId = artifactIdList[artifactIdList.length - 1];
-    const latestArtifact = artifacts[latestMessageId];
-
-    if (!latestArtifact) {
-      logger.error('Latest artifact not found for messageId:', latestMessageId, {
-        availableArtifacts: Object.keys(artifacts),
-        artifactIdList,
-      });
-      return shellCommands;
-    }
-
-    logger.info('Extracting commands from latest AI message artifact:', {
-      messageId: latestMessageId,
-      artifactTitle: latestArtifact.title,
-      totalArtifacts: artifactIdList.length,
-    });
-
-    // Extract shell commands only from the latest artifact
-    const actions = latestArtifact.runner.actions.get();
-    const actionCount = Object.keys(actions).length;
-
-    logger.info('DEBUG: Actions in latest artifact:', {
-      actionCount,
-      actionIds: Object.keys(actions),
-      actionTypes: Object.values(actions).map((a) => a.type),
-    });
-
-    if (actionCount === 0) {
-      logger.warn('No actions found in latest artifact');
-      return shellCommands;
-    }
-
-    Object.values(actions).forEach((action, index) => {
-      logger.info(`DEBUG: Processing action ${index}:`, {
-        actionType: action.type,
-        hasContent: !!action.content,
-        contentPreview: action.content ? action.content.substring(0, 100) + '...' : 'No content',
-      });
-
-      if (action.type === 'shell' && action.content) {
-        // Split multiline commands and filter out empty lines
-        const commands = action.content
-          .split('\n')
-          .map((cmd) => cmd.trim())
-          .filter((cmd) => cmd.length > 0 && !cmd.startsWith('#'));
-
-        logger.info('Extracted shell commands from latest message:', {
-          messageId: latestMessageId,
-          commands,
-        });
-
-        shellCommands.push(...commands);
-      }
-    });
-
-    logger.info('Final extracted commands for job execution:', {
-      totalCommands: shellCommands.length,
-      commands: shellCommands,
-    });
-
-    return shellCommands;
-  }, []);
-
-  const getEditedJobConfigFromXdp = useCallback(
-    async (stages: string[]): Promise<JobConfig> => {
-      const response = await bus.sendMessageWithResponse<{ stages: string[] }, JobConfig[] | JobConfig>(
-        {
-          type: MessageType.ADHOC_RUN,
-          payload: {
-            stages,
-          },
-        },
-        {
-          responseType: MessageType.ADHOC_RUN_RESPONSE,
-          timeout: 100000,
-        },
-      );
-
-      // Handle both array and single object responses
-      if (Array.isArray(response)) {
-        if (response.length === 0) {
-          throw new Error('No job configuration received from XDP');
-        }
-
-        return response[0]; // Return the first (and likely only) JobConfig object
-      }
-
-      return response; // Return the single JobConfig object
-    },
-    [bus],
-  );
-
-  const getJobConfigFromXdp = useCallback(
-    async (stages: string[]): Promise<JobConfig> => {
-      const response = await bus.sendMessageWithResponse<{ stages: string[] }, JobConfig[] | JobConfig>(
-        {
-          type: MessageType.GET_DEFAULT_ADHOC_RUN_CONFIG,
-          payload: {
-            stages,
-          },
-        },
-        {
-          responseType: MessageType.GET_DEFAULT_ADHOC_RUN_CONFIG,
-          timeout: 100000,
-        },
-      );
-
-      // Handle both array and single object responses
-      if (Array.isArray(response)) {
-        if (response.length === 0) {
-          throw new Error('No job configuration received from XDP');
-        }
-
-        return response[0]; // Return the first (and likely only) JobConfig object
-      }
-
-      return response; // Return the single JobConfig object
-    },
-    [bus],
-  );
-
-  // Helper function to get execution configuration based on template
-  const getExecutionConfig = useCallback(
-    (template?: { id: string; name: string }): TemplateConfig => {
-      const extractedCommands = extractShellCommands();
-
-      // Get template-specific defaults
-      const getTemplateDefaults = (templateId?: string) => {
-        switch (templateId) {
-          case 'java-application':
-            return {
-              adhocRunType: 'SPARK_JAVA_ADHOC_RUN',
-              type: 'Java',
-              fallbackStages: [
-                'mvn clean compile',
-                'mvn exec:java -Dexec.mainClass="Main"',
-                "echo 'Java execution completed successfully'",
-              ],
-              codeSourceUrl: 'home/projects',
-            };
-          case 'python-application':
-          default:
-            return {
-              adhocRunType: 'SPARK_PYTHON_ADHOC_RUN',
-              type: 'Python',
-              fallbackStages: [
-                'pip install -r requirements.txt --no-cache-dir',
-                'python3 success_test.py',
-                "echo 'Python execution completed successfully'",
-              ],
-              codeSourceUrl: 'home/projects',
-            };
-        }
-      };
-
-      const defaults = getTemplateDefaults(template?.id);
-
-      // Use extracted commands if available, otherwise fall back to template defaults
-      const stages = extractedCommands.length > 0 ? extractedCommands : defaults.fallbackStages;
-
-      return {
-        adhocRunType: defaults.adhocRunType,
-        type: defaults.type,
-        stages,
-        fallbackStages: defaults.fallbackStages,
-        codeSourceUrl: defaults.codeSourceUrl,
-      };
-    },
-    [extractShellCommands],
-  );
 
   const executeAdhocRun = useCallback(
     async (
@@ -243,9 +43,9 @@ export function useAdhocRun() {
 
         // Get job configuration from XDP with the local stages
         if (!isEditAndRun) {
-          jobConfig = await getJobConfigFromXdp(localConfig.stages);
+          jobConfig = await getJobConfigFromXdp(bus, localConfig.stages);
         } else {
-          jobConfig = await getEditedJobConfigFromXdp(localConfig.stages);
+          jobConfig = await getEditedJobConfigFromXdp(bus, localConfig.stages);
         }
 
         /**
@@ -350,14 +150,11 @@ export function useAdhocRun() {
         setIsExecuting(false);
       }
     },
-    [getExecutionConfig, getJobConfigFromXdp, getEditedJobConfigFromXdp, extractShellCommands],
+    [bus],
   );
 
   return {
     isExecuting,
     executeAdhocRun,
-    extractShellCommands,
-    getJobConfigFromXdp,
-    getEditedJobConfigFromXdp,
   };
 }

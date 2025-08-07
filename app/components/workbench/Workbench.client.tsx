@@ -58,12 +58,10 @@ export const Workbench = memo(
     const { syncEnabled } = useSettings();
 
     // Use extracted hooks
-    const { isExecuting, executeAdhocRun, extractShellCommands, getJobConfigFromXdp } = useAdhocRun();
+    const { isExecuting, executeAdhocRun } = useAdhocRun();
 
     // Handle pipeline config messages
     usePipelineConfigHandler({
-      extractShellCommands,
-      getJobConfigFromXdp,
       currentProjectId,
     });
 
