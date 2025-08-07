@@ -2,7 +2,8 @@ import { useStore } from '@nanostores/react';
 import { streamingState } from '~/lib/stores/streaming';
 import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
 import { useChatHistory } from '~/lib/persistence';
-import { PipelineRunner } from './PipelineRunner';
+
+// import { PipelineRunner } from './PipelineRunner';
 
 interface HeaderActionButtonsProps {
   chatStarted: boolean;
@@ -18,7 +19,7 @@ export function HeaderActionButtons({ chatStarted }: HeaderActionButtonsProps) {
     <div className="flex items-center">
       {chatStarted && shouldShowButtons && (
         <>
-          <PipelineRunner />
+          {/* <PipelineRunner /> */}
           <ExportChatButton exportChat={exportChat} />
         </>
       )}
