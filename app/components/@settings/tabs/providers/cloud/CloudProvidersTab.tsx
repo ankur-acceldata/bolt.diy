@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useEffect, useState, useCallback } from 'react';
 import { Switch } from '~/components/ui/Switch';
 import { useSettings } from '~/lib/hooks/useSettings';
@@ -16,44 +17,18 @@ import { FaCloud, FaBrain } from 'react-icons/fa';
 import type { IconType } from 'react-icons';
 
 // Add type for provider names to ensure type safety
-type ProviderName =
-  | 'AmazonBedrock'
-  | 'Anthropic'
-  | 'Cohere'
-  | 'Deepseek'
-  | 'Google'
-  | 'Groq'
-  | 'HuggingFace'
-  | 'Hyperbolic'
-  | 'Mistral'
-  | 'OpenAI'
-  | 'OpenRouter'
-  | 'Perplexity'
-  | 'Together'
-  | 'XAI';
+type ProviderName = 'Anthropic' | 'Google';
 
 // Update the PROVIDER_ICONS type to use the ProviderName type
 const PROVIDER_ICONS: Record<ProviderName, IconType> = {
-  AmazonBedrock: SiAmazon,
   Anthropic: FaBrain,
-  Cohere: BiChip,
-  Deepseek: BiCodeBlock,
   Google: SiGoogle,
-  Groq: BsCloud,
-  HuggingFace: SiHuggingface,
-  Hyperbolic: TbCloudComputing,
-  Mistral: TbBrain,
-  OpenAI: SiOpenai,
-  OpenRouter: FaCloud,
-  Perplexity: SiPerplexity,
-  Together: BsCloud,
-  XAI: BsRobot,
 };
 
 // Update PROVIDER_DESCRIPTIONS to use the same type
 const PROVIDER_DESCRIPTIONS: Partial<Record<ProviderName, string>> = {
-  Anthropic: 'Access Claude and other Anthropic models',
-  OpenAI: 'Use GPT-4, GPT-3.5, and other OpenAI models',
+  Anthropic: 'Access Claude models with hybrid reasoning capabilities',
+  Google: 'Use Gemini models with advanced AI capabilities',
 };
 
 const CloudProvidersTab = () => {
@@ -62,10 +37,10 @@ const CloudProvidersTab = () => {
   const [filteredProviders, setFilteredProviders] = useState<IProviderConfig[]>([]);
   const [categoryEnabled, setCategoryEnabled] = useState<boolean>(false);
 
-  // Load and filter providers
+  // Load and filter providers - only show Google and Anthropic
   useEffect(() => {
     const newFilteredProviders = Object.entries(settings.providers || {})
-      .filter(([key]) => !['Ollama', 'LMStudio', 'OpenAILike'].includes(key))
+      .filter(([key]) => ['Google', 'Anthropic'].includes(key))
       .map(([key, value]) => ({
         name: key,
         settings: value.settings,

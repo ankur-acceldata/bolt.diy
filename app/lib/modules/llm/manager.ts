@@ -3,6 +3,7 @@ import { BaseProvider } from './base-provider';
 import type { ModelInfo, ProviderInfo } from './types';
 import * as providers from './registry';
 import { createScopedLogger } from '~/utils/logger';
+import { isProviderEnabled, filterModelsForProvider } from '~/lib/config/providers';
 
 const logger = createScopedLogger('LLMManager');
 export class LLMManager {
@@ -57,7 +58,15 @@ export class LLMManager {
       return;
     }
 
+    // Check if provider is enabled in configuration
+    if (!isProviderEnabled(provider.name)) {
+      logger.info(`Provider ${provider.name} is disabled by configuration. Skipping.`);
+      return;
+    }
+
     logger.info('Registering Provider: ', provider.name);
+
+    // For now, just register the provider - dynamic models will be filtered during updateModelList
     this._providers.set(provider.name, provider);
     this._modelList = [...this._modelList, ...provider.staticModels];
   }
@@ -99,16 +108,22 @@ export class LLMManager {
           const cachedModels = provider.getModelsFromCache(options);
 
           if (cachedModels) {
-            return cachedModels;
+            // Apply filtering to cached models as well
+            return filterModelsForProvider(provider.name, cachedModels);
           }
 
           const dynamicModels = await provider
             .getDynamicModels(apiKeys, providerSettings?.[provider.name], serverEnv)
             .then((models) => {
-              logger.info(`Caching ${models.length} dynamic models for ${provider.name}`);
-              provider.storeDynamicModels(options, models);
+              logger.info(`Retrieved ${models.length} dynamic models for ${provider.name}`);
 
-              return models;
+              // Apply filtering to get only the latest 4 models
+              const filteredModels = filterModelsForProvider(provider.name, models);
+              logger.info(`Filtered to ${filteredModels.length} latest models for ${provider.name}`);
+
+              provider.storeDynamicModels(options, filteredModels);
+
+              return filteredModels;
             })
             .catch((err) => {
               logger.error(`Error getting dynamic models ${provider.name} :`, err);
@@ -163,7 +178,11 @@ export class LLMManager {
 
     if (cachedModels) {
       logger.info(`Found ${cachedModels.length} cached models for ${provider.name}`);
-      return [...cachedModels, ...staticModels];
+
+      // Apply filtering to cached models as well
+      const filteredCachedModels = filterModelsForProvider(provider.name, cachedModels);
+
+      return [...filteredCachedModels, ...staticModels];
     }
 
     logger.info(`Getting dynamic models for ${provider.name}`);
@@ -172,9 +191,14 @@ export class LLMManager {
       .getDynamicModels?.(apiKeys, providerSettings?.[provider.name], serverEnv)
       .then((models) => {
         logger.info(`Got ${models.length} dynamic models for ${provider.name}`);
-        provider.storeDynamicModels(options, models);
 
-        return models;
+        // Apply filtering to get only the latest 4 models
+        const filteredModels = filterModelsForProvider(provider.name, models);
+        logger.info(`Filtered to ${filteredModels.length} latest models for ${provider.name}`);
+
+        provider.storeDynamicModels(options, filteredModels);
+
+        return filteredModels;
       })
       .catch((err) => {
         logger.error(`Error getting dynamic models ${provider.name} :`, err);

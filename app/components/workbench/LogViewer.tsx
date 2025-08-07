@@ -29,6 +29,14 @@ export function LogViewer({
     tailLines: 100,
   });
 
+  // Clear logs when configuration changes (new job) or when opening for the first time
+  useEffect(() => {
+    if (isOpen && dataplaneId && podName) {
+      console.log('LogViewer: Clearing logs for new job configuration:', { dataplaneId, podName });
+      clearLogs();
+    }
+  }, [isOpen, dataplaneId, podName, clearLogs]);
+
   const scrollToBottom = useCallback(() => {
     if (logsEndRef.current) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -232,10 +240,14 @@ export function LogViewer({
               Clear
             </button>
             <button
-              onClick={connect}
+              onClick={() => {
+                console.log('LogViewer: Manual reconnect - clearing logs and reconnecting');
+                clearLogs();
+                connect();
+              }}
               disabled={isConnecting}
               className="text-xs px-2 py-1 bg-bolt-elements-background-depth-3 hover:bg-bolt-elements-background-depth-4 text-bolt-elements-textSecondary rounded transition-colors disabled:opacity-50"
-              title="Reconnect"
+              title="Clear logs and reconnect"
             >
               {isConnecting ? 'Connecting...' : 'Reconnect'}
             </button>

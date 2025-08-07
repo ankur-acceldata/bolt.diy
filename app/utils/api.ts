@@ -91,7 +91,7 @@ export function navigateToPath(path: string, replace: boolean = false): void {
   const config = getAppConfig();
   const cleanBasePath = config.basePath;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const fullPath = `${cleanBasePath}${normalizedPath}`;
+  const fullPath = cleanBasePath ? `${cleanBasePath}${normalizedPath}` : normalizedPath;
 
   if (replace) {
     window.location.replace(fullPath);
@@ -105,7 +105,9 @@ export function navigateToPath(path: string, replace: boolean = false): void {
  */
 export function createChatUrl(chatId: string): string {
   const config = getAppConfig();
-  return `${config.basePath}/chat/${chatId}`;
+  const basePath = config.basePath;
+
+  return basePath ? `${basePath}/chat/${chatId}` : `/chat/${chatId}`;
 }
 
 /**

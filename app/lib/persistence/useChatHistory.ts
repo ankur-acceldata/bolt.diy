@@ -1,11 +1,11 @@
-import { useLoaderData, useNavigate, useSearchParams } from '@remix-run/react';
+import { useLoaderData, useSearchParams } from '@remix-run/react';
 import { useState, useEffect, useCallback } from 'react';
 import { atom } from 'nanostores';
 import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
-import { getBasePath, createChatUrl } from '~/utils/api';
+import { createChatUrl, navigateToChat, navigateToHome } from '~/utils/api';
 import { streamingState } from '~/lib/stores/streaming';
 import {
   getMessages,
@@ -44,7 +44,6 @@ export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
 export const chatMetadata = atom<IChatMetadata | undefined>(undefined);
 export function useChatHistory() {
-  const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
   const [searchParams] = useSearchParams();
 
@@ -186,7 +185,7 @@ ${value.content}
             chatId.set(storedMessages.id);
             chatMetadata.set(storedMessages.metadata);
           } else {
-            navigate('/', { replace: true });
+            navigateToHome(true);
           }
 
           setReady(true);
@@ -203,7 +202,7 @@ ${value.content}
       setReady(true);
       setIsInitialLoad(false);
     }
-  }, [mixedId, db, navigate, searchParams]); // Added db, navigate, searchParams dependencies
+  }, [mixedId, db, searchParams]); // Added db, searchParams dependencies
 
   const takeSnapshot = useCallback(
     async (
@@ -325,7 +324,7 @@ ${value.content}
       if (!urlId && firstArtifact?.id) {
         const urlId = await getUrlId(db, firstArtifact.id);
         _urlId = urlId;
-        navigateChat(urlId);
+        window.history.replaceState({}, '', createChatUrl(urlId));
         setUrlId(urlId);
       }
 
@@ -354,7 +353,7 @@ ${value.content}
         finalChatId = nextId;
 
         if (!urlId) {
-          navigateChat(nextId);
+          window.history.replaceState({}, '', createChatUrl(nextId));
         }
 
         // Create an initial empty snapshot for the new chat
@@ -447,7 +446,7 @@ ${value.content}
           console.error('Failed to create initial snapshot for duplicated chat:', error);
         }
 
-        navigate(`/chat/${newId}`);
+        navigateToChat(newId);
         toast.success('Chat duplicated successfully');
       } catch (error) {
         toast.error('Failed to duplicate chat');
@@ -517,20 +516,4 @@ ${value.content}
       URL.revokeObjectURL(url);
     },
   };
-}
-
-function navigateChat(nextId: string) {
-  /**
-   * FIXME: Using the intended navigate function causes a rerender for <Chat /> that breaks the app.
-   *
-   * `navigate(`/chat/${nextId}`, { replace: true });`
-   */
-  const url = new URL(window.location.href);
-
-  // Use getBasePath to respect base path configuration
-  const basePath = getBasePath();
-  const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-  url.pathname = `${cleanBasePath}/chat/${nextId}`;
-
-  window.history.replaceState({}, '', url);
 }

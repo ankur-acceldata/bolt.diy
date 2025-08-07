@@ -383,26 +383,86 @@ export const Workbench = memo(
       workbenchStore.currentView.set(view);
     };
 
-    // Helper function to extract shell commands from bolt actions
+    /**
+     * Helper function to extract shell commands from bolt actions
+     * Only extracts commands from the latest AI message artifact
+     */
     const extractShellCommands = useCallback(() => {
       const artifacts = workbenchStore.artifacts.get();
+      const artifactIdList = workbenchStore.artifactIdList;
       const shellCommands: string[] = [];
 
-      Object.values(artifacts).forEach((artifact) => {
-        const actions = artifact.runner.actions.get();
-        Object.values(actions).forEach((action) => {
-          if (action.type === 'shell' && action.content) {
-            // Split multiline commands and filter out empty lines
-            const commands = action.content
-              .split('\n')
-              .map((cmd) => cmd.trim())
-              .filter((cmd) => cmd.length > 0 && !cmd.startsWith('#'));
+      logger.info('DEBUG: Starting shell command extraction:', {
+        artifactIdListLength: artifactIdList.length,
+        artifactIds: artifactIdList,
+        totalArtifacts: Object.keys(artifacts).length,
+      });
 
-            logger.info('Extracted shell commands:', commands);
+      // If no artifacts, return empty array
+      if (artifactIdList.length === 0) {
+        logger.warn('No artifacts available for command extraction - artifactIdList is empty');
+        return shellCommands;
+      }
 
-            shellCommands.push(...commands);
-          }
+      // Get the latest artifact messageId (most recent)
+      const latestMessageId = artifactIdList[artifactIdList.length - 1];
+      const latestArtifact = artifacts[latestMessageId];
+
+      if (!latestArtifact) {
+        logger.error('Latest artifact not found for messageId:', latestMessageId, {
+          availableArtifacts: Object.keys(artifacts),
+          artifactIdList,
         });
+        return shellCommands;
+      }
+
+      logger.info('Extracting commands from latest AI message artifact:', {
+        messageId: latestMessageId,
+        artifactTitle: latestArtifact.title,
+        totalArtifacts: artifactIdList.length,
+      });
+
+      // Extract shell commands only from the latest artifact
+      const actions = latestArtifact.runner.actions.get();
+      const actionCount = Object.keys(actions).length;
+
+      logger.info('DEBUG: Actions in latest artifact:', {
+        actionCount,
+        actionIds: Object.keys(actions),
+        actionTypes: Object.values(actions).map((a) => a.type),
+      });
+
+      if (actionCount === 0) {
+        logger.warn('No actions found in latest artifact');
+        return shellCommands;
+      }
+
+      Object.values(actions).forEach((action, index) => {
+        logger.info(`DEBUG: Processing action ${index}:`, {
+          actionType: action.type,
+          hasContent: !!action.content,
+          contentPreview: action.content ? action.content.substring(0, 100) + '...' : 'No content',
+        });
+
+        if (action.type === 'shell' && action.content) {
+          // Split multiline commands and filter out empty lines
+          const commands = action.content
+            .split('\n')
+            .map((cmd) => cmd.trim())
+            .filter((cmd) => cmd.length > 0 && !cmd.startsWith('#'));
+
+          logger.info('Extracted shell commands from latest message:', {
+            messageId: latestMessageId,
+            commands,
+          });
+
+          shellCommands.push(...commands);
+        }
+      });
+
+      logger.info('Final extracted commands for job execution:', {
+        totalCommands: shellCommands.length,
+        commands: shellCommands,
       });
 
       return shellCommands;
@@ -546,6 +606,12 @@ export const Workbench = memo(
           // Get local execution configuration based on selected template
           const localConfig = getExecutionConfig(selectedTemplate);
 
+          logger.info('Local execution config generated:', {
+            template: selectedTemplate,
+            extractedCommands: extractShellCommands(),
+            localConfig,
+          });
+
           let jobConfig;
 
           // Get job configuration from XDP with the local stages
@@ -555,17 +621,29 @@ export const Workbench = memo(
             jobConfig = await getEditedJobConfigFromXdp(localConfig.stages);
           }
 
-          // Destructure for cleaner usage, handling nulls/undefined with defaults
+          /**
+           * Destructure for cleaner usage, handling nulls/undefined with defaults
+           * Note: We preserve our local stages instead of using stages from XDP
+           */
           const {
             baseImage = '',
             dataplaneName = '',
             dataplaneId = '',
-            stages = [],
+            stages: xdpStages = [],
             depends = { dataStores: [] },
             executionConfig = {},
           } = jobConfig || {};
 
-          logger.info('Job Config:', JSON.stringify(jobConfig, null, 2));
+          // Use our local stages instead of XDP stages to preserve extracted commands
+          const stages = localConfig.stages;
+
+          logger.info('Job Config from XDP:', JSON.stringify(jobConfig, null, 2));
+          logger.info('Stages comparison:', {
+            xdpStages,
+            localStages: localConfig.stages,
+            usingStages: stages,
+            stagesSource: 'local (preserving extracted commands)',
+          });
 
           const { adhocRunType = '', codeSourceUrl = '', type = '' } = localConfig || {};
 
@@ -638,7 +716,7 @@ export const Workbench = memo(
 
             logger.info('Extracted from adhoc-run response:', { podName, dataplaneId, responseData: result.data });
 
-            // Open log viewer with extracted parameters
+            // Open log viewer with extracted parameters and clear any previous logs
             workbenchStore.toggleLogViewer(true, { dataplaneId: String(dataplaneId), podName: String(podName) });
           }
         } catch (error) {
