@@ -6,6 +6,9 @@ import { renderHeadToString } from 'remix-island';
 import { Head } from './root';
 import { themeStore } from '~/lib/stores/theme';
 import { installFetchInterceptor } from '~/lib/fetch-interceptor';
+import { createScopedLogger } from './utils/logger';
+
+const logger = createScopedLogger('EntryServer');
 
 // Install fetch interceptor for server-side requests
 installFetchInterceptor();
@@ -22,7 +25,7 @@ export default async function handleRequest(
   const readable = await renderToReadableStream(<RemixServer context={remixContext} url={request.url} />, {
     signal: request.signal,
     onError(error: unknown) {
-      console.error(error);
+      logger.error(error);
       responseStatusCode = 500;
     },
   });

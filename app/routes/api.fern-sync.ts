@@ -5,6 +5,9 @@
 
 import type { ActionFunctionArgs } from '@remix-run/cloudflare';
 import { json } from '@remix-run/cloudflare';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('FernSyncAPI');
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -35,7 +38,7 @@ export async function action({ request }: ActionFunctionArgs) {
         return json({ error: 'Unknown action' }, { status: 400 });
     }
   } catch (error) {
-    console.error('Fern sync API error:', error);
+    logger.error('Fern sync API error:', error);
     return json({ error: (error as Error).message }, { status: 500 });
   }
 }

@@ -18,6 +18,9 @@ import type { ProviderInfo } from '~/types/model';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import { StarterTemplateSelector } from './StarterTemplateSelector';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('ChatBox');
 
 interface ChatBoxProps {
   isModelSettingsCollapsed: boolean;
@@ -82,8 +85,8 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
         <div className="mb-6">
           <StarterTemplateSelector
             onTemplateSelect={(template) => {
-              console.log('Template selected:', template);
-              console.log('setSelectedTemplate function:', props.setSelectedTemplate);
+              logger.debug('Template selected:', template);
+              logger.debug('setSelectedTemplate function:', props.setSelectedTemplate);
               props.setSelectedTemplate?.(template);
             }}
             selectedTemplate={props.selectedTemplate}
