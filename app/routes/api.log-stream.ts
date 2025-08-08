@@ -29,8 +29,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 
   try {
     // Get base URL from HOST environment variable
-    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || 'demo.xdp.acceldata.tech';
-    const baseUrl = host.startsWith('http') ? host : `https://${host}`;
+    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || request.headers.get('origin');
+
+    const protocol = request.headers.get('x-forwarded-proto') || 'https';
+    const baseUrl = host?.startsWith('http') ? host : `${protocol}://${host}`;
 
     // Use the correct SSE endpoint format
     const endpoint = `${baseUrl}/xdp-cp-service/api/dataplane/${dataplaneId}/logs/${podName}/sse?tailLines=${tailLines}`;

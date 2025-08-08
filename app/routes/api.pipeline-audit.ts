@@ -15,9 +15,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return json({ error: 'Missing runId' }, { status: 400 });
     }
 
-    // Get base URL from HOST environment variable
-    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || 'demo.xdp.acceldata.tech';
-    const baseUrl = host.startsWith('http') ? host : `https://${host}`;
+    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || request.headers.get('origin');
+
+    const protocol = request.headers.get('x-forwarded-proto') || 'https';
+    const baseUrl = host?.startsWith('http') ? host : `${protocol}://${host}`;
 
     const endpoint = `${baseUrl}/xdp-cp-service/api/pipelines/runs/${runId}/audit`;
 

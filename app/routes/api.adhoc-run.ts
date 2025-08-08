@@ -48,10 +48,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
       };
     }
 
-    // Get base URL from HOST environment variable
-    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || 'demo.xdp.acceldata.tech';
+    // Get base URL from HOST environment variable or request headers
+    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || request.headers.get('origin');
 
-    const baseUrl = host.startsWith('http') ? host : `https://${host}`;
+    const protocol = request.headers.get('x-forwarded-proto') || 'https';
+    const baseUrl = host?.startsWith('http') ? host : `${protocol}://${host}`;
 
     const endpoint = `${baseUrl}/xdp-cp-service/api/adhoc-runs`;
 
