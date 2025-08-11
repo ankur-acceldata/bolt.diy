@@ -1,9 +1,10 @@
 import { json, type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { createScopedLogger } from '~/utils/logger';
+import { AcceldataService } from '~/lib/services/acceldataService';
 
 const logger = createScopedLogger('api.pipeline-audit');
 
-export async function action({ request, context }: ActionFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, { status: 405 });
   }
@@ -15,48 +16,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return json({ error: 'Missing runId' }, { status: 400 });
     }
 
-    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || request.headers.get('origin');
+    // Use centralized service with request for dynamic base URL
+    const result = await AcceldataService.getPipelineAudit(runId, request);
 
-    const protocol = request.headers.get('x-forwarded-proto') || 'https';
-    const baseUrl = host?.startsWith('http') ? host : `${protocol}://${host}`;
-
-    const endpoint = `${baseUrl}/xdp-cp-service/api/pipelines/runs/${runId}/audit`;
-
-    logger.info(`Fetching audit for run ${runId} from: ${endpoint}`);
-
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        'X-User-Name': 'Tanaya',
-        'X-Tenant-ID': '1234',
-        'X-Tenant-Name': 'TestTenant',
-        'X-User-ID': '5678',
-        accessKey: (context?.cloudflare?.env as any)?.ACCELDATA_ACCESS_KEY || process.env.ACCELDATA_ACCESS_KEY,
-        secretKey: (context?.cloudflare?.env as any)?.ACCELDATA_SECRET_KEY || process.env.ACCELDATA_SECRET_KEY,
-      },
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      logger.error(`Pipeline audit failed: ${response.status} ${response.statusText}`, { data });
-      return json(
-        {
-          error: `Pipeline audit failed: ${response.status} ${response.statusText}`,
-          details: data,
-        },
-        { status: response.status },
-      );
-    }
-
-    logger.info('Pipeline audit fetched successfully', { runId, dataSize: JSON.stringify(data).length });
-
-    return json({
-      success: true,
-      status: response.status,
-      data,
-      message: `Audit for run ${runId} fetched successfully`,
-    });
+    return json(result, { status: result.status });
   } catch (error) {
     logger.error('Pipeline audit error:', error);
     return json(

@@ -1,9 +1,10 @@
 import { type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import { createScopedLogger } from '~/utils/logger';
+import { AcceldataService } from '~/lib/services/acceldataService';
 
 const logger = createScopedLogger('api.log-stream');
 
-export async function loader({ request, context }: LoaderFunctionArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const dataplaneId = url.searchParams.get('dataplaneId');
   const podName = url.searchParams.get('podName');
@@ -16,44 +17,14 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     return new Response('Missing required parameters: dataplaneId and podName', { status: 400 });
   }
 
-  // Get authentication keys
-  const accessKey = (context?.cloudflare?.env as any)?.ACCELDATA_ACCESS_KEY || process.env.ACCELDATA_ACCESS_KEY;
-  const secretKey = (context?.cloudflare?.env as any)?.ACCELDATA_SECRET_KEY || process.env.ACCELDATA_SECRET_KEY;
-
-  logger.info(`Auth keys available - accessKey: ${!!accessKey}, secretKey: ${!!secretKey}`);
-
-  if (!accessKey || !secretKey) {
-    logger.error('Missing authentication keys');
-    return new Response('Authentication keys not configured', { status: 500 });
+  // Check if service is configured
+  if (!AcceldataService.isConfigured()) {
+    logger.error('Acceldata service not configured');
+    return new Response('Acceldata service not configured', { status: 500 });
   }
 
   try {
-    // Get base URL from HOST environment variable
-    const host = (context?.cloudflare?.env as any)?.HOST || process.env.HOST || request.headers.get('origin');
-
-    const protocol = request.headers.get('x-forwarded-proto') || 'https';
-    const baseUrl = host?.startsWith('http') ? host : `${protocol}://${host}`;
-
-    // Use the correct SSE endpoint format
-    const endpoint = `${baseUrl}/xdp-cp-service/api/dataplane/${dataplaneId}/logs/${podName}/sse?tailLines=${tailLines}`;
-
-    logger.info(`Streaming logs from: ${endpoint}`);
-
-    // Print the exact curl command for debugging (for use in Postman or terminal)
-    const curlCommand = [
-      'curl',
-      '-N', // for streaming output
-      '-H',
-      `'accessKey: ${accessKey}'`,
-      '-H',
-      `'secretKey: ${secretKey}'`,
-      '-H',
-      "'Accept: text/event-stream'",
-      '-H',
-      "'Cache-Control: no-cache'",
-      `'${endpoint}'`,
-    ].join(' ');
-    logger.info(`CURL for Postman/terminal:\n${curlCommand}`);
+    logger.info(`Streaming logs for dataplaneId: ${dataplaneId}, podName: ${podName}`);
 
     // Create a readable stream for SSE
     const stream = new ReadableStream({
@@ -68,18 +39,20 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           try {
             logger.info(`Initiating connection to backend log stream... (attempt ${retryCount + 1}/${maxRetries + 1})`);
 
-            const response = await fetch(endpoint, {
-              headers: {
-                accessKey,
-                secretKey,
-                Accept: 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'User-Agent': 'Mozilla/5.0 (compatible; LogStreamClient/1.0)',
-                Connection: 'keep-alive',
-                Host: new URL(endpoint).host, // Helps some gateways
+            // Use centralized AcceldataService for consistent header handling
+            const response = await AcceldataService.callStream(
+              `/xdp-cp-service/api/dataplane/${dataplaneId}/logs/${podName}/sse?tailLines=${tailLines}`,
+              {
+                requestHeaders: request.headers,
+                request,
+                additionalHeaders: {
+                  Accept: 'text/event-stream',
+                  'Cache-Control': 'no-cache',
+                  'User-Agent': 'Mozilla/5.0 (compatible; LogStreamClient/1.0)',
+                  Connection: 'keep-alive',
+                },
               },
-              signal: request.signal, // Pass through client abort signal
-            });
+            );
 
             logger.info(`Backend response status: ${response.status} ${response.statusText}`);
             logger.info(`Backend response headers:`, Object.fromEntries(response.headers.entries()));

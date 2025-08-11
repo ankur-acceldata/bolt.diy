@@ -13,6 +13,10 @@ export interface AppConfig {
   isProduction: boolean;
 }
 
+export interface ExternalServiceConfig {
+  acceldataBaseUrl?: string;
+}
+
 /**
  * Get configuration from various sources with proper fallbacks
  */
@@ -164,10 +168,111 @@ export function getAssetUrl(path: string): string {
 }
 
 /**
+ * Get external service configuration from environment variables
+ */
+function getExternalServiceConfigFromSources(): ExternalServiceConfig {
+  const config: ExternalServiceConfig = {};
+
+  // Browser environment - use Vite's environment variables
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    config.acceldataBaseUrl = import.meta.env.VITE_ACCELDATA_BASE_URL;
+  }
+
+  // Node.js environment - use process.env
+  if (typeof process !== 'undefined' && process.env) {
+    config.acceldataBaseUrl = config.acceldataBaseUrl || process.env.ACCELDATA_BASE_URL;
+  }
+
+  return config;
+}
+
+// Cache the external service configuration
+let cachedExternalConfig: ExternalServiceConfig | null = null;
+
+/**
+ * Get the external service configuration
+ */
+export function getExternalServiceConfig(): ExternalServiceConfig {
+  if (cachedExternalConfig) {
+    return cachedExternalConfig;
+  }
+
+  cachedExternalConfig = getExternalServiceConfigFromSources();
+
+  return cachedExternalConfig;
+}
+
+/**
+ * Reset the cached external service configuration
+ */
+export function resetExternalServiceCache(): void {
+  cachedExternalConfig = null;
+}
+
+/**
+ * Get the Acceldata service base URL
+ * Dynamically determined from HOST env var or request origin
+ */
+export function getAcceldataBaseUrl(request?: Request): string {
+  const serviceConfig = getExternalServiceConfig();
+
+  // Use configured base URL if available (highest priority)
+  if (serviceConfig.acceldataBaseUrl) {
+    return serviceConfig.acceldataBaseUrl;
+  }
+
+  // Check static environment variable (medium priority)
+  if (process.env.ACCELDATA_BASE_URL) {
+    return process.env.ACCELDATA_BASE_URL;
+  }
+
+  // Dynamic determination from HOST env var (low priority)
+  if (process.env.HOST) {
+    const host = process.env.HOST;
+    const protocol = host.startsWith('http') ? '' : 'https://';
+
+    return `${protocol}${host}`;
+  }
+
+  // Fallback to request origin (lowest priority)
+  if (request) {
+    const origin = request.headers.get('origin');
+
+    if (origin) {
+      return origin;
+    }
+
+    // Construct from host header if origin is not available
+    const host = request.headers.get('host');
+
+    if (host) {
+      const protocol = request.headers.get('x-forwarded-proto') || 'https';
+      return `${protocol}://${host}`;
+    }
+  }
+
+  throw new Error(
+    'Acceldata base URL could not be determined. Please set HOST environment variable or ensure request has origin/host headers.',
+  );
+}
+
+/**
+ * Construct an Acceldata API URL
+ */
+export function getAcceldataApiUrl(path: string, request?: Request): string {
+  const baseUrl = getAcceldataBaseUrl(request);
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  return `${baseUrl}${cleanPath}`;
+}
+
+/**
  * Get configuration for display/debugging purposes
  */
 export function getConfigSummary(): Record<string, any> {
   const config = getAppConfig();
+  const externalConfig = getExternalServiceConfig();
+
   return {
     basePath: config.basePath || '(root)',
     baseUrl: config.baseUrl,
@@ -176,5 +281,8 @@ export function getConfigSummary(): Record<string, any> {
     protocol: config.protocol,
     environment: config.isDevelopment ? 'development' : 'production',
     fullBaseUrl: getFullBaseUrl(),
+    externalServices: {
+      acceldataBaseUrl: externalConfig.acceldataBaseUrl || '(not configured)',
+    },
   };
 }

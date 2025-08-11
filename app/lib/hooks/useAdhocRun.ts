@@ -98,8 +98,10 @@ export function useAdhocRun() {
             stages: stages || [],
             type: type || '',
             mode: 'cluster',
-            executionConfig: executionConfig || {},
             depends: depends || { dataStores: [] },
+
+            // Spread executionConfig properties directly into config instead of nesting
+            ...(executionConfig || {}),
           },
           dataplaneName: dataplaneName || '',
           dataplaneId: dataplaneId || '',
@@ -133,15 +135,21 @@ export function useAdhocRun() {
          * Expected format from example: wss://demo.xdp.acceldata.tech/xdp-cp-service/api/dataplane/135/logs/adhoc-run-spar-1753369519227/stream?tailLines=100
          */
         if (result.success && result.data) {
-          // Extract pod name and dataplane ID from the API response
+          // Extract pod name from the API response
           const podName = result.data?.data?.podName || result.data?.name || result.data?.id;
 
-          // const dataplaneId = result.data?.data?.dataplaneId || result.data?.dataplane?.id || result.data?.dataplane;
-
-          logger.info('Extracted from adhoc-run response:', { podName, dataplaneId, responseData: result.data });
+          // Use dataplaneId from job config (already extracted from getJobConfigFromXdp)
+          logger.info('Using dataplaneId from job config and podName from response:', {
+            dataplaneId,
+            podName,
+            responseData: result.data,
+          });
 
           // Open log viewer with extracted parameters and clear any previous logs
-          workbenchStore.toggleLogViewer(true, { dataplaneId: String(dataplaneId), podName: String(podName) });
+          workbenchStore.toggleLogViewer(true, {
+            dataplaneId: String(dataplaneId),
+            podName: String(podName),
+          });
         }
       } catch (error) {
         logger.error('Execute adhoc run error:', error);
