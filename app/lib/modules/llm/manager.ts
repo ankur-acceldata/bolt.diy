@@ -140,7 +140,8 @@ export class LLMManager {
 
     // Combine static and dynamic models
     const modelList = [...dynamicModelsFlat, ...filteredStaticModesl];
-    modelList.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Note: Don't sort here - preserve the custom sorting from filterModelsForProvider
     this._modelList = modelList;
 
     return modelList;

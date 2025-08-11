@@ -149,7 +149,9 @@ export const ModelSelector = ({
           if (setProvider) {
             setProvider(selectedProvider);
 
-            const firstModel = modelList.find((m) => m.provider === selectedProvider.name);
+            // Get all models for this provider and pick the first one (should be latest due to our sorting)
+            const providerModels = modelList.filter((m) => m.provider === selectedProvider.name);
+            const firstModel = providerModels[0]; // First model should be the latest due to our custom sorting
 
             if (firstModel && setModel) {
               setModel(firstModel.name);
@@ -196,7 +198,9 @@ export const ModelSelector = ({
       const firstEnabledProvider = providerList[0];
       setProvider?.(firstEnabledProvider);
 
-      const firstModel = modelList.find((m) => m.provider === firstEnabledProvider.name);
+      // Get all models for this provider and pick the first one (should be latest due to our sorting)
+      const providerModels = modelList.filter((m) => m.provider === firstEnabledProvider.name);
+      const firstModel = providerModels[0]; // First model should be the latest due to our custom sorting
 
       if (firstModel) {
         setModel?.(firstModel.name);
@@ -323,7 +327,9 @@ export const ModelSelector = ({
                       if (setProvider) {
                         setProvider(providerOption);
 
-                        const firstModel = modelList.find((m) => m.provider === providerOption.name);
+                        // Get all models for this provider and pick the first one (should be latest due to our sorting)
+                        const providerModels = modelList.filter((m) => m.provider === providerOption.name);
+                        const firstModel = providerModels[0]; // First model should be the latest due to our custom sorting
 
                         if (firstModel && setModel) {
                           setModel(firstModel.name);

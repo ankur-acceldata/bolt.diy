@@ -18,18 +18,20 @@ export interface ModelFilter {
 }
 
 /**
- * Current configuration: Only Google and Anthropic with one model from each of the latest 4 versions
- * Excludes image generation, TTS, and other non-text models
+ * Current configuration: Both Google and Anthropic show up to 20 models with all variants
+ * For Google: Shows all model variants (Ultra, Pro, Flash, Flash-Lite, Flash-8B, Nano, etc.) across versions
+ * For Anthropic: Shows all model variants (Opus, Sonnet, Haiku, Thinking, etc.) across versions
+ * Excludes image generation, TTS, and other non-text models for both providers
+ * Uses dynamic version priority calculation to automatically handle new model versions
  */
 export const PROVIDER_FILTER_CONFIG: ProviderFilterConfig = {
   enabledProviders: ['Google', 'Anthropic'],
   maxModelsPerProvider: 4,
   providerModelLimits: {
     Google: {
-      maxModels: 4,
+      maxModels: 20, // Allow more models to show all variants (pro, flash, flash-lite, etc.)
       excludeModels: [
-        // Exclude older/deprecated versions that might still appear in API
-        'gemini-1.0-pro',
+        // Exclude truly deprecated versions
         'text-bison',
         'chat-bison',
 
@@ -38,18 +40,17 @@ export const PROVIDER_FILTER_CONFIG: ProviderFilterConfig = {
         'gemini-2.0-flash-preview-image-generation',
         'gemini-2.5-flash-preview-tts',
         'gemini-2.5-pro-preview-tts',
+        'gemini-1.0-pro-vision',
       ],
     },
     Anthropic: {
-      maxModels: 4,
+      maxModels: 20, // Allow more models to show all variants (sonnet, haiku, opus, thinking, etc.)
       excludeModels: [
-        // Exclude older/deprecated versions that might still appear in API
+        // Only exclude truly deprecated models
         'claude-instant',
         'claude-instant-1',
         'claude-1',
-        'claude-2',
-        'claude-2.0',
-        'claude-2.1',
+        'claude-2.0', // Keep claude-2.1 as it might still be useful
       ],
     },
   },
@@ -111,7 +112,7 @@ function sortModelsByLatest(providerName: string, models: any[]): any[] {
 }
 
 /**
- * Sort Google models by version priority (latest first) and filter to one per version
+ * Sort Google models by version and capability, showing all variants
  */
 function sortGoogleModels(models: any[]): any[] {
   // Filter out non-text models (image generation, TTS, etc.)
@@ -129,80 +130,91 @@ function sortGoogleModels(models: any[]): any[] {
     ); // Only Gemini text models
   });
 
-  const versionPriority: Record<string, number> = {
-    '2.5': 1000,
-    '2.0': 900,
-    '1.5': 800,
-    '1.0': 700,
-    '0': 100, // Default for models without recognized version
-  };
-
-  // Group models by version
-  const versionGroups: Record<string, any[]> = {};
-  textModels.forEach((model) => {
-    const version = extractGoogleVersion(model.name);
-
-    if (!versionGroups[version]) {
-      versionGroups[version] = [];
+  // Dynamic version priority calculation based on version numbers
+  const getVersionPriority = (version: string): number => {
+    if (version === '0') {
+      return 100; // Default for unrecognized versions
     }
 
-    versionGroups[version].push(model);
-  });
+    const [major, minor] = version.split('.').map(Number);
 
-  // Select best model from each version group
-  const selectedModels: any[] = [];
-  Object.entries(versionGroups).forEach(([_version, versionModels]) => {
-    // Sort models within version by preference (pro > flash > flash-lite)
-    const sortedVersionModels = versionModels.sort((a, b) => {
-      const aScore = getGoogleModelScore(a.name);
-      const bScore = getGoogleModelScore(b.name);
+    // Calculate priority: major * 1000 + minor * 100 (higher = newer)
+    return (major || 0) * 1000 + (minor || 0) * 100;
+  };
 
-      return bScore - aScore; // Higher score first
-    });
-
-    // Take the best model from this version
-    selectedModels.push(sortedVersionModels[0]);
-  });
-
-  // Sort by version priority
-  return selectedModels.sort((a, b) => {
+  // Sort all models by version and capability without limiting to one per version
+  return textModels.sort((a, b) => {
     const aVersion = extractGoogleVersion(a.name);
     const bVersion = extractGoogleVersion(b.name);
 
-    const aPriority = versionPriority[aVersion] || 100;
-    const bPriority = versionPriority[bVersion] || 100;
+    const aPriority = getVersionPriority(aVersion);
+    const bPriority = getVersionPriority(bVersion);
 
-    return bPriority - aPriority; // Higher priority first
+    // First sort by version (newer first)
+    if (aPriority !== bPriority) {
+      return bPriority - aPriority;
+    }
+
+    // If same version, sort by model capability score
+    const aScore = getGoogleModelScore(a.name);
+    const bScore = getGoogleModelScore(b.name);
+
+    if (aScore !== bScore) {
+      return bScore - aScore; // Higher score first
+    }
+
+    // Prefer experimental/preview versions
+    if (a.name.includes('experimental') && !b.name.includes('experimental')) {
+      return -1;
+    }
+
+    if (b.name.includes('experimental') && !a.name.includes('experimental')) {
+      return 1;
+    }
+
+    // Finally, sort by name descending (newer dates/versions first)
+    return b.name.localeCompare(a.name);
   });
 }
 
 /**
  * Get preference score for Google models within same version
+ * Higher scores indicate more capable/preferred models
  */
 function getGoogleModelScore(modelName: string): number {
   const name = modelName.toLowerCase();
 
-  if (name.includes('pro')) {
-    return 100;
+  // Latest and most capable models get highest scores
+  if (name.includes('ultra')) {
+    return 120; // Most capable when available
   }
 
-  if (name.includes('flash') && !name.includes('lite')) {
-    return 80;
+  if (name.includes('pro')) {
+    return 100; // High capability, balanced performance
+  }
+
+  if (name.includes('flash') && !name.includes('lite') && !name.includes('8b')) {
+    return 80; // Fast and capable
   }
 
   if (name.includes('flash-lite')) {
-    return 60;
+    return 60; // Lightweight version
   }
 
   if (name.includes('flash-8b')) {
-    return 40;
+    return 40; // Smallest model
   }
 
-  return 20;
+  if (name.includes('nano')) {
+    return 30; // Edge/mobile optimized
+  }
+
+  // Handle any other variants
+  return 50;
 }
 
 /**
- * Sort Anthropic models by version priority (latest first) and filter to one per version
+ * Sort Anthropic models by version and capability, showing all variants
  */
 function sortAnthropicModels(models: any[]): any[] {
   // Filter out non-text models (audio, vision, etc.)
@@ -218,86 +230,79 @@ function sortAnthropicModels(models: any[]): any[] {
     ); // Only Claude text models
   });
 
-  const versionPriority: Record<string, number> = {
-    '3.7': 1000,
-    '3.5': 900,
-    '3.0': 800,
-    '2.0': 700,
-    '0': 100, // Default for models without recognized version
-  };
-
-  // Group models by version
-  const versionGroups: Record<string, any[]> = {};
-  textModels.forEach((model) => {
-    const version = extractAnthropicVersion(model.name);
-
-    if (!versionGroups[version]) {
-      versionGroups[version] = [];
+  // Dynamic version priority calculation based on version numbers
+  const getVersionPriority = (version: string): number => {
+    if (version === '0') {
+      return 100; // Default for unrecognized versions
     }
 
-    versionGroups[version].push(model);
-  });
+    const [major, minor] = version.split('.').map(Number);
 
-  // Select best model from each version group
-  const selectedModels: any[] = [];
-  Object.entries(versionGroups).forEach(([_version, versionModels]) => {
-    // Sort models within version by preference (sonnet > haiku > opus for same version)
-    const sortedVersionModels = versionModels.sort((a, b) => {
-      const aScore = getAnthropicModelScore(a.name);
-      const bScore = getAnthropicModelScore(b.name);
+    // Calculate priority: major * 1000 + minor * 100 (higher = newer)
+    return (major || 0) * 1000 + (minor || 0) * 100;
+  };
 
-      if (aScore !== bScore) {
-        return bScore - aScore; // Higher score first
-      }
-
-      // Prefer "latest" versions
-      if (a.name.includes('latest') && !b.name.includes('latest')) {
-        return -1;
-      }
-
-      if (b.name.includes('latest') && !a.name.includes('latest')) {
-        return 1;
-      }
-
-      // If same score, sort by name descending (newer dates first)
-      return b.name.localeCompare(a.name);
-    });
-
-    // Take the best model from this version
-    selectedModels.push(sortedVersionModels[0]);
-  });
-
-  // Sort by version priority
-  return selectedModels.sort((a, b) => {
+  // Sort all models by version and capability without limiting to one per version
+  return textModels.sort((a, b) => {
     const aVersion = extractAnthropicVersion(a.name);
     const bVersion = extractAnthropicVersion(b.name);
 
-    const aPriority = versionPriority[aVersion] || 100;
-    const bPriority = versionPriority[bVersion] || 100;
+    const aPriority = getVersionPriority(aVersion);
+    const bPriority = getVersionPriority(bVersion);
 
-    return bPriority - aPriority; // Higher priority first
+    // First sort by version (newer first)
+    if (aPriority !== bPriority) {
+      return bPriority - aPriority;
+    }
+
+    // If same version, sort by model capability score
+    const aScore = getAnthropicModelScore(a.name);
+    const bScore = getAnthropicModelScore(b.name);
+
+    if (aScore !== bScore) {
+      return bScore - aScore; // Higher score first
+    }
+
+    // Prefer "latest" versions
+    if (a.name.includes('latest') && !b.name.includes('latest')) {
+      return -1;
+    }
+
+    if (b.name.includes('latest') && !a.name.includes('latest')) {
+      return 1;
+    }
+
+    // Finally, sort by date in model name (newer dates first)
+    return b.name.localeCompare(a.name);
   });
 }
 
 /**
  * Get preference score for Anthropic models within same version
+ * Higher scores indicate more capable/preferred models
  */
 function getAnthropicModelScore(modelName: string): number {
   const name = modelName.toLowerCase();
 
+  // Latest and most capable models get highest scores
+  if (name.includes('opus')) {
+    return 120; // Most capable, highest cost
+  }
+
   if (name.includes('sonnet')) {
-    return 100;
+    return 100; // Balanced capability and speed
+  }
+
+  if (name.includes('thinking')) {
+    return 90; // Specialized reasoning models
   }
 
   if (name.includes('haiku')) {
-    return 80;
+    return 80; // Fastest, lower cost
   }
 
-  if (name.includes('opus')) {
-    return 60;
-  }
-
-  return 20;
+  // Handle any other variants
+  return 50;
 }
 
 /**
@@ -310,10 +315,31 @@ function extractGoogleVersion(modelName: string): string {
 
 /**
  * Extract version number from Anthropic model name
+ * Handles formats like: claude-3-5-sonnet-20241022, claude-3-haiku-20240307, claude-4-sonnet-latest
  */
 function extractAnthropicVersion(modelName: string): string {
-  const match = modelName.match(/claude-(\d+\.\d+)/);
-  return match ? match[1] : '0';
+  // Try modern format first: claude-3-5-sonnet or claude-4-sonnet
+  const modernMatch = modelName.match(/claude-(\d+)-(\d+)/);
+
+  if (modernMatch) {
+    return `${modernMatch[1]}.${modernMatch[2]}`;
+  }
+
+  // Try legacy format: claude-3.5-sonnet
+  const legacyMatch = modelName.match(/claude-(\d+\.\d+)/);
+
+  if (legacyMatch) {
+    return legacyMatch[1];
+  }
+
+  // Extract major version only for models like claude-4-sonnet-latest
+  const majorMatch = modelName.match(/claude-(\d+)/);
+
+  if (majorMatch) {
+    return `${majorMatch[1]}.0`;
+  }
+
+  return '0';
 }
 
 /**
