@@ -31,66 +31,55 @@ export function UserMessage({ content, parts }: UserMessageProps) {
       (part): part is FileUIPart => part.type === 'file' && 'mimeType' in part && part.mimeType.startsWith('image/'),
     ) || [];
 
-  if (Array.isArray(content)) {
-    const textItem = content.find((item) => item.type === 'text');
-    const textContent = stripMetadata(textItem?.text || '');
-
-    return (
-      <div className="overflow-hidden flex flex-col gap-3 items-center ">
-        <div className="flex flex-row items-start justify-center overflow-hidden shrink-0 self-start">
-          {profile?.avatar || profile?.username ? (
-            <div className="flex items-end gap-2">
-              <img
-                src={profile.avatar}
-                alt={profile?.username || 'User'}
-                className="w-[25px] h-[25px] object-cover rounded-full"
-                loading="eager"
-                decoding="sync"
-              />
-              <span className="text-bolt-elements-textPrimary text-sm">
-                {profile?.username ? profile.username : ''}
-              </span>
-            </div>
-          ) : (
-            <div className="i-ph:user-fill text-bolt-elements-item-contentAccent text-2xl" />
-          )}
-        </div>
-        <div className="flex flex-col gap-4 bg-bolt-elements-item-backgroundAccent border-l-4 border-l-bolt-elements-borderColorActive border border-bolt-elements-borderColor backdrop-blur-sm p-3 py-3 w-auto rounded-lg mr-auto shadow-md">
-          {textContent && <Markdown html>{textContent}</Markdown>}
-          {images.map((item, index) => (
-            <img
-              key={index}
-              src={`data:${item.mimeType};base64,${item.data}`}
-              alt={`Image ${index + 1}`}
-              className="max-w-full h-auto rounded-lg"
-              style={{ maxHeight: '512px', objectFit: 'contain' }}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  const textContent = stripMetadata(content);
+  // Get text content regardless of content type
+  const textContent = Array.isArray(content)
+    ? stripMetadata(content.find((item) => item.type === 'text')?.text || '')
+    : stripMetadata(content);
 
   return (
-    <div className="flex flex-col bg-accent-500/10 backdrop-blur-sm px-5 p-3.5 w-auto rounded-lg ml-auto">
-      <div className="flex gap-3.5 mb-4">
-        {images.map((item, index) => (
-          <div className="relative flex rounded-lg border border-bolt-elements-borderColor overflow-hidden">
-            <div className="h-16 w-16 bg-transparent outline-none">
-              <img
-                key={index}
-                src={`data:${item.mimeType};base64,${item.data}`}
-                alt={`Image ${index + 1}`}
-                className="h-full w-full rounded-lg"
-                style={{ objectFit: 'fill' }}
-              />
+    <div className="flex gap-3 w-full justify-end items-start pr-2">
+      <div className="flex flex-col max-w-chat">
+        {/* Optional username label */}
+        {profile?.username && (
+          <div className="text-xs text-bolt-elements-textSecondary mb-1 text-right pr-1">{profile.username}</div>
+        )}
+
+        {/* Message bubble */}
+        <div className="bg-bolt-elements-background-depth-2 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-sm border border-bolt-elements-borderColor">
+          {/* Images */}
+          {images.length > 0 && (
+            <div className="flex gap-2 mb-3 flex-wrap">
+              {images.map((item, index) => (
+                <div key={index} className="rounded-lg border border-bolt-elements-borderColor overflow-hidden">
+                  <img
+                    src={`data:${item.mimeType};base64,${item.data}`}
+                    alt={`Image ${index + 1}`}
+                    className="h-16 w-16 object-cover"
+                  />
+                </div>
+              ))}
             </div>
-          </div>
-        ))}
+          )}
+
+          {/* Text content */}
+          {textContent && <Markdown html>{textContent}</Markdown>}
+        </div>
       </div>
-      <Markdown html>{textContent}</Markdown>
+
+      {/* Avatar */}
+      <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-bolt-elements-background-depth-3 ring-2 ring-bolt-elements-borderColor shadow-sm flex-shrink-0 mt-1">
+        {profile?.avatar ? (
+          <img
+            src={profile.avatar}
+            alt={profile?.username || 'User'}
+            className="w-full h-full object-cover"
+            loading="eager"
+            decoding="sync"
+          />
+        ) : (
+          <div className="i-ph:user w-6 h-6 text-bolt-elements-textSecondary" />
+        )}
+      </div>
     </div>
   );
 }
