@@ -12,26 +12,22 @@ This directory contains an enhanced prompt system for Bolt AI that significantly
 ## Features Added
 
 1. **Complete Project Structure Generation**:
-
    - Full directory structure for Python and Java projects
    - All necessary configuration files
    - Test directories and sample tests
    - Comprehensive documentation
 
 2. **Sequential Thinking Approach**:
-
    - Methodical planning before implementation
    - Architecture design before coding
    - Dependency management planning
    - Complete project validation
 
 3. **Language-Specific Best Practices**:
-
    - Python: PEP standards, type hints, proper package structure
    - Java: Maven/Gradle configuration, proper package structure, JavaDoc
 
 4. **Production-Grade Quality**:
-
    - Error handling with custom exceptions
    - Logging system implementation
    - Configuration management
