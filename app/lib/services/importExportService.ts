@@ -1,9 +1,6 @@
 import Cookies from 'js-cookie';
 import { type Message } from 'ai';
-import { createScopedLogger } from '~/utils/logger';
 import { getAllChats, deleteChat } from '~/lib/persistence/chats';
-
-const logger = createScopedLogger('ImportExportService');
 
 interface ExtendedMessage extends Message {
   name?: string;
@@ -46,14 +43,14 @@ export class ImportExportService {
         metadata: chat.metadata || null,
       }));
 
-      logger.info(`Successfully prepared ${sanitizedChats.length} chats for export`);
+      console.log(`Successfully prepared ${sanitizedChats.length} chats for export`);
 
       return {
         chats: sanitizedChats,
         exportDate: new Date().toISOString(),
       };
     } catch (error) {
-      logger.error('Error exporting chats:', error);
+      console.error('Error exporting chats:', error);
       throw new Error(`Failed to export chats: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -175,7 +172,7 @@ export class ImportExportService {
         },
       };
     } catch (error) {
-      logger.error('Error exporting settings:', error);
+      console.error('Error exporting settings:', error);
       throw error;
     }
   }
@@ -298,7 +295,7 @@ export class ImportExportService {
         try {
           localStorage.removeItem(key);
         } catch (err) {
-          logger.error(`Error removing localStorage item ${key}:`, err);
+          console.error(`Error removing localStorage item ${key}:`, err);
         }
       }
     });
@@ -316,14 +313,14 @@ export class ImportExportService {
         try {
           Cookies.remove(key);
         } catch (err) {
-          logger.error(`Error removing cookie ${key}:`, err);
+          console.error(`Error removing cookie ${key}:`, err);
         }
       }
     });
 
     // 3. Clear all data from IndexedDB
     if (!db) {
-      logger.warn('Database not initialized, skipping IndexedDB reset');
+      console.warn('Database not initialized, skipping IndexedDB reset');
     } else {
       // Get all chats and delete them
       const chats = await getAllChats(db);
@@ -338,7 +335,7 @@ export class ImportExportService {
       try {
         localStorage.removeItem(key);
       } catch (err) {
-        logger.error(`Error removing snapshot ${key}:`, err);
+        console.error(`Error removing snapshot ${key}:`, err);
       }
     });
   }
@@ -376,7 +373,7 @@ export class ImportExportService {
           try {
             this._safeSetItem(key, value);
           } catch (err) {
-            logger.error(`Error importing core setting ${key}:`, err);
+            console.error(`Error importing core setting ${key}:`, err);
           }
         }
       });
@@ -389,7 +386,7 @@ export class ImportExportService {
         try {
           this._safeSetItem('provider_settings', data.providers.provider_settings);
         } catch (err) {
-          logger.error('Error importing provider settings:', err);
+          console.error('Error importing provider settings:', err);
         }
       }
 
@@ -400,7 +397,7 @@ export class ImportExportService {
           try {
             this._safeSetCookie(key, data.providers[key]);
           } catch (err) {
-            logger.error(`Error importing provider cookie ${key}:`, err);
+            console.error(`Error importing provider cookie ${key}:`, err);
           }
         }
       });
@@ -413,7 +410,7 @@ export class ImportExportService {
           try {
             this._safeSetItem(key, value);
           } catch (err) {
-            logger.error(`Error importing feature setting ${key}:`, err);
+            console.error(`Error importing feature setting ${key}:`, err);
           }
         }
       });
@@ -426,7 +423,7 @@ export class ImportExportService {
         try {
           this._safeSetItem('bolt_tab_configuration', data.ui.bolt_tab_configuration);
         } catch (err) {
-          logger.error('Error importing tab configuration:', err);
+          console.error('Error importing tab configuration:', err);
         }
       }
 
@@ -434,7 +431,7 @@ export class ImportExportService {
         try {
           this._safeSetItem('promptId', data.ui.promptId);
         } catch (err) {
-          logger.error('Error importing prompt ID:', err);
+          console.error('Error importing prompt ID:', err);
         }
       }
 
@@ -445,7 +442,7 @@ export class ImportExportService {
           try {
             this._safeSetCookie(key, data.ui[key]);
           } catch (err) {
-            logger.error(`Error importing UI cookie ${key}:`, err);
+            console.error(`Error importing UI cookie ${key}:`, err);
           }
         }
       });
@@ -458,7 +455,7 @@ export class ImportExportService {
         try {
           this._safeSetItem('netlify_connection', data.connections.netlify_connection);
         } catch (err) {
-          logger.error('Error importing Netlify connection:', err);
+          console.error('Error importing Netlify connection:', err);
         }
       }
 
@@ -468,7 +465,7 @@ export class ImportExportService {
           try {
             this._safeSetItem(key, value);
           } catch (err) {
-            logger.error(`Error importing GitHub connection ${key}:`, err);
+            console.error(`Error importing GitHub connection ${key}:`, err);
           }
         }
       });
@@ -489,7 +486,7 @@ export class ImportExportService {
           try {
             this._safeSetItem(key, data.debug[key]);
           } catch (err) {
-            logger.error(`Error importing debug setting ${key}:`, err);
+            console.error(`Error importing debug setting ${key}:`, err);
           }
         }
       });
@@ -501,7 +498,7 @@ export class ImportExportService {
           try {
             this._safeSetCookie(key, data.debug[key]);
           } catch (err) {
-            logger.error(`Error importing debug cookie ${key}:`, err);
+            console.error(`Error importing debug cookie ${key}:`, err);
           }
         }
       });
@@ -513,7 +510,7 @@ export class ImportExportService {
         try {
           this._safeSetItem('update_settings', data.updates.update_settings);
         } catch (err) {
-          logger.error('Error importing update settings:', err);
+          console.error('Error importing update settings:', err);
         }
       }
 
@@ -521,7 +518,7 @@ export class ImportExportService {
         try {
           this._safeSetItem('bolt_last_acknowledged_version', data.updates.last_acknowledged_update);
         } catch (err) {
-          logger.error('Error importing last acknowledged update:', err);
+          console.error('Error importing last acknowledged update:', err);
         }
       }
     }
@@ -533,7 +530,7 @@ export class ImportExportService {
           try {
             this._safeSetItem(key, value);
           } catch (err) {
-            logger.error(`Error importing chat snapshot ${key}:`, err);
+            console.error(`Error importing chat snapshot ${key}:`, err);
           }
         }
       });
@@ -577,7 +574,7 @@ export class ImportExportService {
             this._safeSetItem(key, value);
           }
         } catch (err) {
-          logger.error(`Error importing legacy setting ${key}:`, err);
+          console.error(`Error importing legacy setting ${key}:`, err);
         }
       }
     });
@@ -593,7 +590,7 @@ export class ImportExportService {
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : null;
     } catch (err) {
-      logger.error(`Error getting localStorage item ${key}:`, err);
+      console.error(`Error getting localStorage item ${key}:`, err);
       return null;
     }
   }
@@ -619,7 +616,7 @@ export class ImportExportService {
         }
       }
     } catch (err) {
-      logger.error('Error getting all localStorage items:', err);
+      console.error('Error getting all localStorage items:', err);
     }
 
     return result;
@@ -640,7 +637,7 @@ export class ImportExportService {
         const value = localStorage.getItem(key);
         result[key] = value ? JSON.parse(value) : null;
       } catch (err) {
-        logger.error(`Error getting GitHub connection ${key}:`, err);
+        console.error(`Error getting GitHub connection ${key}:`, err);
         result[key] = null;
       }
     });
@@ -662,7 +659,7 @@ export class ImportExportService {
         const value = localStorage.getItem(key);
         result[key] = value ? JSON.parse(value) : null;
       } catch (err) {
-        logger.error(`Error getting chat snapshot ${key}:`, err);
+        console.error(`Error getting chat snapshot ${key}:`, err);
         result[key] = null;
       }
     });
@@ -679,7 +676,7 @@ export class ImportExportService {
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (err) {
-      logger.error(`Error setting localStorage item ${key}:`, err);
+      console.error(`Error setting localStorage item ${key}:`, err);
     }
   }
 
@@ -692,7 +689,7 @@ export class ImportExportService {
     try {
       Cookies.set(key, typeof value === 'string' ? value : JSON.stringify(value), { expires: 365 });
     } catch (err) {
-      logger.error(`Error setting cookie ${key}:`, err);
+      console.error(`Error setting cookie ${key}:`, err);
     }
   }
 }

@@ -1,8 +1,5 @@
 import { atom } from 'nanostores';
-import { createScopedLogger } from '~/utils/logger';
 import type { SupabaseUser, SupabaseStats, SupabaseApiKey, SupabaseCredentials } from '~/types/supabase';
-
-const logger = createScopedLogger('SupabaseStore');
 
 export interface SupabaseProject {
   id: string;
@@ -47,14 +44,14 @@ if (savedCredentials && !initialState.credentials) {
   try {
     initialState.credentials = JSON.parse(savedCredentials);
   } catch (e) {
-    logger.error('Failed to parse saved credentials:', e);
+    console.error('Failed to parse saved credentials:', e);
   }
 }
 
 export const supabaseConnection = atom<SupabaseConnectionState>(initialState);
 
 if (initialState.token && !initialState.stats) {
-  fetchSupabaseStats(initialState.token).catch(logger.error);
+  fetchSupabaseStats(initialState.token).catch(console.error);
 }
 
 export const isConnecting = atom(false);
@@ -140,7 +137,7 @@ export async function fetchSupabaseStats(token: string) {
       stats: data.stats,
     });
   } catch (error) {
-    logger.error('Failed to fetch Supabase stats:', error);
+    console.error('Failed to fetch Supabase stats:', error);
     throw error;
   } finally {
     isFetchingStats.set(false);
@@ -186,7 +183,7 @@ export async function fetchProjectApiKeys(projectId: string, token: string) {
 
     return null;
   } catch (error) {
-    logger.error('Failed to fetch project API keys:', error);
+    console.error('Failed to fetch project API keys:', error);
     throw error;
   } finally {
     isFetchingApiKeys.set(false);

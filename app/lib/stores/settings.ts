@@ -1,5 +1,4 @@
 import { atom, map } from 'nanostores';
-import { createScopedLogger } from '~/utils/logger';
 import { PROVIDER_LIST } from '~/utils/constants';
 import type { IProviderConfig } from '~/types/model';
 import type {
@@ -9,8 +8,6 @@ import type {
   DevTabConfig,
 } from '~/components/@settings/core/types';
 import { DEFAULT_TAB_CONFIG } from '~/components/@settings/core/constants';
-
-const logger = createScopedLogger('SettingsStore');
 import Cookies from 'js-cookie';
 import { toggleTheme } from './theme';
 import { create } from 'zustand';
@@ -93,7 +90,7 @@ const getInitialProviderSettings = (): ProviderSetting => {
           }
         });
       } catch (error) {
-        logger.error('Error parsing saved provider settings:', error);
+        console.error('Error parsing saved provider settings:', error);
       }
     }
   }
@@ -292,12 +289,12 @@ const getInitialTabConfiguration = (): TabWindowConfig => {
       ),
     };
   } catch (error) {
-    logger.warn('Failed to parse tab configuration:', error);
+    console.warn('Failed to parse tab configuration:', error);
     return defaultConfig;
   }
 };
 
-// logger.debug('Initial tab configuration:', getInitialTabConfiguration());
+// console.log('Initial tab configuration:', getInitialTabConfiguration());
 
 export const tabConfigurationStore = map<TabWindowConfig>(getInitialTabConfiguration());
 

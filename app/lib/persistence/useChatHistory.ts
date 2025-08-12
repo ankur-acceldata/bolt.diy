@@ -3,11 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { atom } from 'nanostores';
 import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
-import { createScopedLogger } from '~/utils/logger';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
-
-const logger = createScopedLogger('ChatHistory');
 import { createChatUrl, navigateToChat, navigateToHome } from '~/utils/api';
 import { streamingState } from '~/lib/stores/streaming';
 import {
@@ -103,7 +100,7 @@ export function useChatHistory() {
             }
 
             setArchivedMessages(archivedMessages);
-            logger.debug('startingIdx', startingIdx);
+            console.log('DEBUG: startingIdx', startingIdx);
 
             if (startingIdx > 0) {
               const files = Object.entries(validSnapshot?.files || {})
@@ -118,8 +115,8 @@ export function useChatHistory() {
                   };
                 })
                 .filter((x): x is { content: string; path: string } => !!x); // Type assertion
-              logger.debug('validSnapshot', validSnapshot);
-              logger.debug('files', files);
+              console.log('DEBUG: validSnapshot', validSnapshot);
+              console.log('DEBUG: files', files);
 
               const projectCommands = await detectProjectCommands(files);
 
@@ -195,7 +192,7 @@ ${value.content}
           setIsInitialLoad(false);
         })
         .catch((error) => {
-          logger.error(error);
+          console.error(error);
 
           logStore.logError('Failed to load chat messages or snapshot', error); // Updated error message
           toast.error('Failed to load chat: ' + error.message); // More specific error
@@ -236,9 +233,9 @@ ${value.content}
         // Store the versioned snapshot
         await triggerSnapshot(db, actualChatId, files, finalChangeType, chatIdx);
 
-        logger.info(`Created ${finalChangeType} snapshot for chat ${actualChatId}`);
+        console.log(`Created ${finalChangeType} snapshot for chat ${actualChatId}`);
       } catch (error) {
-        logger.error('Failed to save versioned snapshot:', error);
+        console.error('Failed to save versioned snapshot:', error);
 
         // Fallback to the old snapshot system
         const legacySnapshot: Snapshot = {
@@ -249,9 +246,9 @@ ${value.content}
 
         try {
           await setSnapshot(db, currentChatId, legacySnapshot);
-          logger.info('Fallback to legacy snapshot system successful');
+          console.log('Fallback to legacy snapshot system successful');
         } catch (fallbackError) {
-          logger.error('Failed to save fallback snapshot:', fallbackError);
+          console.error('Failed to save fallback snapshot:', fallbackError);
           toast.error('Failed to save chat snapshot.');
         }
       }
@@ -269,7 +266,7 @@ ${value.content}
       return;
     }
 
-    logger.debug('validSnapshot', validSnapshot);
+    console.log('DEBUG: validSnapshot', validSnapshot);
 
     Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
       if (key.startsWith(container.workdir)) {
@@ -311,7 +308,7 @@ ${value.content}
         chatMetadata.set(metadata);
       } catch (error) {
         toast.error('Failed to update chat metadata');
-        logger.error(error);
+        console.error(error);
       }
     },
     storeMessageHistory: async (messages: Message[]) => {
@@ -366,10 +363,10 @@ ${value.content}
 
           if (!hasSnapshots) {
             await createInitialSnapshot(db, actualChatId, lastMessage.id, 'Initial chat state');
-            logger.info(`Created initial empty snapshot for new chat ${actualChatId}`);
+            console.log(`Created initial empty snapshot for new chat ${actualChatId}`);
           }
         } catch (error) {
-          logger.error('Failed to create initial snapshot for new chat:', error);
+          console.error('Failed to create initial snapshot for new chat:', error);
         }
       }
 
@@ -404,7 +401,7 @@ ${value.content}
       }
 
       if (!finalChatId) {
-        logger.error('Cannot save messages, chat ID is not set.');
+        console.error('Cannot save messages, chat ID is not set.');
         toast.error('Failed to save chat messages: Chat ID missing.');
 
         return;
@@ -443,17 +440,17 @@ ${value.content}
               `chat-${actualChatId}-initial`,
               'Duplicated chat initial state',
             );
-            logger.info(`Created initial empty snapshot for duplicated chat ${actualChatId}`);
+            console.log(`Created initial empty snapshot for duplicated chat ${actualChatId}`);
           }
         } catch (error) {
-          logger.error('Failed to create initial snapshot for duplicated chat:', error);
+          console.error('Failed to create initial snapshot for duplicated chat:', error);
         }
 
         navigateToChat(newId);
         toast.success('Chat duplicated successfully');
       } catch (error) {
         toast.error('Failed to duplicate chat');
-        logger.error(error);
+        console.log(error);
       }
     },
     importChat: async (description: string, messages: Message[], metadata?: IChatMetadata) => {
@@ -464,7 +461,7 @@ ${value.content}
       try {
         // Set user upload state to indicate import is in progress
         workbenchStore.setUserUploadInProgress(true);
-        logger.debug('importChat - Starting user upload, setting upload state to true');
+        console.log('DEBUG: importChat - Starting user upload, setting upload state to true');
 
         const newId = await createChatFromMessages(db, description, messages, metadata);
 
@@ -481,13 +478,13 @@ ${value.content}
         setTimeout(() => {
           if (workbenchStore.isUserUploadInProgress()) {
             workbenchStore.setUserUploadInProgress(false);
-            logger.debug('importChat - Timeout fallback: clearing upload state');
+            console.log('DEBUG: importChat - Timeout fallback: clearing upload state');
           }
         }, 30000); // 30 second timeout
       } catch (error) {
         // Clear upload state on error
         workbenchStore.setUserUploadInProgress(false);
-        logger.debug('importChat - Error during import, clearing upload state');
+        console.log('DEBUG: importChat - Error during import, clearing upload state');
 
         if (error instanceof Error) {
           toast.error('Failed to import chat: ' + error.message);

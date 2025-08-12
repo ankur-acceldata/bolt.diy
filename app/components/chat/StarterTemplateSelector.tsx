@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { classNames } from '~/utils/classNames';
-import { createScopedLogger } from '~/utils/logger';
 import sparkTemplates from '~/data/templates.json';
-
-const logger = createScopedLogger('StarterTemplateSelector');
 
 interface SparkTemplate {
   id: string;
@@ -64,7 +61,7 @@ export const StarterTemplateSelector: React.FC<SparkTemplateSelectorProps> = ({
               )}
               onClick={() => {
                 if (!isDisabled) {
-                  logger.debug('Template clicked:', template);
+                  console.log('Template clicked:', template);
                   onTemplateSelect(template);
                 }
               }}

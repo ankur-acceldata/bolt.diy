@@ -189,7 +189,7 @@ export function debugProjectId(context: string): void {
   const projectId = getProjectId(chatId);
   const allProjectIds = getAllProjectIds();
 
-  logger.debug(`[ProjectID Debug - ${context}]`, {
+  console.log(`[ProjectID Debug - ${context}]`, {
     currentChatId: chatId,
     currentProjectId: projectId,
     allProjectIds,

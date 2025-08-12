@@ -22,10 +22,8 @@ import { getCurrentChatId, resolveActualChatId } from '~/utils/fileLocks';
 import { triggerSnapshot } from '~/lib/persistence/snapshotUtils';
 import { db } from '~/lib/persistence/useChatHistory';
 import { streamingState } from '~/lib/stores/streaming';
-import { createScopedLogger } from '~/utils/logger';
 
 const { saveAs } = fileSaver;
-const logger = createScopedLogger('WorkbenchStore');
 
 export interface ArtifactState {
   id: string;
@@ -279,8 +277,8 @@ export class WorkbenchStore {
 
         // Only create snapshot if there are actually files to snapshot OR if user upload is in progress
         if (Object.keys(files).length > 0 || this.isUserUploadInProgress()) {
-          logger.debug(
-            'saveFile - triggering user-edit snapshot with',
+          console.log(
+            'DEBUG: saveFile - triggering user-edit snapshot with',
             Object.keys(files).length,
             'files',
             this.isUserUploadInProgress() ? '(user upload in progress)' : '',
@@ -290,10 +288,10 @@ export class WorkbenchStore {
 
           triggerSnapshot(db, actualChatId, files, 'user-edit', lastMessageId);
         } else {
-          logger.debug('saveFile - Skipping user-edit snapshot creation - no files to snapshot');
+          console.log('DEBUG: saveFile - Skipping user-edit snapshot creation - no files to snapshot');
         }
       } catch (error) {
-        logger.error('Failed to trigger snapshot after file save:', error);
+        console.error('Failed to trigger snapshot after file save:', error);
       }
     }
   }
@@ -456,8 +454,8 @@ export class WorkbenchStore {
 
             // Only create snapshot if there are actually files to snapshot OR if user upload is in progress
             if (Object.keys(files).length > 0 || this.isUserUploadInProgress()) {
-              logger.debug(
-                'createFile - triggering upload snapshot with',
+              console.log(
+                'DEBUG: createFile - triggering upload snapshot with',
                 Object.keys(files).length,
                 'files',
                 this.isUserUploadInProgress() ? '(user upload in progress)' : '',
@@ -468,17 +466,17 @@ export class WorkbenchStore {
               // Use 'upload' type for file creation - this represents user uploads
               triggerSnapshot(db, actualChatId, files, 'upload', lastMessageId);
             } else {
-              logger.debug('createFile - Skipping upload snapshot creation - no files to snapshot');
+              console.log('DEBUG: createFile - Skipping upload snapshot creation - no files to snapshot');
             }
           } catch (error) {
-            logger.error('Failed to trigger snapshot after file creation:', error);
+            console.error('Failed to trigger snapshot after file creation:', error);
           }
         }
       }
 
       return success;
     } catch (error) {
-      logger.error('Failed to create file:', error);
+      console.error('Failed to create file:', error);
       throw error;
     }
   }
@@ -487,7 +485,7 @@ export class WorkbenchStore {
     try {
       return await this.#filesStore.createFolder(folderPath);
     } catch (error) {
-      logger.error('Failed to create folder:', error);
+      console.error('Failed to create folder:', error);
       throw error;
     }
   }
@@ -524,7 +522,7 @@ export class WorkbenchStore {
 
       return success;
     } catch (error) {
-      logger.error('Failed to delete file:', error);
+      console.error('Failed to delete file:', error);
       throw error;
     }
   }
@@ -567,7 +565,7 @@ export class WorkbenchStore {
 
       return success;
     } catch (error) {
-      logger.error('Failed to delete folder:', error);
+      console.error('Failed to delete folder:', error);
       throw error;
     }
   }
@@ -669,14 +667,14 @@ export class WorkbenchStore {
           isFromAI = triggeringMessage.role === 'assistant';
 
           if (isFromAI) {
-            logger.info('This action was triggered by an AI message');
+            console.log('This action was triggered by an AI message');
 
             // Your logic here
           }
         }
       }
     } catch (error) {
-      logger.error('Failed to check message origin:', error);
+      console.error('Failed to check message origin:', error);
     }
 
     const artifact = this.#getArtifact(messageId);
@@ -715,16 +713,16 @@ export class WorkbenchStore {
         await artifact.runner.runAction(data, isStreaming);
       }
 
-      logger.debug('_runAction - Before updateFile, current files:', Object.keys(this.files.get()).length);
+      console.log('DEBUG: _runAction - Before updateFile, current files:', Object.keys(this.files.get()).length);
       this.#editorStore.updateFile(fullPath, data.action.content);
 
       if (!isStreaming && data.action.content) {
-        logger.debug('_runAction - Before saveFile, current files:', Object.keys(this.files.get()).length);
+        console.log('DEBUG: _runAction - Before saveFile, current files:', Object.keys(this.files.get()).length);
 
         // Skip individual snapshots for batch imports - we'll create one after all files are processed
         await this.saveFile(fullPath, true);
 
-        logger.debug('_runAction - After saveFile, current files:', Object.keys(this.files.get()).length);
+        console.log('DEBUG: _runAction - After saveFile, current files:', Object.keys(this.files.get()).length);
 
         // Check if this is the last file action in the batch by seeing if we have pending file actions
         const actions = artifact.runner.actions.get();
@@ -732,7 +730,7 @@ export class WorkbenchStore {
           (action) => action.type === 'file' && !action.executed,
         );
 
-        logger.debug('_runAction - Pending file actions:', pendingFileActions.length);
+        console.log('DEBUG: _runAction - Pending file actions:', pendingFileActions.length);
 
         /*
          * If no more pending file actions, trigger snapshot for the complete import
@@ -755,18 +753,18 @@ export class WorkbenchStore {
 
               // Only create snapshot if there are actually files to snapshot OR if user upload is in progress
               if (Object.keys(files).length > 0 || this.isUserUploadInProgress()) {
-                logger.debug(
-                  '_runAction - Triggering user batch import snapshot with',
+                console.log(
+                  'DEBUG: _runAction - Triggering user batch import snapshot with',
                   Object.keys(files).length,
                   'files',
                   this.isUserUploadInProgress() ? '(user upload in progress)' : '',
                 );
                 triggerSnapshot(db, actualChatId, files, isFromAI ? 'ai-response' : 'upload', data.messageId);
               } else {
-                logger.debug('_runAction - Skipping batch snapshot creation - no files to snapshot');
+                console.log('DEBUG: _runAction - Skipping batch snapshot creation - no files to snapshot');
               }
             } catch (error) {
-              logger.error('Failed to trigger snapshot after batch import:', error);
+              console.error('Failed to trigger snapshot after batch import:', error);
             }
           }
         }
@@ -876,7 +874,7 @@ export class WorkbenchStore {
       }
 
       // Log the isPrivate flag to verify it's being properly passed
-      logger.info(`pushToGitHub called with isPrivate=${isPrivate}`);
+      console.log(`pushToGitHub called with isPrivate=${isPrivate}`);
 
       // Initialize Octokit with the auth token
       const octokit = new Octokit({ auth: githubToken });
@@ -888,11 +886,11 @@ export class WorkbenchStore {
       try {
         const resp = await octokit.repos.get({ owner, repo: repoName });
         repo = resp.data;
-        logger.info('Repository already exists, using existing repo');
+        console.log('Repository already exists, using existing repo');
 
         // Check if we need to update visibility of existing repo
         if (repo.private !== isPrivate) {
-          logger.info(
+          console.log(
             `Updating repository visibility from ${repo.private ? 'private' : 'public'} to ${isPrivate ? 'private' : 'public'}`,
           );
 
@@ -904,15 +902,15 @@ export class WorkbenchStore {
               private: isPrivate,
             });
 
-            logger.info('Repository visibility updated successfully');
+            console.log('Repository visibility updated successfully');
             repo = updatedRepo;
             visibilityJustChanged = true;
 
             // Add a delay after changing visibility to allow GitHub to fully process the change
-            logger.info('Waiting for visibility change to propagate...');
+            console.log('Waiting for visibility change to propagate...');
             await new Promise((resolve) => setTimeout(resolve, 3000)); // 3 second delay
           } catch (visibilityError) {
-            logger.error('Failed to update repository visibility:', visibilityError);
+            console.error('Failed to update repository visibility:', visibilityError);
 
             // Continue with push even if visibility update fails
           }
@@ -920,7 +918,7 @@ export class WorkbenchStore {
       } catch (error) {
         if (error instanceof Error && 'status' in error && error.status === 404) {
           // Repository doesn't exist, so create a new one
-          logger.info(`Creating new repository with private=${isPrivate}`);
+          console.log(`Creating new repository with private=${isPrivate}`);
 
           // Create new repository with specified privacy setting
           const createRepoOptions = {
@@ -929,18 +927,18 @@ export class WorkbenchStore {
             auto_init: true,
           };
 
-          logger.debug('Create repo options:', createRepoOptions);
+          console.log('Create repo options:', createRepoOptions);
 
           const { data: newRepo } = await octokit.repos.createForAuthenticatedUser(createRepoOptions);
 
-          logger.info('Repository created:', newRepo.html_url, 'Private:', newRepo.private);
+          console.log('Repository created:', newRepo.html_url, 'Private:', newRepo.private);
           repo = newRepo;
 
           // Add a small delay after creating a repository to allow GitHub to fully initialize it
-          logger.info('Waiting for repository to initialize...');
+          console.log('Waiting for repository to initialize...');
           await new Promise((resolve) => setTimeout(resolve, 2000)); // 2 second delay
         } else {
-          logger.error('Cannot create repo:', error);
+          console.error('Cannot create repo:', error);
           throw error; // Some other error occurred
         }
       }
@@ -957,7 +955,7 @@ export class WorkbenchStore {
         const maxAttempts = 3;
 
         try {
-          logger.info(`Pushing files to repository (attempt ${attempt}/${maxAttempts})...`);
+          console.log(`Pushing files to repository (attempt ${attempt}/${maxAttempts})...`);
 
           // Create blobs for each file
           const blobs = await Promise.all(
@@ -1024,16 +1022,16 @@ export class WorkbenchStore {
             sha: newCommit.sha,
           });
 
-          logger.info('Files successfully pushed to repository');
+          console.log('Files successfully pushed to repository');
 
           return repo.html_url;
         } catch (error) {
-          logger.error(`Error during push attempt ${attempt}:`, error);
+          console.error(`Error during push attempt ${attempt}:`, error);
 
           // If we've just changed visibility and this is not our last attempt, wait and retry
           if ((visibilityJustChanged || attempt === 1) && attempt < maxAttempts) {
             const delayMs = attempt * 2000; // Increasing delay with each attempt
-            logger.info(`Waiting ${delayMs}ms before retry...`);
+            console.log(`Waiting ${delayMs}ms before retry...`);
             await new Promise((resolve) => setTimeout(resolve, delayMs));
 
             return pushFilesToRepo(attempt + 1);
@@ -1049,7 +1047,7 @@ export class WorkbenchStore {
       // Return the repository URL
       return repoUrl;
     } catch (error) {
-      logger.error('Error pushing to GitHub:', error);
+      console.error('Error pushing to GitHub:', error);
       throw error; // Rethrow the error for further handling
     }
   }
@@ -1058,21 +1056,21 @@ export class WorkbenchStore {
     const artifact = this.#getArtifact(messageId);
 
     if (!artifact) {
-      logger.error('Artifact not found');
+      console.error('Artifact not found');
       return;
     }
 
     try {
       await artifact.runner.executeUserAction(actionId);
     } catch (error) {
-      logger.error('Failed to execute action:', error);
+      console.error('Failed to execute action:', error);
     }
   }
 
   // Methods to track user upload state
   setUserUploadInProgress(inProgress: boolean) {
     this.#userUploadInProgress = inProgress;
-    logger.debug('User upload state changed:', inProgress);
+    console.log('DEBUG: User upload state changed:', inProgress);
   }
 
   isUserUploadInProgress(): boolean {
