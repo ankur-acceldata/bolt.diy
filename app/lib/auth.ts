@@ -50,7 +50,7 @@ export class AuthUtils {
     const accessToken = AuthUtils.getAccessTokenFromCookie();
 
     return {
-      authorization: accessToken ? `Bearer ${accessToken}` : '',
+      Authorization: accessToken ? `Bearer ${accessToken}` : '',
       'ad-tenant': 'acceldata',
     };
   }

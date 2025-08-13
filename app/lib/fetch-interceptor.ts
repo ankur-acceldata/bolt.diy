@@ -76,10 +76,22 @@ function applyAuthHeaders(url: string, init?: RequestInit): RequestInit {
   const authHeaders = AuthUtils.getAuthHeaders();
   const headers = new Headers(init?.headers);
 
+  // Normalize any lower-case authorization in incoming init to proper case
+  if (!headers.has('Authorization') && headers.has('authorization')) {
+    const value = headers.get('authorization');
+
+    if (value) {
+      headers.set('Authorization', value);
+      headers.delete('authorization');
+    }
+  }
+
   // Only add auth headers if they have values and don't already exist
   Object.entries(authHeaders).forEach(([key, value]) => {
-    if (value && !headers.has(key)) {
-      headers.set(key, value);
+    const effectiveKey = key.toLowerCase() === 'authorization' ? 'Authorization' : key;
+
+    if (value && !headers.has(effectiveKey)) {
+      headers.set(effectiveKey, value);
     }
   });
 

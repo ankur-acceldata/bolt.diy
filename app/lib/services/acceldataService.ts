@@ -155,6 +155,12 @@ export class AcceldataService {
         ...this._getStandardHeaders(),
       };
 
+      // Normalize header casing: prefer 'Authorization'
+      if (!('Authorization' in headers) && 'authorization' in headers) {
+        (headers as Record<string, string>).Authorization = (headers as Record<string, string>).authorization;
+        delete (headers as Record<string, string>).authorization;
+      }
+
       logger.debug('Request headers being forwarded:', Object.keys(forwardedHeaders));
       logger.debug('Final headers count:', Object.keys(headers).length);
 
@@ -348,6 +354,12 @@ export class AcceldataService {
       ...additionalHeaders,
       ...this._getStandardHeaders(),
     };
+
+    // Normalize header casing: prefer 'Authorization'
+    if (!('Authorization' in headers) && 'authorization' in headers) {
+      (headers as Record<string, string>).Authorization = (headers as Record<string, string>).authorization;
+      delete (headers as Record<string, string>).authorization;
+    }
 
     logger.debug('Stream request headers being forwarded:', Object.keys(forwardedHeaders));
     logger.debug('Final stream headers count:', Object.keys(headers).length);
