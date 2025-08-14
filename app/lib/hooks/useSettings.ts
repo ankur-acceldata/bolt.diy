@@ -110,7 +110,7 @@ export function useSettings(): UseSettingsReturn {
       theme: storedSettings?.theme || 'system',
       language: storedSettings?.language || 'en',
       notifications: storedSettings?.notifications ?? true,
-      eventLogs: storedSettings?.eventLogs ?? true,
+      eventLogs: storedSettings?.eventLogs ?? false,
       timezone: storedSettings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       tabConfiguration,
     };
