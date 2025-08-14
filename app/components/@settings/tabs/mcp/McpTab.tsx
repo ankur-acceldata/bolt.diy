@@ -4,27 +4,10 @@ import type { MCPConfig } from '~/lib/services/mcpService';
 import { toast } from 'react-toastify';
 import { useMCPStore } from '~/lib/stores/mcp';
 import McpServerList from '~/components/@settings/tabs/mcp/McpServerList';
+import XdpConfigSection from '~/components/@settings/tabs/mcp/XdpConfigSection';
+import { generateExampleConfig } from '~/lib/xdp-mcp-config';
 
-const EXAMPLE_MCP_CONFIG: MCPConfig = {
-  mcpServers: {
-    everything: {
-      type: 'stdio',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-everything'],
-    },
-    deepwiki: {
-      type: 'streamable-http',
-      url: 'https://mcp.deepwiki.com/mcp',
-    },
-    'local-sse': {
-      type: 'sse',
-      url: 'http://localhost:8000/sse',
-      headers: {
-        Authorization: 'Bearer mytoken123',
-      },
-    },
-  },
-};
+const EXAMPLE_MCP_CONFIG: MCPConfig = generateExampleConfig();
 
 export default function McpTab() {
   const settings = useMCPStore((state) => state.settings);
@@ -98,6 +81,29 @@ export default function McpTab() {
     setError(null);
   };
 
+  const handleXdpConfigGenerated = (config: MCPConfig) => {
+    setMCPConfigText(JSON.stringify(config, null, 2));
+    setError(null);
+  };
+
+  const handleXdpConfigMerge = (xdpConfig: MCPConfig) => {
+    try {
+      const existingConfig = parsedConfig || { mcpServers: {} };
+      const mergedConfig = {
+        mcpServers: {
+          ...existingConfig.mcpServers,
+          ...xdpConfig.mcpServers,
+        },
+      };
+      setMCPConfigText(JSON.stringify(mergedConfig, null, 2));
+      setError(null);
+      toast.success('XDP configuration merged successfully');
+    } catch (e) {
+      setError(`Failed to merge configuration: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error('Failed to merge XDP configuration');
+    }
+  };
+
   const checkServerAvailability = async () => {
     if (serverEntries.length === 0) {
       return;
@@ -154,8 +160,15 @@ export default function McpTab() {
         />
       </section>
 
+      <section aria-labelledby="xdp-quick-setup">
+        <h2 className="text-base font-medium text-bolt-elements-textPrimary mb-3">Quick Setup</h2>
+        <div className="bg-bolt-elements-background-depth-1 rounded-lg p-4 border border-bolt-elements-borderColor">
+          <XdpConfigSection onConfigGenerated={handleXdpConfigGenerated} onConfigMerge={handleXdpConfigMerge} />
+        </div>
+      </section>
+
       <section aria-labelledby="config-section-heading">
-        <h2 className="text-base font-medium text-bolt-elements-textPrimary mb-3">Configuration</h2>
+        <h2 className="text-base font-medium text-bolt-elements-textPrimary mb-3">Manual Configuration</h2>
 
         <div className="space-y-4">
           <div>

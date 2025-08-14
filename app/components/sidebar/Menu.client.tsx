@@ -7,6 +7,7 @@ import { Dialog, DialogButton, DialogDescription, DialogRoot, DialogTitle } from
 import { useStore } from '@nanostores/react';
 import { menuStore } from '~/lib/stores/menu';
 import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
+import { ControlPanel } from '~/components/@settings/core/ControlPanel';
 
 import { Button } from '~/components/ui/Button';
 import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
@@ -82,6 +83,7 @@ export const Menu = () => {
 
   // Remove: const [open, setOpen] = useState(false);
   const [dialogContent, setDialogContent] = useState<DialogContent>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // const profile = useStore(profileStore);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -295,6 +297,26 @@ export const Menu = () => {
     }
   }, [open, loadEntries]);
 
+  // Add keyboard shortcut for settings
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Cmd+, or Ctrl+, to open settings
+      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+        event.preventDefault();
+        setSettingsOpen(true);
+      }
+
+      // Escape to close settings
+      if (event.key === 'Escape' && settingsOpen) {
+        setSettingsOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [settingsOpen]);
+
   // Exit selection mode when sidebar is closed
   useEffect(() => {
     if (!open && selectionMode) {
@@ -346,6 +368,7 @@ export const Menu = () => {
 
   return (
     <>
+      <ControlPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <motion.div
         ref={menuRef}
         initial="open"
@@ -557,7 +580,15 @@ export const Menu = () => {
               </Dialog>
             </DialogRoot>
           </div>
-          <div className="flex items-center justify-end border-t border-bolt-elements-borderColor px-4 py-3">
+          <div className="flex items-center justify-between border-t border-bolt-elements-borderColor px-4 py-3">
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive transition-colors"
+              title="Settings (Cmd+,)"
+            >
+              <span className="i-ph:gear h-4 w-4" />
+              <span>Settings</span>
+            </button>
             <ThemeSwitch />
           </div>
         </div>
