@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { MCPConfig, MCPServerTools } from '~/lib/services/mcpService';
+import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
 
 const MCP_SETTINGS_KEY = 'mcp_settings';
 const isBrowser = typeof window !== 'undefined';
@@ -9,11 +10,17 @@ type MCPSettings = {
   maxLLMSteps: number;
 };
 
+// Create default MCP configuration with XDP server
+const defaultXDPConfig = createXDPMCPConfig({
+  accessKey: DEFAULT_XDP_CONFIG.accessKey,
+  secretKey: DEFAULT_XDP_CONFIG.secretKey,
+  baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
+  serverPath: DEFAULT_XDP_CONFIG.serverPath,
+});
+
 const defaultSettings = {
   maxLLMSteps: 5,
-  mcpConfig: {
-    mcpServers: {},
-  },
+  mcpConfig: defaultXDPConfig,
 } satisfies MCPSettings;
 
 type Store = {
@@ -56,7 +63,11 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
           }));
         }
       } else {
+        // Initialize with default XDP configuration
         localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(defaultSettings));
+
+        const serverTools = await updateServerConfig(defaultSettings.mcpConfig);
+        set(() => ({ settings: defaultSettings, serverTools }));
       }
     }
 

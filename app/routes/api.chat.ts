@@ -13,6 +13,7 @@ import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
+import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -89,6 +90,23 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
   try {
     const mcpService = MCPService.getInstance();
+
+    // Ensure MCP has a default XDP server configured on first use
+    if (!Object.keys((mcpService as any)._mcpToolsPerServer || {}).length) {
+      try {
+        await mcpService.updateConfig(
+          createXDPMCPConfig({
+            accessKey: DEFAULT_XDP_CONFIG.accessKey,
+            secretKey: DEFAULT_XDP_CONFIG.secretKey,
+            baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
+            serverPath: DEFAULT_XDP_CONFIG.serverPath,
+          }),
+        );
+      } catch (e) {
+        logger.warn('Failed to initialize default XDP MCP config', e as any);
+      }
+    }
+
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
 
@@ -102,6 +120,26 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let messageSliceId = 0;
 
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+
+        // Inject a generalized tool-use policy so the LLM reliably calls MCP tools first
+        const toolPolicy = `
+          You have access to Model Context Protocol (MCP) tools. For any request that depends on external systems (data, services, metadata):
+          - Always use tools first to discover real values; do not invent parameters, env vars, or placeholders.
+          - Iteratively call tools to fill missing inputs (e.g., connection/dataplane, catalog, schema/namespace, resource name, columns/fields).
+          - Prefer "list", "describe", and safe "get"/"query" calls to validate assumptions before generating outputs.
+          - After you obtain concrete values from tools, produce the final answer or code using those values.
+          - If a value cannot be determined, call another relevant tool or ask a single, concise follow-up question; do not fabricate.
+          - Never ask the user to provide secrets or environment variables; infer/resolve via tools.
+
+          When Trino tools are available, a typical sequence is:
+          - trino_list_catalogs → trino_list_tables (with catalog, optional schema) → trino_describe_table → optional trino_execute_query to validate.
+
+          When XDP tools are available, use them to discover platforms/resources first (e.g., xdp_list_dataplanes, xdp_list_datastores) before Trino operations.
+
+          Finally, summarize tool findings, then generate the requested artifact (e.g., PySpark app) using the discovered, real parameters.
+          `;
+
+        processedMessages.unshift({ role: 'system', content: toolPolicy } as any);
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -212,7 +250,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const options: StreamingOptions = {
           supabaseConnection: supabase,
           toolChoice: 'auto',
-          tools: mcpService.toolsWithoutExecute,
+
+          // Provide executable tools so the LLM can auto-run tools during reasoning
+          tools: mcpService.tools,
           maxSteps: maxLLMSteps,
           onStepFinish: ({ toolCalls }) => {
             // add tool call annotations for frontend processing

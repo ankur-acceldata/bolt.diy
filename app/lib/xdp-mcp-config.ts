@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { MCPConfig } from './services/mcpService';
 
 /**
@@ -16,7 +17,9 @@ export interface XDPMCPConfig {
  */
 export const DEFAULT_XDP_CONFIG = {
   baseUrl: 'https://dev-api.xdp.acceldata.dev',
-  serverPath: '/Users/ankuragarwal/src/xdp-mcp-server/dist/index.js',
+  serverPath: '/Users/inderjotsingh/acceldata/xdp-mcp-server/dist/index.js',
+  accessKey: 'L96MY61S1Z53U0W',
+  secretKey: 'PG7IQJR3YU73IWLWEH2N81A5TGR65Y',
 };
 
 /**
@@ -37,7 +40,8 @@ export function createXDPMCPConfig({
         env: {
           XDP_ACCESS_KEY: accessKey,
           XDP_SECRET_KEY: secretKey,
-          XDP_BASE_URL: baseUrl,
+
+          // XDP_BASE_URL: baseUrl,
         },
       },
     },

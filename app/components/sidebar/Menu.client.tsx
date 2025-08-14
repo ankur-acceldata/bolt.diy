@@ -581,14 +581,14 @@ export const Menu = () => {
             </DialogRoot>
           </div>
           <div className="flex items-center justify-between border-t border-bolt-elements-borderColor px-4 py-3">
-            <button
+            {/* <button
               onClick={() => setSettingsOpen(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive transition-colors"
               title="Settings (Cmd+,)"
             >
               <span className="i-ph:gear h-4 w-4" />
               <span>Settings</span>
-            </button>
+            </button> */}
             <ThemeSwitch />
           </div>
         </div>

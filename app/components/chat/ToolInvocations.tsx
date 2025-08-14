@@ -1,6 +1,6 @@
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useMemo, useState, useEffect } from 'react';
+import { memo, useMemo, useState, useEffect, useRef } from 'react';
 import { createHighlighter, type BundledLanguage, type BundledTheme, type HighlighterGeneric } from 'shiki';
 import { classNames } from '~/utils/classNames';
 import {
@@ -279,6 +279,7 @@ interface ToolCallsListProps {
 
 const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResult, theme }: ToolCallsListProps) => {
   const [expanded, setExpanded] = useState<{ [id: string]: boolean }>({});
+  const autoApprovedRef = useRef<Set<string>>(new Set());
 
   // OS detection for shortcut display
   const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -299,6 +300,23 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
     });
     setExpanded(expandedState);
   }, [toolInvocations]);
+
+  // Auto-approve any pending tool calls on load/update
+  useEffect(() => {
+    toolInvocations.forEach((inv) => {
+      if (inv.toolInvocation.state === 'call') {
+        const id = inv.toolInvocation.toolCallId;
+
+        if (!autoApprovedRef.current.has(id)) {
+          autoApprovedRef.current.add(id);
+          addToolResult({
+            toolCallId: id,
+            result: TOOL_EXECUTION_APPROVAL.APPROVE,
+          });
+        }
+      }
+    });
+  }, [toolInvocations, addToolResult]);
 
   // Keyboard shortcut logic
   useEffect(() => {
@@ -405,7 +423,7 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
                       </div>
                     </div>
                   )}
-                  <div className="flex justify-end gap-2 pt-2.5">
+                  {/* <div className="flex justify-end gap-2 pt-2.5">
                     <button
                       className={classNames(
                         'px-2.5 py-1.5 rounded-lg text-xs',
@@ -439,7 +457,7 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
                     >
                       Run tool <span className="opacity-70 text-xs ml-1">{isMac ? '⌘↵' : 'Ctrl+Enter'}</span>
                     </button>
-                  </div>
+                  </div> */}
                 </div>
               </div>
             </motion.li>
