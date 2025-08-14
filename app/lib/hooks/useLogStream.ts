@@ -8,7 +8,7 @@ const logger = createScopedLogger('useLogStream');
 
 export function useLogStream({
   dataplaneId,
-  podName,
+  runId,
   enabled = false,
   tailLines = LOG_STREAM_CONSTANTS.DEFAULT_TAIL_LINES,
   initialDelay = LOG_STREAM_CONSTANTS.DEFAULT_INITIAL_DELAY,
@@ -41,8 +41,8 @@ export function useLogStream({
   }, []);
 
   const connectToStream = useCallback(() => {
-    if (!dataplaneId || !podName) {
-      const errorMsg = 'Missing dataplane ID or pod name';
+    if (!dataplaneId || !runId) {
+      const errorMsg = 'Missing dataplane ID or run id';
       logger.error(errorMsg);
       setError(errorMsg);
 
@@ -63,7 +63,9 @@ export function useLogStream({
       const baseUrl = `${window.location.protocol}//${window.location.host}`;
       const basePath = getBasePath();
       const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-      const url = `${baseUrl}${cleanBasePath}/api/log-stream?dataplaneId=${encodeURIComponent(dataplaneId)}&podName=${encodeURIComponent(podName)}&tailLines=${tailLines}`;
+      const url = `${baseUrl}${cleanBasePath}/api/log-stream?dataplaneId=${encodeURIComponent(
+        dataplaneId,
+      )}&runId=${encodeURIComponent(runId)}&tailLines=${tailLines}`;
 
       logger.info('🔗 Connecting to log stream:', url);
 
@@ -143,7 +145,7 @@ export function useLogStream({
           setLogs((prevLogs) => [
             ...prevLogs,
             {
-              log: `✅ Log stream completed - Pod "${podName}" finished execution`,
+              log: `✅ Log stream completed - Run "${runId}" finished`,
               timestamp: new Date().toISOString(),
             },
           ]);
@@ -184,11 +186,11 @@ export function useLogStream({
         },
       ]);
     }
-  }, [dataplaneId, podName, tailLines, disconnect]);
+  }, [dataplaneId, runId, tailLines, disconnect]);
 
   const connect = useCallback(() => {
-    if (!dataplaneId || !podName) {
-      const errorMsg = 'Missing dataplane ID or pod name';
+    if (!dataplaneId || !runId) {
+      const errorMsg = 'Missing dataplane ID or run id';
       logger.error(errorMsg);
       setError(errorMsg);
 
@@ -207,7 +209,7 @@ export function useLogStream({
     setLogs((prevLogs) => [
       ...prevLogs,
       {
-        log: `🏗️ Initializing log stream for ${dataplaneId}/${podName}...`,
+        log: `🏗️ Initializing log stream for ${dataplaneId}/run:${runId}...`,
         timestamp: new Date().toISOString(),
       },
     ]);
@@ -218,7 +220,7 @@ export function useLogStream({
     initializationTimeoutRef.current = setTimeout(() => {
       connectToStream();
     }, initialDelay);
-  }, [dataplaneId, podName, initialDelay, disconnect, connectToStream]);
+  }, [dataplaneId, runId, initialDelay, disconnect, connectToStream]);
 
   const clearLogs = useCallback(() => {
     logger.info('Clearing logs');
@@ -226,9 +228,9 @@ export function useLogStream({
   }, []);
 
   useEffect(() => {
-    logger.info('useLogStream effect triggered:', { enabled, dataplaneId, podName });
+    logger.info('useLogStream effect triggered:', { enabled, dataplaneId, runId });
 
-    if (enabled && dataplaneId && podName) {
+    if (enabled && dataplaneId && runId) {
       connect();
     } else {
       disconnect();
@@ -237,7 +239,7 @@ export function useLogStream({
     return () => {
       disconnect();
     };
-  }, [enabled, dataplaneId, podName, connect, disconnect]);
+  }, [enabled, dataplaneId, runId, connect, disconnect]);
 
   return {
     logs,

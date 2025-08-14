@@ -1,4 +1,5 @@
 import { json, type ActionFunctionArgs } from '@remix-run/cloudflare';
+import type { AdhocRunRequestBody } from '~/types/jobConfig';
 import { createScopedLogger } from '~/utils/logger';
 import { AcceldataService } from '~/lib/services/acceldataService';
 
@@ -11,13 +12,13 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     // Parse request body for configuration
-    let adhocRunConfig;
+    let adhocRunConfig: AdhocRunRequestBody | undefined;
 
     try {
       const bodyText = await request.text();
 
       if (bodyText && bodyText.trim()) {
-        adhocRunConfig = JSON.parse(bodyText);
+        adhocRunConfig = JSON.parse(bodyText) as AdhocRunRequestBody;
         logger.info('Using provided adhoc run configuration:', adhocRunConfig);
       }
     } catch (parseError) {

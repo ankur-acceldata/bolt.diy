@@ -6,7 +6,7 @@ import type { LogViewerProps } from '~/types/logStream';
 
 export function LogViewer({
   dataplaneId,
-  podName,
+  runId,
   isOpen,
   onClose,
   onSendMessage,
@@ -24,18 +24,18 @@ export function LogViewer({
 
   const { logs, isConnected, isConnecting, isInitializing, error, connect, clearLogs } = useLogStream({
     dataplaneId,
-    podName,
+    runId,
     enabled: isOpen,
     tailLines: 100,
   });
 
   // Clear logs when configuration changes (new job) or when opening for the first time
   useEffect(() => {
-    if (isOpen && dataplaneId && podName) {
-      console.log('LogViewer: Clearing logs for new job configuration:', { dataplaneId, podName });
+    if (isOpen && dataplaneId && runId) {
+      console.log('LogViewer: Clearing logs for new job configuration:', { dataplaneId, runId });
       clearLogs();
     }
-  }, [isOpen, dataplaneId, podName, clearLogs]);
+  }, [isOpen, dataplaneId, runId, clearLogs]);
 
   const scrollToBottom = useCallback(() => {
     if (logsEndRef.current) {
@@ -61,7 +61,7 @@ export function LogViewer({
         .join('\n');
 
       // Format the message properly with model/provider prefix for AI to understand
-      const logContent = `I need help analyzing these execution logs from my application:\n\n**Pod:** ${podName}\n**Dataplane:** ${dataplaneId}\n\n\`\`\`\n${logMessages}\n\`\`\`\n\nPlease help me understand what's happening and suggest any fixes if there are errors.`;
+      const logContent = `I need help analyzing these execution logs from my application:\n\n**Run ID:** ${runId}\n**Dataplane:** ${dataplaneId}\n\n\`\`\`\n${logMessages}\n\`\`\`\n\nPlease help me understand what's happening and suggest any fixes if there are errors.`;
 
       // Include model and provider context if available
       const messageContent =
@@ -83,7 +83,7 @@ export function LogViewer({
         onSetChatInput(messageContent);
       }
     },
-    [onSendMessage, onSetChatInput, logs, podName, dataplaneId, autoSendEnabled, model, provider],
+    [onSendMessage, onSetChatInput, logs, runId, dataplaneId, autoSendEnabled, model, provider],
   );
 
   // Auto-send logic
@@ -150,9 +150,9 @@ export function LogViewer({
         <div className="flex items-center justify-between px-4 py-2 bg-bolt-elements-background-depth-2 border-b border-bolt-elements-borderColor">
           <div className="flex items-center gap-2">
             <div className="text-sm font-medium text-bolt-elements-textPrimary">Log Viewer</div>
-            {dataplaneId && podName && (
+            {dataplaneId && runId && (
               <div className="text-xs text-bolt-elements-textSecondary">
-                {dataplaneId}/{podName}
+                {dataplaneId}/run:{runId}
               </div>
             )}
             <div className="relative">

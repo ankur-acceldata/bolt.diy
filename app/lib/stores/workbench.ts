@@ -59,7 +59,7 @@ export class WorkbenchStore {
   deployAlert: WritableAtom<DeployAlert | undefined> =
     import.meta.hot?.data.deployAlert ?? atom<DeployAlert | undefined>(undefined);
   showLogViewer: WritableAtom<boolean> = import.meta.hot?.data.showLogViewer ?? atom(false);
-  logViewerConfig: WritableAtom<{ dataplaneId?: string; podName?: string } | null> =
+  logViewerConfig: WritableAtom<{ dataplaneId?: string; runId?: string } | null> =
     import.meta.hot?.data.logViewerConfig ?? atom(null);
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
@@ -149,7 +149,7 @@ export class WorkbenchStore {
     this.deployAlert.set(undefined);
   }
 
-  toggleLogViewer(value?: boolean, config?: { dataplaneId?: string; podName?: string } | null) {
+  toggleLogViewer(value?: boolean, config?: { dataplaneId?: string; runId?: string } | null) {
     this.showLogViewer.set(value !== undefined ? value : !this.showLogViewer.get());
 
     if (config !== undefined) {

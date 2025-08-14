@@ -7,14 +7,14 @@ const logger = createScopedLogger('api.log-stream');
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const dataplaneId = url.searchParams.get('dataplaneId');
-  const podName = url.searchParams.get('podName');
+  const runId = url.searchParams.get('runId');
   const tailLines = url.searchParams.get('tailLines') || '50';
 
-  logger.info(`Log stream request - dataplaneId: ${dataplaneId}, podName: ${podName}, tailLines: ${tailLines}`);
+  logger.info(`Log stream request - dataplaneId: ${dataplaneId}, runId: ${runId}, tailLines: ${tailLines}`);
 
-  if (!dataplaneId || !podName) {
+  if (!dataplaneId || !runId) {
     logger.error('Missing required parameters');
-    return new Response('Missing required parameters: dataplaneId and podName', { status: 400 });
+    return new Response('Missing required parameters: dataplaneId and runId', { status: 400 });
   }
 
   // Check if service is configured
@@ -24,7 +24,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   try {
-    logger.info(`Streaming logs for dataplaneId: ${dataplaneId}, podName: ${podName}`);
+    logger.info(`Streaming logs for dataplaneId: ${dataplaneId}, runId: ${runId}`);
 
     // Create a readable stream for SSE
     const stream = new ReadableStream({
@@ -41,7 +41,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
             // Use centralized AcceldataService for consistent header handling
             const response = await AcceldataService.callStream(
-              `/xdp-cp-service/api/dataplane/${dataplaneId}/logs/${podName}/sse?tailLines=${tailLines}`,
+              `/xdp-cp-service/api/job/run/logs/${runId}/sse?tailLines=${tailLines}`,
               {
                 requestHeaders: request.headers,
                 request,
@@ -63,7 +63,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
               // Handle specific error cases
               if (response.status === 502) {
-                const errorMsg = `Pod logs unavailable (502 Bad Gateway). The pod "${podName}" may have completed execution, been terminated, or not yet started. This is common for short-lived jobs.`;
+                const errorMsg = `Run logs unavailable (502 Bad Gateway). The run "${runId}" may have completed execution, been terminated, or not yet started. This is common for short-lived jobs.`;
 
                 if (retryCount < maxRetries) {
                   logger.info(`Retrying connection in ${retryDelay}ms... (${retryCount + 1}/${maxRetries})`);
@@ -77,7 +77,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
               if (response.status === 404) {
                 throw new Error(
-                  `Pod "${podName}" not found in dataplane "${dataplaneId}". Please verify the pod name and dataplane ID.`,
+                  `Run "${runId}" not found in dataplane "${dataplaneId}". Please verify the run id and dataplane ID.`,
                 );
               }
 
@@ -131,7 +131,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
           // Send initial connection message
           const connectMsg = `data: ${JSON.stringify({
-            log: `Connected to log stream for ${dataplaneId}/${podName}`,
+            log: `Connected to log stream for run:${runId}`,
             timestamp: new Date().toISOString(),
           })}\n\n`;
           controller.enqueue(new TextEncoder().encode(connectMsg));
@@ -146,7 +146,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
             // Send keep-alive every 30 seconds if no data received
             if (now - lastDataReceived > 30000) {
               const keepAliveMsg = `data: ${JSON.stringify({
-                log: `Keep-alive: Monitoring logs for ${dataplaneId}/${podName}`,
+                log: `Keep-alive: Monitoring logs for run:${runId}`,
                 timestamp: new Date().toISOString(),
                 keepAlive: true,
               })}\n\n`;

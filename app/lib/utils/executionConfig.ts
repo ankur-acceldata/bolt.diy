@@ -1,7 +1,7 @@
 import { extractShellCommands } from './shellCommands';
 
 export interface TemplateConfig {
-  adhocRunType: string;
+  jobType: string;
   type: string;
   stages: string[];
   fallbackStages: string[];
@@ -17,7 +17,7 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
     switch (templateId) {
       case 'java-application':
         return {
-          adhocRunType: 'SPARK_JAVA_ADHOC_RUN',
+          jobType: 'SPARK_CONNECT_JAVA_ADHOC',
           type: 'Java',
           fallbackStages: [
             'mvn clean compile',
@@ -29,7 +29,7 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
       case 'python-application':
       default:
         return {
-          adhocRunType: 'SPARK_PYTHON_ADHOC_RUN',
+          jobType: 'SPARK_CONNECT_PYTHON_ADHOC',
           type: 'Python',
           fallbackStages: [
             'pip install -r requirements.txt --no-cache-dir',
@@ -47,7 +47,7 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
   const stages = extractedCommands.length > 0 ? extractedCommands : defaults.fallbackStages;
 
   return {
-    adhocRunType: defaults.adhocRunType,
+    jobType: defaults.jobType,
     type: defaults.type,
     stages,
     fallbackStages: defaults.fallbackStages,
