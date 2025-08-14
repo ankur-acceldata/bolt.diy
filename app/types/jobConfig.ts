@@ -1,6 +1,11 @@
 /**
  * Job Configuration types from XDP
  */
+export enum JobType {
+  SPARK_CONNECT_PYTHON_ADHOC = 'SPARK_CONNECT_PYTHON_ADHOC',
+  SPARK_CONNECT_JAVA_ADHOC = 'SPARK_CONNECT_JAVA_ADHOC',
+}
+
 export interface JobConfig {
   baseImage: string;
   dataplaneName: string;
@@ -33,6 +38,77 @@ export interface JobConfig {
     };
     sparkConfig: Record<string, any>;
   };
+}
+
+export interface AdhocRunRequestBody {
+  dataplaneId: number | string;
+  jobType: JobType | string;
+  description?: string;
+  name?: string;
+  executionConfig: {
+    jobType: JobType | string;
+    image: string;
+    imagePullSecrets: string[];
+    imagePullPolicy: string;
+    codeSource: {
+      type: 'MINIO' | string;
+      config: {
+        url: string;
+        additionalParams?: unknown;
+      };
+    };
+    stages: string[];
+    type: 'Python' | 'Java' | string;
+    mode: 'cluster' | string;
+    driver: {
+      cores: number;
+      memory: string;
+      memoryOverhead: string;
+    };
+    executor: {
+      instances?: number;
+      cores: number;
+      memory: string;
+      memoryOverhead: string;
+    };
+    dynamicAllocation: {
+      enabled: boolean;
+      initialExecutors: number;
+      minExecutors: number;
+      maxExecutors: number;
+      shuffleTrackingTimeout?: number;
+    };
+    depends: {
+      dataStores: Array<{ dataStoreId?: number }>;
+    };
+    sparkConf: Record<string, any>;
+    timeToLiveSeconds?: number | null;
+  };
+}
+
+export interface ExecuteAdhocRunResponse {
+  errorCode: number;
+  success: boolean;
+  message: string;
+  detailedMessage?: string;
+  data?: {
+    id: number;
+    jobId?: number;
+    jobRunRequestId?: string;
+    dataplaneName?: string;
+    status?: string;
+    executionConfig?: AdhocRunRequestBody['executionConfig'];
+    log?: string | null;
+    logLink?: string | null;
+    jobLink?: string | null;
+    retryCount?: number;
+    triggerType?: string;
+    startTime?: string;
+    endTime?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+  };
+  meta?: unknown;
 }
 
 export interface WorkspaceProps {

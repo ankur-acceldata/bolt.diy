@@ -227,7 +227,7 @@ export class AcceldataService {
 
     // Generate curl command for debugging
     try {
-      const endpoint = getAcceldataApiUrl('/xdp-cp-service/api/adhoc-runs', request);
+      const endpoint = getAcceldataApiUrl('/xdp-cp-service/api/job/adhoc-runs', request);
       const headers = {
         ...(request?.headers ? this._headersToRecord(request.headers) : {}),
         ...this._getStandardHeaders(),
@@ -245,7 +245,7 @@ export class AcceldataService {
       logger.warn('Failed to generate curl command:', curlError);
     }
 
-    const result = await this.call('/xdp-cp-service/api/adhoc-runs', {
+    const result = await this.call('/xdp-cp-service/api/job/adhoc-runs', {
       method: 'POST',
       body: config,
       requestHeaders: request?.headers,
@@ -301,11 +301,8 @@ export class AcceldataService {
    * Get log stream endpoint URL (for SSE)
    * This doesn't make the actual call since it's for streaming
    */
-  static getLogStreamUrl(dataplaneId: string, podName: string, tailLines: string = '50', request?: Request): string {
-    return getAcceldataApiUrl(
-      `/xdp-cp-service/api/dataplane/${dataplaneId}/logs/${podName}/sse?tailLines=${tailLines}`,
-      request,
-    );
+  static getLogStreamUrl(dataplaneId: string, runId: string, tailLines: string = '50', request?: Request): string {
+    return getAcceldataApiUrl(`/xdp-cp-service/api/job/run/logs/${runId}/sse?tailLines=${tailLines}`, request);
   }
 
   /**

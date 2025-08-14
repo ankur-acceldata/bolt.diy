@@ -6,6 +6,7 @@ import { createScopedLogger } from '~/utils/logger';
 import { extractShellCommands } from '~/lib/utils/shellCommands';
 import { getEditedJobConfigFromXdp, getJobConfigFromXdp } from '~/lib/services/jobConfigService';
 import { getExecutionConfig } from '~/lib/utils/executionConfig';
+import type { AdhocRunRequestBody, ExecuteAdhocRunResponse, JobType } from '~/types/jobConfig';
 
 const logger = createScopedLogger('useAdhocRun');
 
@@ -72,23 +73,29 @@ export function useAdhocRun() {
           stagesSource: 'local (preserving extracted commands)',
         });
 
-        const { adhocRunType = '', codeSourceUrl = '', type = '' } = localConfig || {};
+        const { jobType = '', codeSourceUrl = '', type = '' } = localConfig || {};
 
         logger.info('Adhoc Run Execution Config:', {
           selectedTemplate,
           projectId,
           extractedCommands: extractShellCommands(),
           mergedConfig: {
-            template: { adhocRunType, type }, // Local template config
+            template: { jobType, type }, // Local template config
             job: { baseImage, dataplaneName, dataplaneId, stages, executionConfig }, // Job config from XDP
             codeSource: `${codeSourceUrl}/${projectId}`, // Combined
           },
         });
 
-        const payload = {
-          config: {
-            adhocRunType: adhocRunType || '',
-            image: baseImage || '',
+        const payload: AdhocRunRequestBody = {
+          dataplaneId: Number(dataplaneId) || 0,
+          jobType: (jobType as JobType) || 'SPARK_CONNECT_PYTHON_ADHOC',
+          description: '',
+          name: '',
+          executionConfig: {
+            jobType: (jobType as JobType) || 'SPARK_CONNECT_PYTHON_ADHOC',
+            image: baseImage || 'docker.io/apache/spark:4.0.0',
+            imagePullSecrets: (executionConfig as any)?.imagePullSecrets || ['registry-secret'],
+            imagePullPolicy: (executionConfig as any)?.imagePullPolicy || 'IfNotPresent',
             codeSource: {
               type: 'MINIO',
               config: {
@@ -96,15 +103,25 @@ export function useAdhocRun() {
               },
             },
             stages: stages || [],
-            type: type || '',
+            type: type || 'Python',
             mode: 'cluster',
+            driver: (executionConfig as any)?.driver || { cores: 1, memory: '1g', memoryOverhead: '256m' },
+            executor: (executionConfig as any)?.executor || {
+              instances: 1,
+              cores: 1,
+              memory: '512m',
+              memoryOverhead: '256m',
+            },
+            dynamicAllocation: (executionConfig as any)?.dynamicAllocation || {
+              enabled: true,
+              initialExecutors: 1,
+              minExecutors: 1,
+              maxExecutors: 2,
+            },
             depends: depends || { dataStores: [] },
-
-            // Spread executionConfig properties directly into config instead of nesting
-            ...(executionConfig || {}),
+            sparkConf: (executionConfig as any)?.sparkConfig || {},
+            timeToLiveSeconds: (executionConfig as any)?.timeToLiveSeconds ?? null,
           },
-          dataplaneName: dataplaneName || '',
-          dataplaneId: dataplaneId || '',
         };
 
         logger.info('Final payload being sent:', JSON.stringify(payload, null, 2));
@@ -117,38 +134,28 @@ export function useAdhocRun() {
           body: JSON.stringify(payload),
         });
 
-        const result = (await response.json()) as {
-          error?: string;
-          message?: string;
-          data?: any;
-          success?: boolean;
-        };
+        const outer = (await response.json()) as { success?: boolean; status?: number; data?: ExecuteAdhocRunResponse };
+        const backend = outer?.data as ExecuteAdhocRunResponse | undefined;
 
-        if (!response.ok) {
-          throw new Error(result.error || `Execution failed: ${response.status}`);
+        if (!response.ok || !backend?.success) {
+          throw new Error(backend?.message || `Execution failed: ${response.status}`);
         }
 
-        toast.success(result.message || 'Adhoc run executed successfully!');
+        toast.success(backend.message || 'Adhoc run executed successfully!');
 
-        /*
-         * Extract information for log streaming
-         * Expected format from example: wss://demo.xdp.acceldata.tech/xdp-cp-service/api/dataplane/135/logs/adhoc-run-spar-1753369519227/stream?tailLines=100
-         */
-        if (result.success && result.data) {
-          // Extract pod name from the API response
-          const podName = result.data?.data?.podName || result.data?.name || result.data?.id;
+        // Extract runId from backend response shape: backend.data.id
+        const runId = backend.data?.id;
 
-          // Use dataplaneId from job config (already extracted from getJobConfigFromXdp)
-          logger.info('Using dataplaneId from job config and podName from response:', {
+        if (runId !== undefined && runId !== null) {
+          logger.info('Using runId from response for log streaming:', {
             dataplaneId,
-            podName,
-            responseData: result.data,
+            runId,
+            responseData: backend.data,
           });
 
-          // Open log viewer with extracted parameters and clear any previous logs
           workbenchStore.toggleLogViewer(true, {
             dataplaneId: String(dataplaneId),
-            podName: String(podName),
+            runId: String(runId),
           });
         }
       } catch (error) {

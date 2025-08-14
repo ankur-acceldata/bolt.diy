@@ -22,8 +22,8 @@ export interface LogStreamOptions {
   /** The dataplane ID to stream logs from */
   dataplaneId?: string;
 
-  /** The specific pod name to monitor */
-  podName?: string;
+  /** The specific run id to monitor */
+  runId?: string;
 
   /** Whether the log stream should be active */
   enabled?: boolean;
@@ -71,8 +71,8 @@ export interface LogViewerProps {
   /** The dataplane ID to stream logs from */
   dataplaneId?: string;
 
-  /** The specific pod name to monitor */
-  podName?: string;
+  /** The specific run id to monitor */
+  runId?: string;
 
   /** Whether the log viewer is open/visible */
   isOpen: boolean;

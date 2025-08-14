@@ -196,7 +196,7 @@ export const EditorPanel = memo(
             <Panel defaultSize={30} minSize={15} maxSize={60}>
               <LogViewer
                 dataplaneId={logViewerConfig?.dataplaneId}
-                podName={logViewerConfig?.podName}
+                runId={logViewerConfig?.runId}
                 isOpen={showLogViewer}
                 onClose={() => workbenchStore.toggleLogViewer(false)}
                 onSendMessage={onSendMessage}
