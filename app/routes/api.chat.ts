@@ -91,20 +91,21 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   try {
     const mcpService = MCPService.getInstance();
 
-    // Ensure MCP has a default XDP server configured on first use
-    if (!Object.keys((mcpService as any)._mcpToolsPerServer || {}).length) {
-      try {
-        await mcpService.updateConfig(
-          createXDPMCPConfig({
-            accessKey: DEFAULT_XDP_CONFIG.accessKey,
-            secretKey: DEFAULT_XDP_CONFIG.secretKey,
-            baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
-            serverPath: DEFAULT_XDP_CONFIG.serverPath,
-          }),
-        );
-      } catch (e) {
-        logger.warn('Failed to initialize default XDP MCP config', e as any);
-      }
+    /*
+     * Always ensure MCP has the correct XDP server configuration
+     * Force update to use HTTP transport for container deployment
+     */
+    try {
+      const xdpConfig = createXDPMCPConfig({
+        accessKey: DEFAULT_XDP_CONFIG.accessKey,
+        secretKey: DEFAULT_XDP_CONFIG.secretKey,
+        baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
+        serverPath: DEFAULT_XDP_CONFIG.serverPath,
+      });
+      logger.debug('Forcing XDP MCP config update with:', xdpConfig);
+      await mcpService.updateConfig(xdpConfig);
+    } catch (e) {
+      logger.warn('Failed to update XDP MCP config', e as any);
     }
 
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
