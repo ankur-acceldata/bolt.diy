@@ -63,28 +63,29 @@ export function useAdhocRun() {
         } = jobConfig || {};
 
         // Use our local stages instead of XDP stages to preserve extracted commands
-        const stages = localConfig.stages;
+        const stages = xdpStages;
 
         logger.info('Job Config from XDP:', JSON.stringify(jobConfig, null, 2));
-        logger.info('Stages comparison:', {
-          xdpStages,
-          localStages: localConfig.stages,
-          usingStages: stages,
-          stagesSource: 'local (preserving extracted commands)',
-        });
 
         const { jobType = '', codeSourceUrl = '', type = '' } = localConfig || {};
 
-        logger.info('Adhoc Run Execution Config:', {
-          selectedTemplate,
-          projectId,
-          extractedCommands: extractShellCommands(),
-          mergedConfig: {
-            template: { jobType, type }, // Local template config
-            job: { baseImage, dataplaneName, dataplaneId, stages, executionConfig }, // Job config from XDP
-            codeSource: `${codeSourceUrl}/${projectId}`, // Combined
-          },
-        });
+        logger.info(
+          'Adhoc Run Execution Config:',
+          JSON.stringify(
+            {
+              selectedTemplate,
+              projectId,
+              extractedCommands: extractShellCommands(),
+              mergedConfig: {
+                template: { jobType, type }, // Local template config
+                job: { baseImage, dataplaneName, dataplaneId, stages, executionConfig }, // Job config from XDP
+                codeSource: `${codeSourceUrl}/${projectId}`, // Combined
+              },
+            },
+            null,
+            2,
+          ),
+        );
 
         const payload: AdhocRunRequestBody = {
           dataplaneId: Number(dataplaneId) || 0,

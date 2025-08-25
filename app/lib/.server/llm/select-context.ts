@@ -36,10 +36,11 @@ export async function selectContext(props: {
     } else if (message.role == 'assistant') {
       let content = message.content;
 
-      content = simplifyBoltActions(content);
-
-      content = content.replace(/<div class=\\"__boltThought__\\">.*?<\/div>/s, '');
-      content = content.replace(/<think>.*?<\/think>/s, '');
+      if (typeof content === 'string') {
+        content = simplifyBoltActions(content);
+        content = content.replace(/<div class=\\"__boltThought__\\">.*?<\/div>/s, '');
+        content = content.replace(/<think>.*?<\/think>/s, '');
+      }
 
       return { ...message, content };
     }
@@ -76,7 +77,7 @@ export async function selectContext(props: {
     }
   }
 
-  const { codeContext } = extractCurrentContext(processedMessages);
+  const { codeContext } = extractCurrentContext(processedMessages as any);
 
   let filePaths = getFilePaths(files || {});
   filePaths = filePaths.filter((x) => {
@@ -107,10 +108,36 @@ export async function selectContext(props: {
 
   const summaryText = `Here is the summary of the chat till now: ${summary}`;
 
-  const extractTextContent = (message: Message) =>
-    Array.isArray(message.content)
-      ? (message.content.find((item) => item.type === 'text')?.text as string) || ''
-      : message.content;
+  const extractTextContent = (message: any) => {
+    if (typeof message.content === 'string') {
+      return message.content;
+    }
+
+    if (Array.isArray(message.content)) {
+      const textItem = message.content.find((item: any) => item.type === 'text');
+
+      if (textItem && textItem.text) {
+        // Handle nested text arrays
+        if (Array.isArray(textItem.text)) {
+          return textItem.text
+            .map((t: any) =>
+              typeof t === 'string'
+                ? t
+                : t && typeof t === 'object' && t.type === 'text'
+                  ? typeof t.text === 'string'
+                    ? t.text
+                    : ''
+                  : '',
+            )
+            .join(' ');
+        }
+
+        return typeof textItem.text === 'string' ? textItem.text : '';
+      }
+    }
+
+    return '';
+  };
 
   const lastUserMessage = processedMessages.filter((x) => x.role == 'user').pop();
 
@@ -155,7 +182,7 @@ export async function selectContext(props: {
     prompt: `
         ${summaryText}
 
-        Users Question: ${extractTextContent(lastUserMessage)}
+        Users Question: ${extractTextContent(lastUserMessage as any)}
 
         update the context buffer with the files that are relevant to the task from the list of files above.
 

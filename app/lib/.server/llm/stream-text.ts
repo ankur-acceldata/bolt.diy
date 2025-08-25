@@ -27,7 +27,14 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 
 const logger = createScopedLogger('stream-text');
 
-function sanitizeText(text: string): string {
+function sanitizeText(text: string): string;
+function sanitizeText(text: any[]): any[];
+function sanitizeText(text: string | any[]): string | any[] {
+  // If text is not a string, return it as-is (it might be an array of content parts)
+  if (typeof text !== 'string') {
+    return text;
+  }
+
   let sanitized = text.replace(/<div class=\\"__boltThought__\\">.*?<\/div>/s, '');
   sanitized = sanitized.replace(/<think>.*?<\/think>/s, '');
   sanitized = sanitized.replace(/<boltAction type="file" filePath="package-lock\.json">[\s\S]*?<\/boltAction>/g, '');
@@ -78,15 +85,17 @@ export async function streamText(props: {
       const { model, provider, content } = extractPropertiesFromMessage(message);
       currentModel = model;
       currentProvider = provider;
-      newMessage.content = sanitizeText(content);
+      newMessage.content = typeof content === 'string' ? sanitizeText(content) : (content as any);
     } else if (message.role == 'assistant') {
-      newMessage.content = sanitizeText(message.content);
+      newMessage.content = typeof message.content === 'string' ? sanitizeText(message.content) : message.content;
     }
 
     // Sanitize all text parts in parts array, if present
     if (Array.isArray(message.parts)) {
       newMessage.parts = message.parts.map((part) =>
-        part.type === 'text' ? { ...part, text: sanitizeText(part.text) } : part,
+        part.type === 'text' && typeof part.text === 'string'
+          ? { ...part, text: sanitizeText(part.text) as string }
+          : part,
       );
     }
 
@@ -218,6 +227,211 @@ export async function streamText(props: {
 
   // console.log(systemPrompt, processedMessages);
 
+  // Deep sanitization function to handle deeply nested structures
+  function deepSanitizeContent(content: any): any {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      return content.map((item: any) => {
+        if (typeof item === 'string') {
+          return item;
+        }
+
+        if (item && typeof item === 'object') {
+          if (item.type === 'text') {
+            // Handle deeply nested text structures
+            let text = item.text;
+
+            // Recursively flatten nested text structures
+            while (Array.isArray(text)) {
+              text = text
+                .map((t: any) => {
+                  if (typeof t === 'string') {
+                    return t;
+                  }
+
+                  if (t && typeof t === 'object' && t.type === 'text') {
+                    return typeof t.text === 'string' ? t.text : deepSanitizeContent(t.text);
+                  }
+
+                  return '';
+                })
+                .join(' ');
+            }
+
+            return {
+              type: 'text',
+              text: typeof text === 'string' ? text : String(text || ''),
+            };
+          }
+
+          // Handle other content types (images, files, etc.)
+          return {
+            ...item,
+
+            // Recursively sanitize nested objects
+            ...(item.content ? { content: deepSanitizeContent(item.content) } : {}),
+          };
+        }
+
+        return item;
+      });
+    }
+
+    if (content && typeof content === 'object') {
+      // Handle object-type content
+      const sanitized: any = { ...content };
+
+      if (content.text !== undefined) {
+        sanitized.text = deepSanitizeContent(content.text);
+      }
+
+      if (content.content !== undefined) {
+        sanitized.content = deepSanitizeContent(content.content);
+      }
+
+      return sanitized;
+    }
+
+    return content;
+  }
+
+  // Sanitize messages to ensure proper structure for convertToCoreMessages
+  const sanitizedMessages = processedMessages.map((message) => {
+    const sanitizedMessage = { ...message };
+
+    // Deep sanitization of content
+    sanitizedMessage.content = deepSanitizeContent(sanitizedMessage.content);
+
+    return sanitizedMessage;
+  });
+
+  logger.debug(
+    'Processed messages structure before convertToCoreMessages:',
+    JSON.stringify(sanitizedMessages, null, 2),
+  );
+
+  // Ultra-aggressive fallback: force ALL messages to simple string format
+  const finalMessages = sanitizedMessages.map((message) => {
+    const finalMessage = { ...message };
+
+    // Recursive function to extract ALL text from any structure
+    function extractAllText(content: any): string {
+      if (typeof content === 'string') {
+        return content;
+      }
+
+      if (typeof content === 'number' || typeof content === 'boolean') {
+        return String(content);
+      }
+
+      if (Array.isArray(content)) {
+        return content.map(extractAllText).filter(Boolean).join(' ');
+      }
+
+      if (content && typeof content === 'object') {
+        // Handle specific object types
+        if (content.type === 'text') {
+          return extractAllText(content.text || '');
+        }
+
+        // Extract from common properties
+        const textValues = [];
+
+        if (content.text) {
+          textValues.push(extractAllText(content.text));
+        }
+
+        if (content.content) {
+          textValues.push(extractAllText(content.content));
+        }
+
+        if (content.message) {
+          textValues.push(extractAllText(content.message));
+        }
+
+        if (content.value) {
+          textValues.push(extractAllText(content.value));
+        }
+
+        // If no common properties found, try to extract from all string values
+        if (textValues.length === 0) {
+          for (const [key, value] of Object.entries(content)) {
+            if (typeof value === 'string' && value.length > 0) {
+              textValues.push(value);
+            } else if (value !== null && value !== undefined) {
+              const extracted = extractAllText(value);
+
+              if (extracted.length > 0) {
+                textValues.push(extracted);
+              }
+            }
+          }
+        }
+
+        return textValues.filter(Boolean).join(' ');
+      }
+
+      return '';
+    }
+
+    // Force convert to string using aggressive text extraction
+    finalMessage.content = extractAllText(finalMessage.content) || 'Empty message';
+
+    // Final safety check - ensure it's absolutely a string
+    if (typeof finalMessage.content !== 'string') {
+      finalMessage.content = JSON.stringify(finalMessage.content) || 'Malformed message';
+    }
+
+    // Remove any other non-standard properties that might cause issues
+    const cleanMessage = {
+      role: finalMessage.role,
+      content: finalMessage.content,
+    };
+
+    // Only add id if it exists and is a string
+    if ('id' in finalMessage && finalMessage.id && typeof finalMessage.id === 'string') {
+      (cleanMessage as any).id = finalMessage.id;
+    }
+
+    return cleanMessage;
+  });
+
+  logger.debug(
+    'Final messages structure:',
+    JSON.stringify(
+      finalMessages.map((m) => ({
+        role: m.role,
+        contentType: typeof m.content,
+        contentLength: String(m.content).length,
+      })),
+      null,
+      2,
+    ),
+  );
+
+  // Emergency fallback: try convertToCoreMessages with extensive error handling
+  let coreMessages;
+
+  try {
+    coreMessages = convertToCoreMessages(finalMessages as any);
+    logger.debug('Successfully converted messages to core format');
+  } catch (error) {
+    logger.error('convertToCoreMessages failed, applying emergency fallback:', error);
+
+    // Ultimate fallback: create the simplest possible message structure
+    coreMessages = finalMessages.map((message) => ({
+      role: (message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : 'user') as
+        | 'user'
+        | 'assistant',
+      content: typeof message.content === 'string' ? message.content : 'Message content could not be processed',
+    }));
+
+    logger.info('Applied emergency message fallback, proceeding with simplified messages');
+  }
+
   return await _streamText({
     model: provider.getModelInstance({
       model: modelDetails.name,
@@ -227,7 +441,7 @@ export async function streamText(props: {
     }),
     system: chatMode === 'build' ? systemPrompt : discussPrompt(),
     maxTokens: dynamicMaxTokens,
-    messages: convertToCoreMessages(processedMessages as any),
+    messages: coreMessages,
     ...options,
   });
 }

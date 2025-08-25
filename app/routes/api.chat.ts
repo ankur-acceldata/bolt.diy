@@ -111,7 +111,27 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       logger.warn('Failed to update XDP MCP config', e as any);
     }
 
-    const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
+    const totalMessageContent = messages.reduce((acc, message) => {
+      const messageContent = message.content as string | any[];
+      const content =
+        typeof messageContent === 'string'
+          ? messageContent
+          : Array.isArray(messageContent)
+            ? messageContent
+                .map((item: any) =>
+                  typeof item === 'string'
+                    ? item
+                    : item && typeof item === 'object' && item.type === 'text'
+                      ? typeof item.text === 'string'
+                        ? item.text
+                        : ''
+                      : '',
+                )
+                .join(' ')
+            : '';
+
+      return acc + content;
+    }, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
 
     let lastChunk: string | undefined = undefined;
