@@ -1,0 +1,152 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: xdp-mcp-server-build
+  namespace: default
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: builder
+        image: node:18-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "🔧 Building XDP MCP Server..."
+          
+          # Install git and typescript
+          apk add --no-cache git
+          npm install -g typescript
+          
+          # Create app directory
+          mkdir -p /shared/app
+          cd /shared/app
+          
+          # Clone or copy source code (for demo, we'll create the essential files)
+          cat > package.json << 'EOF'
+          {
+            "name": "xdp-mcp-server",
+            "version": "1.0.0",
+            "type": "module",
+            "main": "dist/index.js",
+            "scripts": {
+              "start": "node dist/index.js",
+              "build": "tsc"
+            },
+            "dependencies": {
+              "@modelcontextprotocol/sdk": "^1.0.0",
+              "axios": "^1.6.0",
+              "zod": "^3.22.0"
+            },
+            "devDependencies": {
+              "@types/node": "^20.0.0",
+              "typescript": "^5.0.0"
+            }
+          }
+          EOF
+          
+          cat > tsconfig.json << 'EOF'
+          {
+            "compilerOptions": {
+              "target": "ES2022",
+              "module": "ESNext",
+              "moduleResolution": "node",
+              "outDir": "./dist",
+              "rootDir": "./src",
+              "strict": true,
+              "esModuleInterop": true,
+              "skipLibCheck": true,
+              "forceConsistentCasingInFileNames": true,
+              "allowSyntheticDefaultImports": true
+            },
+            "include": ["src/**/*"],
+            "exclude": ["node_modules", "dist"]
+          }
+          EOF
+          
+          # Create minimal source structure (placeholder)
+          mkdir -p src/services src/types
+          
+          # Create a simple MCP server placeholder
+          cat > src/index.ts << 'EOF'
+          #!/usr/bin/env node
+          
+          import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+          import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+          
+          console.error('🚀 XDP MCP Server starting...');
+          
+          const server = new Server(
+            {
+              name: 'xdp-mcp-server',
+              version: '1.0.0',
+            },
+            {
+              capabilities: {
+                tools: {},
+              },
+            }
+          );
+          
+          // Basic health check tool
+          server.setRequestHandler('tools/list', async () => {
+            return {
+              tools: [
+                {
+                  name: 'health_check',
+                  description: 'Basic health check for XDP MCP Server',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {}
+                  }
+                }
+              ]
+            };
+          });
+          
+          server.setRequestHandler('tools/call', async (request) => {
+            const { name } = request.params;
+            
+            if (name === 'health_check') {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'XDP MCP Server is healthy and running!'
+                  }
+                ]
+              };
+            }
+            
+            throw new Error(`Unknown tool: ${name}`);
+          });
+          
+          async function main() {
+            const transport = new StdioServerTransport();
+            await server.connect(transport);
+            console.error('✅ XDP MCP Server ready for connections');
+          }
+          
+          main().catch((error) => {
+            console.error('💥 Server failed to start:', error);
+            process.exit(1);
+          });
+          EOF
+          
+          echo "📦 Installing dependencies..."
+          npm install
+          
+          echo "🔨 Building TypeScript..."
+          npm run build
+          
+          echo "✅ Build completed successfully!"
+          ls -la dist/
+        volumeMounts:
+        - name: shared-data
+          mountPath: /shared
+      volumes:
+      - name: shared-data
+        emptyDir: {}

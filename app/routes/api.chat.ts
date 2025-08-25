@@ -14,6 +14,7 @@ import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
 import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
+import { getProjectId } from '~/utils/fileLocks';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -50,6 +51,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     designScheme,
     maxLLMSteps,
     selectedTemplate,
+    chatId,
   } = await request.json<{
     messages: Messages;
     files: any;
@@ -70,6 +72,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       };
     };
     maxLLMSteps: number;
+    chatId?: string;
   }>();
 
   const cookieHeader = request.headers.get('Cookie');
@@ -122,6 +125,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
 
+        // Generate a session ID for execution tracking if not provided
+        const sessionId = chatId || generateId();
+
+        // Get current project context
+        const currentProjectId = getProjectId();
+
         // Inject a generalized tool-use policy so the LLM reliably calls MCP tools first
         const toolPolicy = `
           You have access to Model Context Protocol (MCP) tools. For any request that depends on external systems (data, services, metadata):
@@ -136,6 +145,21 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           - trino_list_catalogs → trino_list_tables (with catalog, optional schema) → trino_describe_table → optional trino_execute_query to validate.
 
           When XDP tools are available, use them to discover platforms/resources first (e.g., xdp_list_dataplanes, xdp_list_datastores) before Trino operations.
+
+          **Auto-Run Feature**: You have two execution tools available:
+          1. **'register_manual_execution'** - Use this when user reports manual execution results
+          2. **'execute_and_monitor'** - Use this ONLY for auto-retry after manual execution
+          
+          **Workflow**:
+          - **IMPORTANT**: Do NOT automatically call 'execute_and_monitor' after initial code generation
+          - First execution must be manual - tell user to use the Run button in the workbench
+          - When user reports manual execution results (success/failure), call 'register_manual_execution' first
+          - ONLY after manual execution is registered, you can use auto-retry with 'execute_and_monitor'
+          - Use sessionId: "${sessionId}" for execution tracking (max 3 auto-executions per session)
+          - Current projectId: "${currentProjectId}" (use this for code execution)
+          - For dataplaneId, use xdp_list_datastores to find appropriate dataplane or use "1" as default
+          - Include selectedTemplate information if provided: ${selectedTemplate ? JSON.stringify(selectedTemplate) : 'none'}
+          - The tool includes loop prevention - you'll be notified when the limit is reached
 
           Finally, summarize tool findings, then generate the requested artifact (e.g., PySpark app) using the discovered, real parameters.
           `;

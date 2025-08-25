@@ -129,6 +129,7 @@ const SETTINGS_KEYS = {
   SYNC_AUTO_SYNC: 'syncAutoSync',
   SYNC_INTERVAL: 'syncInterval',
   SYNC_REMOTE_URL: 'syncRemoteUrl',
+  AUTO_EXECUTION_LIMIT: 'autoExecutionLimit',
 } as const;
 
 // Initialize settings from localStorage or defaults
@@ -186,6 +187,7 @@ const getInitialSettings = () => {
     syncAutoSync: getStoredBoolean(SETTINGS_KEYS.SYNC_AUTO_SYNC, true),
     syncInterval: getStoredNumber(SETTINGS_KEYS.SYNC_INTERVAL, 5000),
     syncRemoteUrl: getStoredString(SETTINGS_KEYS.SYNC_REMOTE_URL, '/api/fern-fs'),
+    autoExecutionLimit: getStoredNumber(SETTINGS_KEYS.AUTO_EXECUTION_LIMIT, 3),
   };
 };
 
@@ -203,6 +205,9 @@ export const syncEnabledStore = atom<boolean>(initialSettings.syncEnabled);
 export const syncAutoSyncStore = atom<boolean>(initialSettings.syncAutoSync);
 export const syncIntervalStore = atom<number>(initialSettings.syncInterval);
 export const syncRemoteUrlStore = atom<string>(initialSettings.syncRemoteUrl);
+
+// Auto-execution settings
+export const autoExecutionLimitStore = atom<number>(initialSettings.autoExecutionLimit);
 
 // Helper functions to update settings with persistence
 export const updateLatestBranch = (enabled: boolean) => {
@@ -249,6 +254,11 @@ export const updateSyncInterval = (interval: number) => {
 export const updateSyncRemoteUrl = (url: string) => {
   syncRemoteUrlStore.set(url);
   localStorage.setItem(SETTINGS_KEYS.SYNC_REMOTE_URL, url);
+};
+
+export const updateAutoExecutionLimit = (limit: number) => {
+  autoExecutionLimitStore.set(limit);
+  localStorage.setItem(SETTINGS_KEYS.AUTO_EXECUTION_LIMIT, limit.toString());
 };
 
 // Initialize tab configuration from localStorage or defaults

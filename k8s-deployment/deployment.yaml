@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xdp-mcp-server
+  namespace: mcp-server
+  labels:
+    app: xdp-mcp-server
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: xdp-mcp-server
+  template:
+    metadata:
+      labels:
+        app: xdp-mcp-server
+        version: v1.0.0
+    spec:
+      containers:
+      - name: xdp-mcp-server
+        image: node:18-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: mcp-port
+        env:
+        - name: XDP_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: xdp-mcp-server-secrets
+              key: XDP_ACCESS_KEY
+        - name: XDP_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: xdp-mcp-server-secrets
+              key: XDP_SECRET_KEY
+        - name: XDP_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: xdp-mcp-server-config
+              key: XDP_BASE_URL
+        - name: BOLT_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: xdp-mcp-server-config
+              key: BOLT_API_URL
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: xdp-mcp-server-config
+              key: NODE_ENV
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Install dependencies and copy source code
+          apk add --no-cache git
+          npm install -g typescript
+          
+          # Create app directory
+          mkdir -p /app
+          cd /app
+          
+          # Copy package files (would need to be mounted or built into image)
+          cat > package.json << 'EOF'
+          {
+            "name": "xdp-mcp-server",
+            "version": "1.0.0",
+            "type": "module",
+            "main": "dist/index.js",
+            "scripts": {
+              "start": "node dist/index.js",
+              "build": "tsc"
+            },
+            "dependencies": {
+              "@modelcontextprotocol/sdk": "^1.0.0",
+              "axios": "^1.6.0",
+              "zod": "^3.22.0"
+            },
+            "devDependencies": {
+              "@types/node": "^20.0.0",
+              "typescript": "^5.0.0"
+            }
+          }
+          EOF
+          
+          # Install dependencies
+          npm install
+          
+          # This is a placeholder - in production, you'd want to build and copy the compiled code
+          # For now, we'll create a simple HTTP wrapper around the MCP server
+          cat > server.js << 'EOF'
+          import { spawn } from 'child_process';
+          import http from 'http';
+          
+          const port = process.env.PORT || 3000;
+          
+          // Start MCP server
+          const mcpServer = spawn('node', ['dist/index.js'], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: process.env
+          });
+          
+          mcpServer.stderr.on('data', (data) => {
+            console.error('MCP Server:', data.toString());
+          });
+          
+          // Create HTTP server for health checks
+          const server = http.createServer((req, res) => {
+            if (req.url === '/health') {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ status: 'healthy', service: 'xdp-mcp-server' }));
+            } else if (req.url === '/mcp') {
+              res.writeHead(200, { 'Content-Type': 'text/plain' });
+              res.end('XDP MCP Server is running');
+            } else {
+              res.writeHead(404);
+              res.end('Not Found');
+            }
+          });
+          
+          server.listen(port, () => {
+            console.log(`XDP MCP Server HTTP wrapper listening on port ${port}`);
+          });
+          EOF
+          
+          # Keep container running with a simple loop
+          node server.js
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      restartPolicy: Always

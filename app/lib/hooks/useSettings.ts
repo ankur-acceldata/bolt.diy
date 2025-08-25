@@ -12,6 +12,7 @@ import {
   syncAutoSyncStore,
   syncIntervalStore,
   syncRemoteUrlStore,
+  autoExecutionLimitStore,
   resetTabConfiguration as resetTabConfig,
   updateProviderSettings as updateProviderSettingsStore,
   updateLatestBranch,
@@ -23,6 +24,7 @@ import {
   updateSyncAutoSync,
   updateSyncInterval,
   updateSyncRemoteUrl,
+  updateAutoExecutionLimit,
 } from '~/lib/stores/settings';
 import { useCallback, useEffect, useState } from 'react';
 import Cookies from 'js-cookie';
@@ -80,6 +82,10 @@ export interface UseSettingsReturn {
   setSyncInterval: (interval: number) => void;
   syncRemoteUrl: string;
   setSyncRemoteUrl: (url: string) => void;
+
+  // Auto-execution settings
+  autoExecutionLimit: number;
+  setAutoExecutionLimit: (limit: number) => void;
 }
 
 // Add interface to match ProviderSetting type
@@ -103,6 +109,9 @@ export function useSettings(): UseSettingsReturn {
   const syncAutoSync = useStore(syncAutoSyncStore);
   const syncInterval = useStore(syncIntervalStore);
   const syncRemoteUrl = useStore(syncRemoteUrlStore);
+
+  // Auto-execution settings
+  const autoExecutionLimit = useStore(autoExecutionLimitStore);
 
   const [settings, setSettings] = useState<Settings>(() => {
     const storedSettings = getLocalStorage('settings');
@@ -189,6 +198,11 @@ export function useSettings(): UseSettingsReturn {
     logStore.logSystem(`Sync remote URL updated to ${url || 'none'}`);
   }, []);
 
+  const setAutoExecutionLimit = useCallback((limit: number) => {
+    updateAutoExecutionLimit(limit);
+    logStore.logSystem(`Auto-execution limit updated to ${limit}`);
+  }, []);
+
   const setTheme = useCallback(
     (theme: Settings['theme']) => {
       saveSettings({ theme });
@@ -260,5 +274,9 @@ export function useSettings(): UseSettingsReturn {
     setSyncInterval,
     syncRemoteUrl,
     setSyncRemoteUrl,
+
+    // Auto-execution settings
+    autoExecutionLimit,
+    setAutoExecutionLimit,
   };
 }

@@ -1,0 +1,197 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xdp-mcp-server
+  namespace: mcp-server
+  labels:
+    app: xdp-mcp-server
+    version: v1.0.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xdp-mcp-server
+  template:
+    metadata:
+      labels:
+        app: xdp-mcp-server
+        version: v1.0.0
+    spec:
+      containers:
+      - name: xdp-mcp-server
+        image: node:18-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http-port
+        env:
+        - name: XDP_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: xdp-mcp-server-secrets
+              key: XDP_ACCESS_KEY
+        - name: XDP_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: xdp-mcp-server-secrets
+              key: XDP_SECRET_KEY
+        - name: XDP_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: xdp-mcp-server-config
+              key: XDP_BASE_URL
+        - name: BOLT_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: xdp-mcp-server-config
+              key: BOLT_API_URL
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: xdp-mcp-server-config
+              key: NODE_ENV
+        - name: PORT
+          value: "8080"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "🚀 Starting XDP MCP Server..."
+          
+          # Create app directory
+          mkdir -p /app
+          cd /app
+          
+          # Copy source files
+          cp -r /mcp-source/* ./
+          cp /mcp-package/package.json ./
+          
+          # Install production dependencies
+          echo "📦 Installing dependencies..."
+          npm install --production --silent
+          
+          # Create HTTP wrapper for the MCP server
+          cat > http-wrapper.js << 'EOF'
+          import { spawn } from 'child_process';
+          import http from 'http';
+          
+          const port = process.env.PORT || 8080;
+          
+          console.log('🔌 Starting MCP server process...');
+          
+          // Start MCP server
+          const mcpServer = spawn('node', ['index.js'], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: process.env
+          });
+          
+          let mcpReady = false;
+          
+          mcpServer.stdout.on('data', (data) => {
+            const output = data.toString();
+            console.log('MCP stdout:', output);
+            if (output.includes('ready for connections')) {
+              mcpReady = true;
+            }
+          });
+          
+          mcpServer.stderr.on('data', (data) => {
+            const output = data.toString();
+            console.log('MCP stderr:', output);
+            if (output.includes('ready for connections')) {
+              mcpReady = true;
+            }
+          });
+          
+          mcpServer.on('close', (code) => {
+            console.log(`MCP server exited with code ${code}`);
+            process.exit(code);
+          });
+          
+          // Create HTTP server for health checks and service discovery
+          const server = http.createServer((req, res) => {
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            if (req.method === 'OPTIONS') {
+              res.writeHead(200);
+              res.end();
+              return;
+            }
+            
+            if (req.url === '/health') {
+              const status = mcpReady ? 200 : 503;
+              res.writeHead(status, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ 
+                status: mcpReady ? 'healthy' : 'starting',
+                service: 'xdp-mcp-server',
+                timestamp: new Date().toISOString()
+              }));
+            } else if (req.url === '/info') {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                name: 'XDP MCP Server',
+                version: '1.0.0',
+                ready: mcpReady,
+                environment: process.env.NODE_ENV || 'development'
+              }));
+            } else {
+              res.writeHead(200, { 'Content-Type': 'text/plain' });
+              res.end(`XDP MCP Server is ${mcpReady ? 'ready' : 'starting'}...`);
+            }
+          });
+          
+          server.listen(port, () => {
+            console.log(`🌐 HTTP wrapper listening on port ${port}`);
+            console.log('🔧 Health check available at /health');
+            console.log('📋 Server info available at /info');
+          });
+          
+          // Graceful shutdown
+          process.on('SIGTERM', () => {
+            console.log('Received SIGTERM, shutting down gracefully');
+            server.close(() => {
+              mcpServer.kill('SIGTERM');
+            });
+          });
+          EOF
+          
+          # Start the HTTP wrapper
+          echo "🌐 Starting HTTP wrapper..."
+          node http-wrapper.js
+        volumeMounts:
+        - name: mcp-source
+          mountPath: /mcp-source
+        - name: mcp-package
+          mountPath: /mcp-package
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+      volumes:
+      - name: mcp-source
+        configMap:
+          name: xdp-mcp-source
+      - name: mcp-package
+        configMap:
+          name: xdp-mcp-package
+      restartPolicy: Always
