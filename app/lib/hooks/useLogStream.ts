@@ -3,6 +3,7 @@ import { createScopedLogger } from '~/utils/logger';
 import { getBasePath } from '~/utils/api';
 import type { LogEntry, LogStreamOptions, LogStreamState } from '~/types/logStream';
 import { LOG_STREAM_CONSTANTS } from '~/types/logStream';
+import { PayloadContextService } from '~/lib/stores/payloadContext';
 
 const logger = createScopedLogger('useLogStream');
 
@@ -201,6 +202,14 @@ export function useLogStream({
       disconnect();
     }
 
+    // Store payload for LLM context (so it has access to exact values)
+    PayloadContextService.updateLogStreamPayload(dataplaneId, runId, tailLines.toString(), {
+      enabled,
+      initialDelay,
+      baseUrl: window.location.origin,
+    });
+    logger.info('Log stream payload stored for LLM context from hook');
+
     // Start initialization phase
     setIsInitializing(true);
     setError(null);
@@ -220,7 +229,7 @@ export function useLogStream({
     initializationTimeoutRef.current = setTimeout(() => {
       connectToStream();
     }, initialDelay);
-  }, [dataplaneId, runId, initialDelay, disconnect, connectToStream]);
+  }, [dataplaneId, runId, initialDelay, disconnect, connectToStream, tailLines, enabled]);
 
   const clearLogs = useCallback(() => {
     logger.info('Clearing logs');

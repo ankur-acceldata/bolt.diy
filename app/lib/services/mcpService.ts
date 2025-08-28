@@ -17,6 +17,7 @@ import {
   TOOL_NO_EXECUTE_FUNCTION,
 } from '~/utils/constants';
 import { createScopedLogger } from '~/utils/logger';
+import { MCPToolTimeoutService, type ProgressUpdate } from './mcpToolTimeoutService';
 
 const logger = createScopedLogger('mcp-service');
 
@@ -107,6 +108,7 @@ export class MCPService {
   private _toolsWithoutExecute: ToolSet = {};
   private _mcpToolsPerServer: MCPServerTools = {};
   private _toolNamesToServerNames = new Map<string, string>();
+  private _timeoutService = MCPToolTimeoutService.getInstance();
   private _config: MCPConfig = {
     mcpServers: {},
   };
@@ -405,14 +407,32 @@ export class MCPService {
           if (toolInstance && typeof toolInstance.execute === 'function') {
             logger.debug(`calling tool "${toolName}" with args: ${JSON.stringify(toolInvocation.args)}`);
 
+            // Start progress tracking for long-running tools
+            const progressCallback = (update: ProgressUpdate) => {
+              // Send progress update as a text message to keep LLM informed
+              dataStream.write(formatDataStreamPart('text', `⏳ ${update.message} (${update.progress}% complete)`));
+            };
+
+            this._timeoutService.startToolExecution(toolCallId, toolName, progressCallback);
+
             try {
-              result = await toolInstance.execute(toolInvocation.args, {
-                messages: convertToCoreMessages(messages),
+              // Execute the tool with timeout handling
+              result = await this._executeToolWithTimeout(
+                toolInstance,
+                toolInvocation.args,
+                {
+                  messages: convertToCoreMessages(messages),
+                  toolCallId,
+                },
                 toolCallId,
-              });
+                toolName,
+              );
             } catch (error) {
               logger.error(`error while calling tool "${toolName}":`, error);
               result = TOOL_EXECUTION_ERROR;
+            } finally {
+              // Stop progress tracking
+              this._timeoutService.stopToolExecution(toolCallId);
             }
           } else {
             result = TOOL_NO_EXECUTE_FUNCTION;
@@ -453,5 +473,60 @@ export class MCPService {
 
   get toolsWithoutExecute() {
     return this._toolsWithoutExecute;
+  }
+
+  /**
+   * Execute a tool with timeout handling and progress updates
+   */
+  private async _executeToolWithTimeout(
+    toolInstance: any,
+    args: Record<string, unknown>,
+    context: { messages: any[]; toolCallId: string },
+    toolCallId: string,
+    toolName: string,
+  ): Promise<any> {
+    const timeoutConfig = this._timeoutService.getToolTimeout(toolName);
+
+    // If no timeout config, execute normally
+    if (!timeoutConfig) {
+      return await toolInstance.execute(args, context);
+    }
+
+    // Create a timeout promise
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Tool "${toolName}" timed out after ${timeoutConfig.timeoutMs}ms`));
+      }, timeoutConfig.timeoutMs);
+    });
+
+    // Race between tool execution and timeout
+    try {
+      const result = await Promise.race([toolInstance.execute(args, context), timeoutPromise]);
+
+      logger.info(`Tool "${toolName}" completed successfully in ${this._timeoutService.getElapsedTime(toolCallId)}ms`);
+
+      return result;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('timed out')) {
+        logger.error(`Tool "${toolName}" timed out after ${timeoutConfig.timeoutMs}ms`);
+
+        return {
+          error: `Tool execution timed out after ${Math.round(timeoutConfig.timeoutMs / 1000)} seconds. This usually happens with long-running operations. You can try again or check if the operation completed successfully.`,
+          timeout: true,
+          toolName,
+          elapsedMs: this._timeoutService.getElapsedTime(toolCallId),
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up all active tool executions on service shutdown
+   */
+  cleanup(): void {
+    this._timeoutService.clearAllExecutions();
+    logger.info('MCPService cleanup completed');
   }
 }

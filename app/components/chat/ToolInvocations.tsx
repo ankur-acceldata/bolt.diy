@@ -220,6 +220,13 @@ const ToolResultsList = memo(({ toolInvocations, toolCallAnnotations, theme }: T
             tool.toolInvocation.result,
           );
 
+          // Skip showing approval results - only show actual execution results
+          const isApprovalResult = tool.toolInvocation.result === TOOL_EXECUTION_APPROVAL.APPROVE;
+
+          if (isApprovalResult) {
+            return null; // Don't show "Yes, approved." as a result
+          }
+
           return (
             <motion.li
               key={index}
@@ -374,6 +381,11 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
           const { toolName, toolCallId } = tool.toolInvocation;
           const annotation = toolCallAnnotations.find((annotation) => annotation.toolCallId === toolCallId);
 
+          // Check if this tool has been auto-approved and is likely executing
+          const isLongRunningTool = ['execute_and_monitor', 'adhoc_run', 'trino_execute_query'].includes(toolName);
+          const statusText = isLongRunningTool ? 'Executing' : 'Calling';
+          const statusIcon = isLongRunningTool ? '⚙️' : '';
+
           return (
             <motion.li
               key={index}
@@ -396,10 +408,15 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
                         className={`i-ph:caret-down-bold inline-block transition-transform duration-150 ${expanded[toolCallId] ? '' : '-rotate-90'}`}
                       />
                     </button>
-                    Calling MCP tool{' '}
+                    {statusIcon} {statusText} MCP tool{' '}
                     <span className="ml-0.5 font-light font-mono text-bolt-elements-textPrimary bg-bolt-elements-background-depth-3 px-1.5 py-0.5 rounded-md">
                       {toolName}
                     </span>
+                    {isLongRunningTool && (
+                      <span className="ml-2 px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded-md animate-pulse">
+                        In Progress
+                      </span>
+                    )}
                   </div>
                   {expanded[toolCallId] && (
                     <div className="flex gap-3">

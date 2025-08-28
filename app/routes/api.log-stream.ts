@@ -1,6 +1,7 @@
 import { type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import { createScopedLogger } from '~/utils/logger';
 import { AcceldataService } from '~/lib/services/acceldataService';
+import { PayloadContextService } from '~/lib/stores/payloadContext';
 
 const logger = createScopedLogger('api.log-stream');
 
@@ -22,6 +23,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     logger.error('Acceldata service not configured');
     return new Response('Acceldata service not configured', { status: 500 });
   }
+
+  // Store payload for LLM context (so it has access to exact values)
+  PayloadContextService.updateLogStreamPayload(dataplaneId, runId, tailLines, {
+    enabled: true,
+    baseUrl: request.url,
+  });
+  logger.info('Log stream payload stored for LLM context');
 
   try {
     logger.info(`Streaming logs for dataplaneId: ${dataplaneId}, runId: ${runId}`);

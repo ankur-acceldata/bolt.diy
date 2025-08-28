@@ -2,6 +2,7 @@ import { json, type ActionFunctionArgs } from '@remix-run/cloudflare';
 import type { AdhocRunRequestBody } from '~/types/jobConfig';
 import { createScopedLogger } from '~/utils/logger';
 import { AcceldataService } from '~/lib/services/acceldataService';
+import { PayloadContextService } from '~/lib/stores/payloadContext';
 
 const logger = createScopedLogger('api.adhoc-run');
 
@@ -27,6 +28,12 @@ export async function action({ request }: ActionFunctionArgs) {
 
     // Use centralized service with request for dynamic base URL
     const result = await AcceldataService.executeAdhocRun(adhocRunConfig, request);
+
+    // Store payload for LLM context (so it has access to exact values)
+    if (result.success && adhocRunConfig) {
+      PayloadContextService.updateAdhocRunPayload(adhocRunConfig);
+      logger.info('Adhoc run payload stored for LLM context');
+    }
 
     return json(result, { status: result.status });
   } catch (error) {

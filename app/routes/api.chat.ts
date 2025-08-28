@@ -166,6 +166,19 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           When XDP tools are available, use them to discover platforms/resources first (e.g., xdp_list_dataplanes, xdp_list_datastores) before Trino operations.
 
+          **CRITICAL MCP PAYLOAD CONTEXT USAGE**: 
+          - For adhoc-run and log-stream operations, ALWAYS check your system prompt for "CURRENT API PAYLOAD CONTEXT" section
+          - Use the exact values provided in that section - never modify, assume, or generate these parameters
+          - The payloads contain: dataplaneId, jobType, executionConfig (for adhoc runs) and dataplaneId, runId, tailLines (for log streams)
+          - Use these values exactly as provided without any modifications
+
+          **LONG-RUNNING TOOL HANDLING**:
+          - Some tools like "execute_and_monitor" can take 1-3 minutes to complete - this is NORMAL
+          - You will receive progress updates during execution (🚀, ⚙️, 📊, ⏳ messages)
+          - DO NOT retry or abandon tool calls that are showing progress updates
+          - Wait patiently for tool completion - progress messages indicate the tool is working
+          - If a tool times out, it will return a timeout error message - only then should you acknowledge the timeout
+
           **Auto-Run Feature**: You have two execution tools available:
           1. **'register_manual_execution'** - Use this when user reports manual execution results
           2. **'execute_and_monitor'** - Use this ONLY for auto-retry after manual execution

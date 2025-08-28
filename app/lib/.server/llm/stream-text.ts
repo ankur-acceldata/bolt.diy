@@ -11,6 +11,7 @@ import { createScopedLogger } from '~/utils/logger';
 import { createFilesContext, extractPropertiesFromMessage } from './utils';
 import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
 import type { DesignScheme } from '~/types/design-scheme';
+import { PayloadContextService } from '~/lib/stores/payloadContext';
 
 export type Messages = Message[];
 
@@ -221,6 +222,16 @@ export async function streamText(props: {
     `;
   } else {
     console.log('No locked files found from any source for prompt.');
+  }
+
+  // Add payload context for MCP tool calls
+  const payloadContext = PayloadContextService.getPayloadContext();
+
+  if (payloadContext.trim()) {
+    systemPrompt = `${systemPrompt}
+
+    ${payloadContext}
+    `;
   }
 
   logger.info(`Sending llm call to ${provider.name} with model ${modelDetails.name}`);
@@ -442,6 +453,10 @@ export async function streamText(props: {
     system: chatMode === 'build' ? systemPrompt : discussPrompt(),
     maxTokens: dynamicMaxTokens,
     messages: coreMessages,
+    maxSteps: 10, // Allow multiple tool calls
+    experimental_continueSteps: true, // Enable step continuation
+    experimental_toolCallStreaming: true, // Enable tool call streaming
+    abortSignal: options?.abortSignal,
     ...options,
   });
 }
