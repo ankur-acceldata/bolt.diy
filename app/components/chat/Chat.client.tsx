@@ -4,7 +4,7 @@ import { useChat } from '@ai-sdk/react';
 import { useAnimate } from 'framer-motion';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
-import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
+import { useMessageParser, usePromptEnhancer, useShortcuts, useSync } from '~/lib/hooks';
 import { description, useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
@@ -25,6 +25,7 @@ import { filesToArtifacts } from '~/utils/fileUtils';
 import { supabaseConnection } from '~/lib/stores/supabase';
 import { defaultDesignScheme, type DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
+import { debugProjectId } from '~/utils/fileLocks';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
@@ -118,6 +119,14 @@ export const ChatImpl = memo(
   ({ description, initialMessages, storeMessageHistory, importChat, exportChat }: ChatProps) => {
     useShortcuts();
 
+    // Initialize sync functionality
+    const { currentProjectId } = useSync();
+
+    // Debug project ID consistency
+    useEffect(() => {
+      debugProjectId('Chat.client.tsx - useSync initialization');
+    }, [currentProjectId]);
+
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [chatStarted, setChatStarted] = useState(initialMessages.length > 0);
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -148,6 +157,13 @@ export const ChatImpl = memo(
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
+    const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+
+    // Debug selectedTemplate changes
+    useEffect(() => {
+      console.log('selectedTemplate changed:', selectedTemplate);
+    }, [selectedTemplate]);
+
     const mcpSettings = useMCPStore((state) => state.settings);
 
     const {
@@ -165,7 +181,7 @@ export const ChatImpl = memo(
       setData,
       addToolResult,
     } = useChat({
-      api: '/api/chat',
+      api: import.meta.env.BASE_URL ? `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/chat` : '/api/chat',
       body: {
         apiKeys,
         files,
@@ -173,6 +189,7 @@ export const ChatImpl = memo(
         contextOptimization: contextOptimizationEnabled,
         chatMode,
         designScheme,
+        selectedTemplate,
         supabase: {
           isConnected: supabaseConn.isConnected,
           hasSelectedProject: !!selectedProject,
@@ -184,11 +201,11 @@ export const ChatImpl = memo(
         maxLLMSteps: mcpSettings.maxLLMSteps,
       },
       sendExtraMessageFields: true,
-      onError: (e) => {
+      onError: (e: Error) => {
         setFakeLoading(false);
         handleError(e, 'chat');
       },
-      onFinish: (message, response) => {
+      onFinish: async (message: Message, response: any) => {
         const usage = response.usage;
         setData(undefined);
 
@@ -205,6 +222,12 @@ export const ChatImpl = memo(
         }
 
         logger.debug('Finished streaming');
+
+        // Clear user upload state if it was set (for imports/uploads)
+        if (workbenchStore.isUserUploadInProgress()) {
+          workbenchStore.setUserUploadInProgress(false);
+          console.log('DEBUG: onFinish - Clearing user upload state after AI response completion');
+        }
       },
       initialMessages,
       initialInput: Cookies.get(PROMPT_COOKIE_KEY) || '',
@@ -352,18 +375,47 @@ export const ChatImpl = memo(
     }, [input, textareaRef]);
 
     const runAnimation = async () => {
+      console.log('runAnimation called, chatStarted:', chatStarted);
+
       if (chatStarted) {
+        console.log('Animation skipped - chat already started');
         return;
       }
 
-      await Promise.all([
-        animate('#examples', { opacity: 0, display: 'none' }, { duration: 0.1 }),
-        animate('#intro', { opacity: 0, flex: 1 }, { duration: 0.2, ease: cubicEasingFn }),
-      ]);
+      // Check which elements exist before trying to animate them
+      const examplesEl = document.getElementById('examples');
+      const introEl = document.getElementById('intro');
+
+      console.log('Elements found:', { examplesEl, introEl });
+
+      const animations = [];
+
+      // Only animate #examples if it exists (currently removed/commented out)
+      if (examplesEl) {
+        animations.push(animate('#examples', { opacity: 0, display: 'none' }, { duration: 0.1 }));
+      } else {
+        console.log('Skipping #examples animation - element not found');
+      }
+
+      // Only animate #intro if it exists
+      if (introEl) {
+        animations.push(animate('#intro', { opacity: 0, flex: 1 }, { duration: 0.2, ease: cubicEasingFn }));
+      } else {
+        console.log('Skipping #intro animation - element not found');
+      }
+
+      // If no elements to animate, just proceed with setting the state
+      if (animations.length > 0) {
+        console.log('Running animations for', animations.length, 'elements');
+        await Promise.all(animations);
+      } else {
+        console.log('No elements to animate, proceeding to set chat started');
+      }
 
       chatStore.setKey('started', true);
-
       setChatStarted(true);
+
+      console.log('Animation completed, chatStarted set to true');
     };
 
     // Helper function to create message parts array from text and images
@@ -440,12 +492,18 @@ export const ChatImpl = memo(
         finalMessageContent = messageContent + elementInfo;
       }
 
-      runAnimation();
+      console.log('About to run animation, chatStarted:', chatStarted);
+
+      // Make runAnimation awaitable to ensure it completes before proceeding
+      await runAnimation();
+
+      console.log('Animation completed, proceeding with message processing');
 
       if (!chatStarted) {
         setFakeLoading(true);
 
-        if (autoSelectTemplate) {
+        // Only auto-select template if no template has been manually selected
+        if (autoSelectTemplate && !selectedTemplate) {
           const { template, title } = await selectStarterTemplate({
             message: finalMessageContent,
             model,
@@ -632,6 +690,7 @@ export const ChatImpl = memo(
         ref={animationScope}
         textareaRef={textareaRef}
         input={input}
+        setInput={setInput}
         showChat={showChat}
         chatStarted={chatStarted}
         isStreaming={isLoading || fakeLoading}
@@ -696,6 +755,8 @@ export const ChatImpl = memo(
         setDesignScheme={setDesignScheme}
         selectedElement={selectedElement}
         setSelectedElement={setSelectedElement}
+        selectedTemplate={selectedTemplate}
+        setSelectedTemplate={setSelectedTemplate}
         addToolResult={addToolResult}
       />
     );

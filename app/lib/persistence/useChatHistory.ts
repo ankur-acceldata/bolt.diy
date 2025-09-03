@@ -1,10 +1,12 @@
-import { useLoaderData, useNavigate, useSearchParams } from '@remix-run/react';
+import { useLoaderData, useSearchParams } from '@remix-run/react';
 import { useState, useEffect, useCallback } from 'react';
 import { atom } from 'nanostores';
 import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
+import { createChatUrl, navigateToChat, navigateToHome } from '~/utils/api';
+import { streamingState } from '~/lib/stores/streaming';
 import {
   getMessages,
   getNextId,
@@ -13,15 +15,17 @@ import {
   setMessages,
   duplicateChat,
   createChatFromMessages,
-  getSnapshot,
   setSnapshot,
+  getLatestVersionedSnapshot,
   type IChatMetadata,
 } from './db';
 import type { FileMap } from '~/lib/stores/files';
-import type { Snapshot } from './types';
+import type { Snapshot, ChangeType } from './types';
+import { createInitialSnapshot, hasExistingSnapshots, triggerSnapshot } from './snapshotUtils';
 import { webcontainer } from '~/lib/webcontainer';
 import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
+import { resolveActualChatId } from '~/utils/fileLocks';
 
 export interface ChatHistoryItem {
   id: string;
@@ -40,7 +44,6 @@ export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
 export const chatMetadata = atom<IChatMetadata | undefined>(undefined);
 export function useChatHistory() {
-  const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
   const [searchParams] = useSearchParams();
 
@@ -48,6 +51,7 @@ export function useChatHistory() {
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
 
   useEffect(() => {
     if (!db) {
@@ -63,25 +67,22 @@ export function useChatHistory() {
     }
 
     if (mixedId) {
-      Promise.all([
-        getMessages(db, mixedId),
-        getSnapshot(db, mixedId), // Fetch snapshot from DB
-      ])
+      Promise.all([getMessages(db, mixedId), getLatestVersionedSnapshot(db, mixedId)])
         .then(async ([storedMessages, snapshot]) => {
           if (storedMessages && storedMessages.messages.length > 0) {
             /*
              * const snapshotStr = localStorage.getItem(`snapshot:${mixedId}`); // Remove localStorage usage
              * const snapshot: Snapshot = snapshotStr ? JSON.parse(snapshotStr) : { chatIndex: 0, files: {} }; // Use snapshot from DB
              */
-            const validSnapshot = snapshot || { chatIndex: '', files: {} }; // Ensure snapshot is not undefined
-            const summary = validSnapshot.summary;
+            const validSnapshot = snapshot;
+            const summary = validSnapshot?.summary;
 
             const rewindId = searchParams.get('rewindTo');
             let startingIdx = -1;
             const endingIdx = rewindId
               ? storedMessages.messages.findIndex((m) => m.id === rewindId) + 1
               : storedMessages.messages.length;
-            const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot.chatIndex);
+            const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot?.chatIndex);
 
             if (snapshotIndex >= 0 && snapshotIndex < endingIdx) {
               startingIdx = snapshotIndex;
@@ -99,6 +100,7 @@ export function useChatHistory() {
             }
 
             setArchivedMessages(archivedMessages);
+            console.log('DEBUG: startingIdx', startingIdx);
 
             if (startingIdx > 0) {
               const files = Object.entries(validSnapshot?.files || {})
@@ -113,6 +115,9 @@ export function useChatHistory() {
                   };
                 })
                 .filter((x): x is { content: string; path: string } => !!x); // Type assertion
+              console.log('DEBUG: validSnapshot', validSnapshot);
+              console.log('DEBUG: files', files);
+
               const projectCommands = await detectProjectCommands(files);
 
               // Call the modified function to get only the command actions string
@@ -145,7 +150,7 @@ ${value.content}
                       }
                     })
                     .join('\n')}
-                  ${commandActionsString} 
+                  ${commandActionsString}
                   </boltArtifact>
                   `, // Added commandActionsString, followupMessage, updated id and title
                   annotations: [
@@ -180,10 +185,11 @@ ${value.content}
             chatId.set(storedMessages.id);
             chatMetadata.set(storedMessages.metadata);
           } else {
-            navigate('/', { replace: true });
+            navigateToHome(true);
           }
 
           setReady(true);
+          setIsInitialLoad(false);
         })
         .catch((error) => {
           console.error(error);
@@ -194,29 +200,57 @@ ${value.content}
     } else {
       // Handle case where there is no mixedId (e.g., new chat)
       setReady(true);
+      setIsInitialLoad(false);
     }
-  }, [mixedId, db, navigate, searchParams]); // Added db, navigate, searchParams dependencies
+  }, [mixedId, db, searchParams]); // Added db, searchParams dependencies
 
   const takeSnapshot = useCallback(
-    async (chatIdx: string, files: FileMap, _chatId?: string | undefined, chatSummary?: string) => {
-      const id = chatId.get();
+    async (
+      chatIdx: string,
+      files: FileMap,
+      _chatId?: string | undefined,
+      chatSummary?: string,
+      changeType?: ChangeType,
+    ) => {
+      const currentChatId = chatId.get();
 
-      if (!id || !db) {
+      if (!currentChatId || !db) {
         return;
       }
 
-      const snapshot: Snapshot = {
-        chatIndex: chatIdx,
-        files,
-        summary: chatSummary,
-      };
-
-      // localStorage.setItem(`snapshot:${id}`, JSON.stringify(snapshot)); // Remove localStorage usage
       try {
-        await setSnapshot(db, id, snapshot);
+        // Resolve the mixed chatId to the actual chatId to prevent duplicate snapshots
+        const actualChatId = await resolveActualChatId(currentChatId);
+        let finalChangeType: ChangeType = changeType || 'user-edit';
+
+        // Check if this is an initial snapshot (no previous snapshots)
+        const latestSnapshot = await getLatestVersionedSnapshot(db, actualChatId);
+
+        if (!latestSnapshot) {
+          finalChangeType = 'initial';
+        }
+
+        // Store the versioned snapshot
+        await triggerSnapshot(db, actualChatId, files, finalChangeType, chatIdx);
+
+        console.log(`Created ${finalChangeType} snapshot for chat ${actualChatId}`);
       } catch (error) {
-        console.error('Failed to save snapshot:', error);
-        toast.error('Failed to save chat snapshot.');
+        console.error('Failed to save versioned snapshot:', error);
+
+        // Fallback to the old snapshot system
+        const legacySnapshot: Snapshot = {
+          chatIndex: chatIdx,
+          files,
+          summary: chatSummary,
+        };
+
+        try {
+          await setSnapshot(db, currentChatId, legacySnapshot);
+          console.log('Fallback to legacy snapshot system successful');
+        } catch (fallbackError) {
+          console.error('Failed to save fallback snapshot:', fallbackError);
+          toast.error('Failed to save chat snapshot.');
+        }
       }
     },
     [db],
@@ -231,6 +265,8 @@ ${value.content}
     if (!validSnapshot?.files) {
       return;
     }
+
+    console.log('DEBUG: validSnapshot', validSnapshot);
 
     Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
       if (key.startsWith(container.workdir)) {
@@ -266,7 +302,9 @@ ${value.content}
       }
 
       try {
-        await setMessages(db, id, initialMessages, urlId, description.get(), undefined, metadata);
+        // Resolve the actual chatId before saving
+        const actualChatId = await resolveActualChatId(id);
+        await setMessages(db, actualChatId, initialMessages, urlId, description.get(), undefined, metadata);
         chatMetadata.set(metadata);
       } catch (error) {
         toast.error('Failed to update chat metadata');
@@ -286,7 +324,7 @@ ${value.content}
       if (!urlId && firstArtifact?.id) {
         const urlId = await getUrlId(db, firstArtifact.id);
         _urlId = urlId;
-        navigateChat(urlId);
+        window.history.replaceState({}, '', createChatUrl(urlId));
         setUrlId(urlId);
       }
 
@@ -305,25 +343,62 @@ ${value.content}
         }
       }
 
-      takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+      // Ensure chatId.get() is used here as well
+      let finalChatId = chatId.get();
+
+      if (initialMessages.length === 0 && !finalChatId) {
+        const nextId = await getNextId(db);
+
+        chatId.set(nextId);
+        finalChatId = nextId;
+
+        if (!urlId) {
+          window.history.replaceState({}, '', createChatUrl(nextId));
+        }
+
+        // Create an initial empty snapshot for the new chat
+        try {
+          const actualChatId = await resolveActualChatId(finalChatId);
+          const hasSnapshots = await hasExistingSnapshots(db, actualChatId);
+
+          if (!hasSnapshots) {
+            await createInitialSnapshot(db, actualChatId, lastMessage.id, 'Initial chat state');
+            console.log(`Created initial empty snapshot for new chat ${actualChatId}`);
+          }
+        } catch (error) {
+          console.error('Failed to create initial snapshot for new chat:', error);
+        }
+      }
+
+      /*
+       * Only take snapshot if this is a new message being added, not during page load
+       * Skip ALL snapshots during AI streaming since AI response snapshots are now handled in Chat.client.tsx onFinish
+       */
+      if (!isInitialLoad && messages.length > initialMessages.length) {
+        const isCurrentlyStreaming = streamingState.get();
+
+        /*
+         * Skip snapshot creation only during active AI streaming
+         * AI response snapshots are now centralized to Chat.client.tsx onFinish callback
+         * But allow snapshots for user imports (like folder uploads) even if they create assistant messages
+         */
+        if (!isCurrentlyStreaming) {
+          // Determine the appropriate change type based on context
+          const lastMessage = messages[messages.length - 1];
+          let changeType: ChangeType = 'user-edit';
+
+          // Check if this is an AI response post-completion
+          if (lastMessage.role === 'assistant') {
+            changeType = 'ai-response';
+          }
+
+          takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary, changeType);
+        }
+      }
 
       if (!description.get() && firstArtifact?.title) {
         description.set(firstArtifact?.title);
       }
-
-      // Ensure chatId.get() is used here as well
-      if (initialMessages.length === 0 && !chatId.get()) {
-        const nextId = await getNextId(db);
-
-        chatId.set(nextId);
-
-        if (!urlId) {
-          navigateChat(nextId);
-        }
-      }
-
-      // Ensure chatId.get() is used for the final setMessages call
-      const finalChatId = chatId.get();
 
       if (!finalChatId) {
         console.error('Cannot save messages, chat ID is not set.');
@@ -332,9 +407,12 @@ ${value.content}
         return;
       }
 
+      // Resolve the actual chatId before saving
+      const actualChatId = await resolveActualChatId(finalChatId);
+
       await setMessages(
         db,
-        finalChatId, // Use the potentially updated chatId
+        actualChatId, // Use the resolved chatId
         [...archivedMessages, ...messages],
         urlId,
         description.get(),
@@ -349,7 +427,26 @@ ${value.content}
 
       try {
         const newId = await duplicateChat(db, mixedId || listItemId);
-        navigate(`/chat/${newId}`);
+
+        // Create an initial empty snapshot for the duplicated chat
+        try {
+          const actualChatId = await resolveActualChatId(newId);
+          const hasSnapshots = await hasExistingSnapshots(db, actualChatId);
+
+          if (!hasSnapshots) {
+            await createInitialSnapshot(
+              db,
+              actualChatId,
+              `chat-${actualChatId}-initial`,
+              'Duplicated chat initial state',
+            );
+            console.log(`Created initial empty snapshot for duplicated chat ${actualChatId}`);
+          }
+        } catch (error) {
+          console.error('Failed to create initial snapshot for duplicated chat:', error);
+        }
+
+        navigateToChat(newId);
         toast.success('Chat duplicated successfully');
       } catch (error) {
         toast.error('Failed to duplicate chat');
@@ -362,10 +459,33 @@ ${value.content}
       }
 
       try {
+        // Set user upload state to indicate import is in progress
+        workbenchStore.setUserUploadInProgress(true);
+        console.log('DEBUG: importChat - Starting user upload, setting upload state to true');
+
         const newId = await createChatFromMessages(db, description, messages, metadata);
-        window.location.href = `/chat/${newId}`;
+
+        /*
+         * For imported chats, we don't create an initial empty snapshot
+         * since they may already have content from the imported messages
+         * The snapshot will be created when files are uploaded or created
+         */
+
+        window.location.href = createChatUrl(newId);
         toast.success('Chat imported successfully');
+
+        // Set a timeout to clear upload state as fallback (in case AI doesn't complete)
+        setTimeout(() => {
+          if (workbenchStore.isUserUploadInProgress()) {
+            workbenchStore.setUserUploadInProgress(false);
+            console.log('DEBUG: importChat - Timeout fallback: clearing upload state');
+          }
+        }, 30000); // 30 second timeout
       } catch (error) {
+        // Clear upload state on error
+        workbenchStore.setUserUploadInProgress(false);
+        console.log('DEBUG: importChat - Error during import, clearing upload state');
+
         if (error instanceof Error) {
           toast.error('Failed to import chat: ' + error.message);
         } else {
@@ -396,16 +516,4 @@ ${value.content}
       URL.revokeObjectURL(url);
     },
   };
-}
-
-function navigateChat(nextId: string) {
-  /**
-   * FIXME: Using the intended navigate function causes a rerender for <Chat /> that breaks the app.
-   *
-   * `navigate(`/chat/${nextId}`, { replace: true });`
-   */
-  const url = new URL(window.location.href);
-  url.pathname = `/chat/${nextId}`;
-
-  window.history.replaceState({}, '', url);
 }

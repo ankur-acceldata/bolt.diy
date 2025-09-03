@@ -199,7 +199,7 @@ export function FileIcon({ filename, size = 'md', className }: FileIconProps) {
     }
 
     if (['php'].includes(extension)) {
-      return 'text-purple-500';
+      return 'text-bolt-elements-item-contentAccent';
     }
 
     if (['rb', 'ruby'].includes(extension)) {

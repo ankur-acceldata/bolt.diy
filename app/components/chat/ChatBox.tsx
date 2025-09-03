@@ -11,13 +11,13 @@ import { SendButton } from './SendButton.client';
 import { IconButton } from '~/components/ui/IconButton';
 import { toast } from 'react-toastify';
 import { SpeechRecognitionButton } from '~/components/chat/SpeechRecognition';
-import { SupabaseConnection } from './SupabaseConnection';
-import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import styles from './BaseChat.module.scss';
 import type { ProviderInfo } from '~/types/model';
-import { ColorSchemeDialog } from '~/components/ui/ColorSchemeDialog';
+
+// import { ColorSchemeDialog } from '~/components/ui/ColorSchemeDialog';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
+import { StarterTemplateSelector } from './StarterTemplateSelector';
 import { McpTools } from './MCPTools';
 
 interface ChatBoxProps {
@@ -61,6 +61,8 @@ interface ChatBoxProps {
   setDesignScheme?: (scheme: DesignScheme) => void;
   selectedElement?: ElementInfo | null;
   setSelectedElement?: ((element: ElementInfo | null) => void) | undefined;
+  selectedTemplate?: any;
+  setSelectedTemplate?: (template: any) => void;
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
@@ -76,6 +78,20 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
          */
       )}
     >
+      {/* Show template selector when chat hasn't started */}
+      {!props.chatStarted && (
+        <div className="mb-6">
+          <StarterTemplateSelector
+            onTemplateSelect={(template) => {
+              console.log('Template selected:', template);
+              console.log('setSelectedTemplate function:', props.setSelectedTemplate);
+              props.setSelectedTemplate?.(template);
+            }}
+            selectedTemplate={props.selectedTemplate}
+          />
+        </div>
+      )}
+
       <svg className={classNames(styles.PromptEffectContainer)}>
         <defs>
           <linearGradient
@@ -87,16 +103,16 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             gradientUnits="userSpaceOnUse"
             gradientTransform="rotate(-45)"
           >
-            <stop offset="0%" stopColor="#b44aff" stopOpacity="0%"></stop>
-            <stop offset="40%" stopColor="#b44aff" stopOpacity="80%"></stop>
-            <stop offset="50%" stopColor="#b44aff" stopOpacity="80%"></stop>
-            <stop offset="100%" stopColor="#b44aff" stopOpacity="0%"></stop>
+            <stop offset="0%" stopColor="var(--bolt-elements-item-contentAccent)" stopOpacity="0%"></stop>
+            <stop offset="40%" stopColor="var(--bolt-elements-item-contentAccent)" stopOpacity="80%"></stop>
+            <stop offset="50%" stopColor="var(--bolt-elements-item-contentAccent)" stopOpacity="80%"></stop>
+            <stop offset="100%" stopColor="var(--bolt-elements-item-contentAccent)" stopOpacity="0%"></stop>
           </linearGradient>
           <linearGradient id="shine-gradient">
-            <stop offset="0%" stopColor="white" stopOpacity="0%"></stop>
-            <stop offset="40%" stopColor="#ffffff" stopOpacity="80%"></stop>
-            <stop offset="50%" stopColor="#ffffff" stopOpacity="80%"></stop>
-            <stop offset="100%" stopColor="white" stopOpacity="0%"></stop>
+            <stop offset="0%" stopColor="var(--bolt-elements-textPrimary)" stopOpacity="0%"></stop>
+            <stop offset="40%" stopColor="var(--bolt-elements-textPrimary)" stopOpacity="60%"></stop>
+            <stop offset="50%" stopColor="var(--bolt-elements-textPrimary)" stopOpacity="60%"></stop>
+            <stop offset="100%" stopColor="var(--bolt-elements-textPrimary)" stopOpacity="0%"></stop>
           </linearGradient>
         </defs>
         <rect className={classNames(styles.PromptEffectLine)} pathLength="100" strokeLinecap="round"></rect>
@@ -153,13 +169,13 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
       {props.selectedElement && (
         <div className="flex mx-1.5 gap-2 items-center justify-between rounded-lg rounded-b-none border border-b-none border-bolt-elements-borderColor text-bolt-elements-textPrimary flex py-1 px-2.5 font-medium text-xs">
           <div className="flex gap-2 items-center lowercase">
-            <code className="bg-accent-500 rounded-4px px-1.5 py-1 mr-0.5 text-white">
+            <code className="bg-bolt-elements-item-contentAccent rounded-4px px-1.5 py-1 mr-0.5 text-white">
               {props?.selectedElement?.tagName}
             </code>
             selected for inspection
           </div>
           <button
-            className="bg-transparent text-accent-500 pointer-auto"
+            className="bg-transparent text-bolt-elements-item-contentAccent pointer-auto"
             onClick={() => props.setSelectedElement?.(null)}
           >
             Clear
@@ -175,7 +191,12 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             'w-full pl-4 pt-4 pr-16 outline-none resize-none text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary bg-transparent text-sm',
             'transition-all duration-200',
             'hover:border-bolt-elements-focus',
+            {
+              'cursor-not-allowed opacity-50': !props.chatStarted && !props.selectedTemplate,
+            },
           )}
+          disabled={!props.chatStarted && !props.selectedTemplate}
+          title={!props.chatStarted && !props.selectedTemplate ? 'Select a Template to start with' : ''}
           onDragEnter={(e) => {
             e.preventDefault();
             e.currentTarget.style.border = '2px solid #1488fc';
@@ -224,6 +245,11 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 return;
               }
 
+              // Don't send message if no template selected
+              if (!props.chatStarted && !props.selectedTemplate) {
+                return;
+              }
+
               props.handleSendMessage?.(event);
             }
           }}
@@ -236,7 +262,13 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             minHeight: props.TEXTAREA_MIN_HEIGHT,
             maxHeight: props.TEXTAREA_MAX_HEIGHT,
           }}
-          placeholder={props.chatMode === 'build' ? 'How can Bolt help you today?' : 'What would you like to discuss?'}
+          placeholder={
+            !props.chatStarted && !props.selectedTemplate
+              ? 'Select a template to start...'
+              : props.chatMode === 'build'
+                ? 'How can Bolt help you today?'
+                : 'What would you like to discuss?'
+          }
           translate="no"
         />
         <ClientOnly>
@@ -244,10 +276,19 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             <SendButton
               show={props.input.length > 0 || props.isStreaming || props.uploadedFiles.length > 0}
               isStreaming={props.isStreaming}
-              disabled={!props.providerList || props.providerList.length === 0}
+              disabled={
+                !props.providerList ||
+                props.providerList.length === 0 ||
+                (!props.chatStarted && !props.selectedTemplate)
+              }
               onClick={(event) => {
                 if (props.isStreaming) {
                   props.handleStop?.();
+                  return;
+                }
+
+                // Don't send if no template selected
+                if (!props.chatStarted && !props.selectedTemplate) {
                   return;
                 }
 
@@ -260,7 +301,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
         </ClientOnly>
         <div className="flex justify-between items-center text-sm p-4 pt-2">
           <div className="flex gap-1 items-center">
-            <ColorSchemeDialog designScheme={props.designScheme} setDesignScheme={props.setDesignScheme} />
+            {/* <ColorSchemeDialog designScheme={props.designScheme} setDesignScheme={props.setDesignScheme} /> */}
             <McpTools />
             <IconButton title="Upload file" className="transition-all" onClick={() => props.handleFileUpload()}>
               <div className="i-ph:paperclip text-xl"></div>
@@ -325,8 +366,8 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd> a new line
             </div>
           ) : null}
-          <SupabaseConnection />
-          <ExpoQrModal open={props.qrModalOpen} onClose={() => props.setQrModalOpen(false)} />
+          {/* <SupabaseConnection /> */}
+          {/* <ExpoQrModal open={props.qrModalOpen} onClose={() => props.setQrModalOpen(false)} /> */}
         </div>
       </div>
     </div>

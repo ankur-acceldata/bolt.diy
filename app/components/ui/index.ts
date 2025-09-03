@@ -3,6 +3,7 @@
 // Core components
 export * from './Badge';
 export * from './Button';
+export * from './ButtonDropdown';
 export * from './Card';
 export * from './Checkbox';
 export * from './Collapsible';

@@ -33,6 +33,9 @@ functions/build/
 .wrangler
 _worker.bundle
 
+# SSL certificates for local development
+/certs/*.pem
+
 Modelfile
 modelfiles
 
@@ -44,5 +47,5 @@ app/commit.json
 changelogUI.md
 docs/instructions/Roadmap.md
 .cursorrules
-*.md
+# *.md
 .qodo

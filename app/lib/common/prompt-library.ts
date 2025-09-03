@@ -1,6 +1,8 @@
 import { getSystemPrompt } from './prompts/prompts';
 import optimized from './prompts/optimized';
 import { getFineTunedPrompt } from './prompts/new-prompt';
+import { getJavaPrompt } from './prompts/java-prompt';
+import { getPythonPrompt } from './prompts/python-prompt';
 import type { DesignScheme } from '~/types/design-scheme';
 
 export interface PromptOptions {
@@ -41,6 +43,17 @@ export class PromptLibrary {
       label: 'Optimized Prompt (experimental)',
       description: 'An Experimental version of the prompt for lower token usage',
       get: (options) => optimized(options),
+    },
+    java: {
+      label: 'Java Applications Prompt',
+      description:
+        'Specialized prompt for Java applications, Spring Boot, Apache Spark, and enterprise Java development',
+      get: (options) => getJavaPrompt(options.cwd, options.supabase),
+    },
+    python: {
+      label: 'Python Applications Prompt',
+      description: 'Specialized prompt for Python applications, PySpark, data processing, and backend services',
+      get: (options) => getPythonPrompt(options.cwd, options.supabase),
     },
   };
   static getList() {

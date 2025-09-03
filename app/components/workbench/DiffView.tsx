@@ -1,5 +1,8 @@
 import { memo, useMemo, useState, useEffect, useCallback } from 'react';
 import { useStore } from '@nanostores/react';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('DiffView');
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { FileMap } from '~/lib/stores/files';
 import type { EditorDocument } from '~/components/editor/codemirror/CodeMirrorEditor';
@@ -8,8 +11,8 @@ import { getHighlighter } from 'shiki';
 import '~/styles/diff-view.css';
 import { diffFiles, extractRelativePath } from '~/utils/diff';
 import type { FileHistory } from '~/types/actions';
-import { getLanguageFromExtension } from '~/utils/getLanguageFromExtension';
 import { themeStore } from '~/lib/stores/theme';
+import { DiffPanel } from './DiffPanel';
 
 interface CodeComparisonProps {
   beforeCode: string;
@@ -298,7 +301,7 @@ const processChanges = (beforeCode: string, afterCode: string) => {
       isBinary: false,
     };
   } catch (error) {
-    console.error('Error processing changes:', error);
+    logger.error('Error processing changes:', error);
     return {
       beforeLines: [],
       afterLines: [],
@@ -573,7 +576,17 @@ const getSharedHighlighter = async () => {
       'go',
       'ruby',
       'rust',
+      'groovy',
       'plaintext',
+      'xml',
+      'yaml',
+      'toml',
+      'ini',
+      'bash',
+      'shell',
+      'properties',
+      'markdown',
+      'dockerfile',
     ],
   });
 
@@ -584,12 +597,13 @@ const getSharedHighlighter = async () => {
   return highlighterInstance;
 };
 
-const InlineDiffComparison = memo(({ beforeCode, afterCode, filename, language }: CodeComparisonProps) => {
+export const InlineDiffComparison = memo(({ beforeCode, afterCode, filename, language }: CodeComparisonProps) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Use state to hold the shared highlighter instance
   const [highlighter, setHighlighter] = useState<any>(null);
-  const theme = useStore(themeStore);
+  const themeConfig = useStore(themeStore);
+  const theme = themeConfig.mode;
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);
@@ -665,12 +679,15 @@ interface DiffViewProps {
   setFileHistory: React.Dispatch<React.SetStateAction<Record<string, FileHistory>>>;
 }
 
+// Helper function was moved to DiffPanel.tsx
+
 export const DiffView = memo(({ fileHistory, setFileHistory }: DiffViewProps) => {
   const files = useStore(workbenchStore.files) as FileMap;
   const selectedFile = useStore(workbenchStore.selectedFile);
   const currentDocument = useStore(workbenchStore.currentDocument) as EditorDocument;
   const unsavedFiles = useStore(workbenchStore.unsavedFiles);
 
+  // Track history changes for modified files
   useEffect(() => {
     if (selectedFile && currentDocument) {
       const file = files[selectedFile];
@@ -682,13 +699,13 @@ export const DiffView = memo(({ fileHistory, setFileHistory }: DiffViewProps) =>
       const existingHistory = fileHistory[selectedFile];
       const currentContent = currentDocument.value;
 
-      // Normalizar o conteúdo para comparação
+      // Normalize content for comparison
       const normalizedCurrentContent = currentContent.replace(/\r\n/g, '\n').trim();
       const normalizedOriginalContent = (existingHistory?.originalContent || file.content)
         .replace(/\r\n/g, '\n')
         .trim();
 
-      // Se não há histórico existente, criar um novo apenas se houver diferenças
+      // If there's no existing history, create a new one only if there are differences
       if (!existingHistory) {
         if (normalizedCurrentContent !== normalizedOriginalContent) {
           const newChanges = diffLines(file.content, currentContent);
@@ -712,22 +729,22 @@ export const DiffView = memo(({ fileHistory, setFileHistory }: DiffViewProps) =>
         return;
       }
 
-      // Se já existe histórico, verificar se há mudanças reais desde a última versão
+      // If history exists, check for changes since the last version
       const lastVersion = existingHistory.versions[existingHistory.versions.length - 1];
       const normalizedLastContent = lastVersion?.content.replace(/\r\n/g, '\n').trim();
 
       if (normalizedCurrentContent === normalizedLastContent) {
-        return; // Não criar novo histórico se o conteúdo é o mesmo
+        return; // Don't create new history if content is the same
       }
 
-      // Verificar se há mudanças significativas usando diffFiles
+      // Check for significant changes using diffFiles
       const relativePath = extractRelativePath(selectedFile);
       const unifiedDiff = diffFiles(relativePath, existingHistory.originalContent, currentContent);
 
       if (unifiedDiff) {
         const newChanges = diffLines(existingHistory.originalContent, currentContent);
 
-        // Verificar se as mudanças são significativas
+        // Check if changes are significant
         const hasSignificantChanges = newChanges.some(
           (change) => (change.added || change.removed) && change.value.trim().length > 0,
         );
@@ -736,14 +753,14 @@ export const DiffView = memo(({ fileHistory, setFileHistory }: DiffViewProps) =>
           const newHistory: FileHistory = {
             originalContent: existingHistory.originalContent,
             lastModified: Date.now(),
-            changes: [...existingHistory.changes, ...newChanges].slice(-100), // Limitar histórico de mudanças
+            changes: [...existingHistory.changes, ...newChanges].slice(-100), // Limit change history
             versions: [
               ...existingHistory.versions,
               {
                 timestamp: Date.now(),
                 content: currentContent,
               },
-            ].slice(-10), // Manter apenas as 10 últimas versões
+            ].slice(-10), // Keep only the last 10 versions
             changeSource: 'auto-save',
           };
 
@@ -753,44 +770,6 @@ export const DiffView = memo(({ fileHistory, setFileHistory }: DiffViewProps) =>
     }
   }, [selectedFile, currentDocument?.value, files, setFileHistory, unsavedFiles]);
 
-  if (!selectedFile || !currentDocument) {
-    return (
-      <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
-        Select a file to view differences
-      </div>
-    );
-  }
-
-  const file = files[selectedFile];
-  const originalContent = file && 'content' in file ? file.content : '';
-  const currentContent = currentDocument.value;
-
-  const history = fileHistory[selectedFile];
-  const effectiveOriginalContent = history?.originalContent || originalContent;
-  const language = getLanguageFromExtension(selectedFile.split('.').pop() || '');
-
-  try {
-    return (
-      <div className="h-full overflow-hidden">
-        <InlineDiffComparison
-          beforeCode={effectiveOriginalContent}
-          afterCode={currentContent}
-          language={language}
-          filename={selectedFile}
-          lightTheme="github-light"
-          darkTheme="github-dark"
-        />
-      </div>
-    );
-  } catch (error) {
-    console.error('DiffView render error:', error);
-    return (
-      <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-red-400">
-        <div className="text-center">
-          <div className="i-ph:warning-circle text-4xl mb-2" />
-          <p>Failed to render diff view</p>
-        </div>
-      </div>
-    );
-  }
+  // Use the new DiffPanel component
+  return <DiffPanel fileHistory={fileHistory} setFileHistory={setFileHistory} />;
 });

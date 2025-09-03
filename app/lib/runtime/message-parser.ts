@@ -1,4 +1,12 @@
-import type { ActionType, BoltAction, BoltActionData, FileAction, ShellAction, SupabaseAction } from '~/types/actions';
+import type {
+  ActionType,
+  BoltAction,
+  BoltActionData,
+  FileAction,
+  ShellAction,
+  SupabaseAction,
+  WorkbenchAction,
+} from '~/types/actions';
 import type { BoltArtifactData } from '~/types/artifact';
 import { createScopedLogger } from '~/utils/logger';
 import { unreachable } from '~/utils/unreachable';
@@ -356,11 +364,67 @@ export class StreamingMessageParser {
       }
 
       (actionAttributes as FileAction).filePath = filePath;
+    } else if (actionType === 'workbench-action') {
+      console.log('🎬 MESSAGE PARSER: Found workbench-action in LLM response!');
+
+      const action = this.#extractAttribute(actionTag, 'action');
+      console.log('🎯 Extracted action attribute:', action);
+
+      if (!action) {
+        console.log('❌ No action attribute found in workbench-action tag');
+        logger.warn('Workbench action requires an action attribute');
+        throw new Error('Workbench action requires an action attribute');
+      }
+
+      const validActions = ['run', 'build', 'sync', 'deploy', 'test', 'preview', 'terminal'];
+
+      if (!validActions.includes(action)) {
+        console.log('❌ Invalid workbench action:', action, 'Valid actions:', validActions);
+        logger.warn(`Invalid workbench action: ${action}`);
+        throw new Error(`Invalid workbench action: ${action}. Valid actions: ${validActions.join(', ')}`);
+      }
+
+      console.log('✅ Valid workbench action:', action);
+
+      let parameters: Record<string, any> = {};
+      const parametersStr = this.#extractAttribute(actionTag, 'parameters');
+      console.log('🔧 Extracted parameters string:', parametersStr);
+
+      if (parametersStr) {
+        try {
+          parameters = JSON.parse(parametersStr);
+          console.log('✅ Parsed parameters:', parameters);
+        } catch {
+          console.log('❌ Failed to parse parameters JSON');
+          logger.warn('Invalid JSON in parameters attribute');
+          throw new Error('Invalid JSON in parameters attribute');
+        }
+      }
+
+      (actionAttributes as WorkbenchAction).action = action as WorkbenchAction['action'];
+      (actionAttributes as WorkbenchAction).parameters = parameters;
+      console.log('🎉 Workbench action parsed successfully:', { action, parameters });
+
+      // Trigger auto-execution for run actions
+      if (action === 'run') {
+        console.log('🚀 MESSAGE PARSER: Triggering auto-execution for run action!');
+
+        // Dispatch a custom event that the Workbench component can listen to
+        window.dispatchEvent(
+          new CustomEvent('workbench-action-detected', {
+            detail: {
+              action,
+              parameters,
+              timestamp: Date.now(),
+            },
+          }),
+        );
+      }
     } else if (!['shell', 'start'].includes(actionType)) {
       logger.warn(`Unknown action type '${actionType}'`);
     }
 
-    return actionAttributes as FileAction | ShellAction;
+    return actionAttributes as FileAction | ShellAction | WorkbenchAction;
   }
 
   #extractAttribute(tag: string, attributeName: string): string | undefined {

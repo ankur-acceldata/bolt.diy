@@ -104,16 +104,103 @@ export async function saveChat(db: IDBDatabase, chat: Chat): Promise<void> {
  */
 export async function deleteChat(db: IDBDatabase, id: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(['chats'], 'readwrite');
-    const store = transaction.objectStore('chats');
-    const request = store.delete(id);
+    const transaction = db.transaction(['chats', 'snapshots', 'versioned_snapshots', 'snapshot_versions'], 'readwrite');
+    const chatStore = transaction.objectStore('chats');
+    const snapshotStore = transaction.objectStore('snapshots');
+    const versionedSnapshotStore = transaction.objectStore('versioned_snapshots');
+    const versionStore = transaction.objectStore('snapshot_versions');
 
-    request.onsuccess = () => {
-      resolve();
+    let completedOperations = 0;
+    const totalOperations = 4; // chats, snapshots, versioned_snapshots cleanup, snapshot_versions
+
+    const checkCompletion = () => {
+      completedOperations++;
+
+      if (completedOperations === totalOperations) {
+        resolve();
+      }
     };
 
-    request.onerror = () => {
-      reject(request.error);
+    const handleError = (error: any) => {
+      reject(error);
+    };
+
+    /*
+     * First get the version index to find all snapshot IDs before deleting anything
+     */
+    const getVersionRequest = versionStore.get(id);
+
+    getVersionRequest.onsuccess = () => {
+      const versionIndex = getVersionRequest.result;
+
+      // Delete chat
+      const deleteChatRequest = chatStore.delete(id);
+      deleteChatRequest.onsuccess = () => checkCompletion();
+      deleteChatRequest.onerror = () => handleError(deleteChatRequest.error);
+
+      // Delete regular snapshot
+      const deleteSnapshotRequest = snapshotStore.delete(id);
+      deleteSnapshotRequest.onsuccess = () => checkCompletion();
+      deleteSnapshotRequest.onerror = () => handleError(deleteSnapshotRequest.error);
+
+      // Delete version index
+      const deleteVersionRequest = versionStore.delete(id);
+      deleteVersionRequest.onsuccess = () => checkCompletion();
+      deleteVersionRequest.onerror = () => handleError(deleteVersionRequest.error);
+
+      // Delete all versioned snapshots for this chat
+      if (!versionIndex || !versionIndex.versions || versionIndex.versions.length === 0) {
+        // No versioned snapshots to delete
+        checkCompletion();
+        return;
+      }
+
+      let deletedSnapshots = 0;
+      const totalSnapshots = versionIndex.versions.length;
+
+      for (const versionEntry of versionIndex.versions) {
+        const deleteVersionedSnapshotRequest = versionedSnapshotStore.delete(versionEntry.snapshotId);
+
+        deleteVersionedSnapshotRequest.onsuccess = () => {
+          deletedSnapshots++;
+
+          if (deletedSnapshots === totalSnapshots) {
+            checkCompletion();
+          }
+        };
+
+        deleteVersionedSnapshotRequest.onerror = () => {
+          // Continue even if snapshot deletion fails
+          deletedSnapshots++;
+
+          if (deletedSnapshots === totalSnapshots) {
+            checkCompletion();
+          }
+        };
+      }
+    };
+
+    getVersionRequest.onerror = () => {
+      /*
+       * If we can't get the version index, still delete the other stores
+       */
+      // Delete chat
+      const deleteChatRequest = chatStore.delete(id);
+      deleteChatRequest.onsuccess = () => checkCompletion();
+      deleteChatRequest.onerror = () => handleError(deleteChatRequest.error);
+
+      // Delete regular snapshot
+      const deleteSnapshotRequest = snapshotStore.delete(id);
+      deleteSnapshotRequest.onsuccess = () => checkCompletion();
+      deleteSnapshotRequest.onerror = () => handleError(deleteSnapshotRequest.error);
+
+      // Delete version index (even though get failed, try delete)
+      const deleteVersionRequest = versionStore.delete(id);
+      deleteVersionRequest.onsuccess = () => checkCompletion();
+      deleteVersionRequest.onerror = () => handleError(deleteVersionRequest.error);
+
+      // No versioned snapshots to delete since we couldn't get the index
+      checkCompletion();
     };
   });
 }
@@ -125,16 +212,42 @@ export async function deleteChat(db: IDBDatabase, id: string): Promise<void> {
  */
 export async function deleteAllChats(db: IDBDatabase): Promise<void> {
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(['chats'], 'readwrite');
-    const store = transaction.objectStore('chats');
-    const request = store.clear();
+    const transaction = db.transaction(['chats', 'snapshots', 'versioned_snapshots', 'snapshot_versions'], 'readwrite');
+    const chatStore = transaction.objectStore('chats');
+    const snapshotStore = transaction.objectStore('snapshots');
+    const versionedSnapshotStore = transaction.objectStore('versioned_snapshots');
+    const versionStore = transaction.objectStore('snapshot_versions');
 
-    request.onsuccess = () => {
-      resolve();
+    let completedOperations = 0;
+    const totalOperations = 4;
+
+    const checkCompletion = () => {
+      completedOperations++;
+
+      if (completedOperations === totalOperations) {
+        resolve();
+      }
     };
 
-    request.onerror = () => {
-      reject(request.error);
+    const handleError = (error: any) => {
+      reject(error);
     };
+
+    // Clear all stores
+    const clearChatsRequest = chatStore.clear();
+    clearChatsRequest.onsuccess = () => checkCompletion();
+    clearChatsRequest.onerror = () => handleError(clearChatsRequest.error);
+
+    const clearSnapshotsRequest = snapshotStore.clear();
+    clearSnapshotsRequest.onsuccess = () => checkCompletion();
+    clearSnapshotsRequest.onerror = () => handleError(clearSnapshotsRequest.error);
+
+    const clearVersionedSnapshotsRequest = versionedSnapshotStore.clear();
+    clearVersionedSnapshotsRequest.onsuccess = () => checkCompletion();
+    clearVersionedSnapshotsRequest.onerror = () => handleError(clearVersionedSnapshotsRequest.error);
+
+    const clearVersionsRequest = versionStore.clear();
+    clearVersionsRequest.onsuccess = () => checkCompletion();
+    clearVersionsRequest.onerror = () => handleError(clearVersionsRequest.error);
   });
 }

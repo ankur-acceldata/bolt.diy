@@ -125,6 +125,11 @@ const SETTINGS_KEYS = {
   EVENT_LOGS: 'isEventLogsEnabled',
   PROMPT_ID: 'promptId',
   DEVELOPER_MODE: 'isDeveloperMode',
+  SYNC_ENABLED: 'isSyncEnabled',
+  SYNC_AUTO_SYNC: 'syncAutoSync',
+  SYNC_INTERVAL: 'syncInterval',
+  SYNC_REMOTE_URL: 'syncRemoteUrl',
+  AUTO_EXECUTION_LIMIT: 'autoExecutionLimit',
 } as const;
 
 // Initialize settings from localStorage or defaults
@@ -147,13 +152,42 @@ const getInitialSettings = () => {
     }
   };
 
+  const getStoredString = (key: string, defaultValue: string): string => {
+    if (!isBrowser) {
+      return defaultValue;
+    }
+
+    return localStorage.getItem(key) || defaultValue;
+  };
+
+  const getStoredNumber = (key: string, defaultValue: number): number => {
+    if (!isBrowser) {
+      return defaultValue;
+    }
+
+    const stored = localStorage.getItem(key);
+
+    if (stored === null) {
+      return defaultValue;
+    }
+
+    const parsed = parseInt(stored, 10);
+
+    return isNaN(parsed) ? defaultValue : parsed;
+  };
+
   return {
     latestBranch: getStoredBoolean(SETTINGS_KEYS.LATEST_BRANCH, false),
     autoSelectTemplate: getStoredBoolean(SETTINGS_KEYS.AUTO_SELECT_TEMPLATE, true),
     contextOptimization: getStoredBoolean(SETTINGS_KEYS.CONTEXT_OPTIMIZATION, true),
-    eventLogs: getStoredBoolean(SETTINGS_KEYS.EVENT_LOGS, true),
+    eventLogs: getStoredBoolean(SETTINGS_KEYS.EVENT_LOGS, false),
     promptId: isBrowser ? localStorage.getItem(SETTINGS_KEYS.PROMPT_ID) || 'default' : 'default',
     developerMode: getStoredBoolean(SETTINGS_KEYS.DEVELOPER_MODE, false),
+    syncEnabled: getStoredBoolean(SETTINGS_KEYS.SYNC_ENABLED, true),
+    syncAutoSync: getStoredBoolean(SETTINGS_KEYS.SYNC_AUTO_SYNC, true),
+    syncInterval: getStoredNumber(SETTINGS_KEYS.SYNC_INTERVAL, 5000),
+    syncRemoteUrl: getStoredString(SETTINGS_KEYS.SYNC_REMOTE_URL, '/api/fern-fs'),
+    autoExecutionLimit: getStoredNumber(SETTINGS_KEYS.AUTO_EXECUTION_LIMIT, 3),
   };
 };
 
@@ -165,6 +199,15 @@ export const autoSelectStarterTemplate = atom<boolean>(initialSettings.autoSelec
 export const enableContextOptimizationStore = atom<boolean>(initialSettings.contextOptimization);
 export const isEventLogsEnabled = atom<boolean>(initialSettings.eventLogs);
 export const promptStore = atom<string>(initialSettings.promptId);
+
+// Sync settings stores
+export const syncEnabledStore = atom<boolean>(initialSettings.syncEnabled);
+export const syncAutoSyncStore = atom<boolean>(initialSettings.syncAutoSync);
+export const syncIntervalStore = atom<number>(initialSettings.syncInterval);
+export const syncRemoteUrlStore = atom<string>(initialSettings.syncRemoteUrl);
+
+// Auto-execution settings
+export const autoExecutionLimitStore = atom<number>(initialSettings.autoExecutionLimit);
 
 // Helper functions to update settings with persistence
 export const updateLatestBranch = (enabled: boolean) => {
@@ -190,6 +233,32 @@ export const updateEventLogs = (enabled: boolean) => {
 export const updatePromptId = (id: string) => {
   promptStore.set(id);
   localStorage.setItem(SETTINGS_KEYS.PROMPT_ID, id);
+};
+
+// Sync settings update functions
+export const updateSyncEnabled = (enabled: boolean) => {
+  syncEnabledStore.set(enabled);
+  localStorage.setItem(SETTINGS_KEYS.SYNC_ENABLED, JSON.stringify(enabled));
+};
+
+export const updateSyncAutoSync = (enabled: boolean) => {
+  syncAutoSyncStore.set(enabled);
+  localStorage.setItem(SETTINGS_KEYS.SYNC_AUTO_SYNC, JSON.stringify(enabled));
+};
+
+export const updateSyncInterval = (interval: number) => {
+  syncIntervalStore.set(interval);
+  localStorage.setItem(SETTINGS_KEYS.SYNC_INTERVAL, interval.toString());
+};
+
+export const updateSyncRemoteUrl = (url: string) => {
+  syncRemoteUrlStore.set(url);
+  localStorage.setItem(SETTINGS_KEYS.SYNC_REMOTE_URL, url);
+};
+
+export const updateAutoExecutionLimit = (limit: number) => {
+  autoExecutionLimitStore.set(limit);
+  localStorage.setItem(SETTINGS_KEYS.AUTO_EXECUTION_LIMIT, limit.toString());
 };
 
 // Initialize tab configuration from localStorage or defaults

@@ -1,314 +1,121 @@
 import { useStore } from '@nanostores/react';
-import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
-import { computed } from 'nanostores';
-import { memo, useCallback, useEffect, useState, useMemo } from 'react';
+import { motion, type HTMLMotionProps } from 'framer-motion';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Popover, Transition } from '@headlessui/react';
-import { diffLines, type Change } from 'diff';
-import { getLanguageFromExtension } from '~/utils/getLanguageFromExtension';
-import type { FileHistory } from '~/types/actions';
-import { DiffView } from './DiffView';
+
 import {
   type OnChangeCallback as OnEditorChange,
   type OnScrollCallback as OnEditorScroll,
 } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { IconButton } from '~/components/ui/IconButton';
 import { PanelHeaderButton } from '~/components/ui/PanelHeaderButton';
-import { Slider, type SliderOptions } from '~/components/ui/Slider';
-import { workbenchStore, type WorkbenchViewType } from '~/lib/stores/workbench';
+import { ButtonDropdown } from '~/components/ui/ButtonDropdown';
+import { Slider } from '~/components/ui/Slider';
+import { StatusIndicator } from '~/components/ui/StatusIndicator';
+import { workbenchStore } from '~/lib/stores/workbench';
 import { classNames } from '~/utils/classNames';
-import { cubicEasingFn } from '~/utils/easings';
-import { renderLogger } from '~/utils/logger';
+import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { EditorPanel } from './EditorPanel';
-import { Preview } from './Preview';
+import { DiffView } from './DiffView';
+import { FileModifiedDropdown } from './FileModifiedDropdown';
 import useViewport from '~/lib/hooks';
 import { PushToGitHubDialog } from '~/components/@settings/tabs/connections/components/PushToGitHubDialog';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { usePreviewStore } from '~/lib/stores/previews';
 import { chatStore } from '~/lib/stores/chat';
-import type { ElementInfo } from './Inspector';
+import { useSync } from '~/lib/hooks/useSync';
+import { useSettings } from '~/lib/hooks/useSettings';
+import { debugProjectId } from '~/utils/fileLocks';
+import { InternalActionsService } from '~/lib/services/internalActionsService';
 
-interface WorkspaceProps {
-  chatStarted?: boolean;
-  isStreaming?: boolean;
-  metadata?: {
-    gitUrl?: string;
-  };
-  updateChatMestaData?: (metadata: any) => void;
-  setSelectedElement?: (element: ElementInfo | null) => void;
-}
+// Extracted imports
+import type { WorkspaceProps } from '~/types/jobConfig';
+import { useAdhocRun } from '~/lib/hooks/useAdhocRun';
+import { usePipelineConfigHandler } from '~/lib/hooks/usePipelineConfigHandler';
+import { viewTransition, sliderOptions, workbenchVariants } from './workbench.constants';
+import type { FileHistory } from '~/types/actions';
 
-const viewTransition = { ease: cubicEasingFn };
-
-const sliderOptions: SliderOptions<WorkbenchViewType> = {
-  left: {
-    value: 'code',
-    text: 'Code',
-  },
-  middle: {
-    value: 'diff',
-    text: 'Diff',
-  },
-  right: {
-    value: 'preview',
-    text: 'Preview',
-  },
-};
-
-const workbenchVariants = {
-  closed: {
-    width: 0,
-    transition: {
-      duration: 0.2,
-      ease: cubicEasingFn,
-    },
-  },
-  open: {
-    width: 'var(--workbench-width)',
-    transition: {
-      duration: 0.2,
-      ease: cubicEasingFn,
-    },
-  },
-} satisfies Variants;
-
-const FileModifiedDropdown = memo(
-  ({
-    fileHistory,
-    onSelectFile,
-  }: {
-    fileHistory: Record<string, FileHistory>;
-    onSelectFile: (filePath: string) => void;
-  }) => {
-    const modifiedFiles = Object.entries(fileHistory);
-    const hasChanges = modifiedFiles.length > 0;
-    const [searchQuery, setSearchQuery] = useState('');
-
-    const filteredFiles = useMemo(() => {
-      return modifiedFiles.filter(([filePath]) => filePath.toLowerCase().includes(searchQuery.toLowerCase()));
-    }, [modifiedFiles, searchQuery]);
-
-    return (
-      <div className="flex items-center gap-2">
-        <Popover className="relative">
-          {({ open }: { open: boolean }) => (
-            <>
-              <Popover.Button className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-2 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-item-contentDefault">
-                <span>File Changes</span>
-                {hasChanges && (
-                  <span className="w-5 h-5 rounded-full bg-accent-500/20 text-accent-500 text-xs flex items-center justify-center border border-accent-500/30">
-                    {modifiedFiles.length}
-                  </span>
-                )}
-              </Popover.Button>
-              <Transition
-                show={open}
-                enter="transition duration-100 ease-out"
-                enterFrom="transform scale-95 opacity-0"
-                enterTo="transform scale-100 opacity-100"
-                leave="transition duration-75 ease-out"
-                leaveFrom="transform scale-100 opacity-100"
-                leaveTo="transform scale-95 opacity-0"
-              >
-                <Popover.Panel className="absolute right-0 z-20 mt-2 w-80 origin-top-right rounded-xl bg-bolt-elements-background-depth-2 shadow-xl border border-bolt-elements-borderColor">
-                  <div className="p-2">
-                    <div className="relative mx-2 mb-2">
-                      <input
-                        type="text"
-                        placeholder="Search files..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                      />
-                      <div className="absolute left-2 top-1/2 -translate-y-1/2 text-bolt-elements-textTertiary">
-                        <div className="i-ph:magnifying-glass" />
-                      </div>
-                    </div>
-
-                    <div className="max-h-60 overflow-y-auto">
-                      {filteredFiles.length > 0 ? (
-                        filteredFiles.map(([filePath, history]) => {
-                          const extension = filePath.split('.').pop() || '';
-                          const language = getLanguageFromExtension(extension);
-
-                          return (
-                            <button
-                              key={filePath}
-                              onClick={() => onSelectFile(filePath)}
-                              className="w-full px-3 py-2 text-left rounded-md hover:bg-bolt-elements-background-depth-1 transition-colors group bg-transparent"
-                            >
-                              <div className="flex items-center gap-2">
-                                <div className="shrink-0 w-5 h-5 text-bolt-elements-textTertiary">
-                                  {['typescript', 'javascript', 'jsx', 'tsx'].includes(language) && (
-                                    <div className="i-ph:file-js" />
-                                  )}
-                                  {['css', 'scss', 'less'].includes(language) && <div className="i-ph:paint-brush" />}
-                                  {language === 'html' && <div className="i-ph:code" />}
-                                  {language === 'json' && <div className="i-ph:brackets-curly" />}
-                                  {language === 'python' && <div className="i-ph:file-text" />}
-                                  {language === 'markdown' && <div className="i-ph:article" />}
-                                  {['yaml', 'yml'].includes(language) && <div className="i-ph:file-text" />}
-                                  {language === 'sql' && <div className="i-ph:database" />}
-                                  {language === 'dockerfile' && <div className="i-ph:cube" />}
-                                  {language === 'shell' && <div className="i-ph:terminal" />}
-                                  {![
-                                    'typescript',
-                                    'javascript',
-                                    'css',
-                                    'html',
-                                    'json',
-                                    'python',
-                                    'markdown',
-                                    'yaml',
-                                    'yml',
-                                    'sql',
-                                    'dockerfile',
-                                    'shell',
-                                    'jsx',
-                                    'tsx',
-                                    'scss',
-                                    'less',
-                                  ].includes(language) && <div className="i-ph:file-text" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex flex-col min-w-0">
-                                      <span className="truncate text-sm font-medium text-bolt-elements-textPrimary">
-                                        {filePath.split('/').pop()}
-                                      </span>
-                                      <span className="truncate text-xs text-bolt-elements-textTertiary">
-                                        {filePath}
-                                      </span>
-                                    </div>
-                                    {(() => {
-                                      // Calculate diff stats
-                                      const { additions, deletions } = (() => {
-                                        if (!history.originalContent) {
-                                          return { additions: 0, deletions: 0 };
-                                        }
-
-                                        const normalizedOriginal = history.originalContent.replace(/\r\n/g, '\n');
-                                        const normalizedCurrent =
-                                          history.versions[history.versions.length - 1]?.content.replace(
-                                            /\r\n/g,
-                                            '\n',
-                                          ) || '';
-
-                                        if (normalizedOriginal === normalizedCurrent) {
-                                          return { additions: 0, deletions: 0 };
-                                        }
-
-                                        const changes = diffLines(normalizedOriginal, normalizedCurrent, {
-                                          newlineIsToken: false,
-                                          ignoreWhitespace: true,
-                                          ignoreCase: false,
-                                        });
-
-                                        return changes.reduce(
-                                          (acc: { additions: number; deletions: number }, change: Change) => {
-                                            if (change.added) {
-                                              acc.additions += change.value.split('\n').length;
-                                            }
-
-                                            if (change.removed) {
-                                              acc.deletions += change.value.split('\n').length;
-                                            }
-
-                                            return acc;
-                                          },
-                                          { additions: 0, deletions: 0 },
-                                        );
-                                      })();
-
-                                      const showStats = additions > 0 || deletions > 0;
-
-                                      return (
-                                        showStats && (
-                                          <div className="flex items-center gap-1 text-xs shrink-0">
-                                            {additions > 0 && <span className="text-green-500">+{additions}</span>}
-                                            {deletions > 0 && <span className="text-red-500">-{deletions}</span>}
-                                          </div>
-                                        )
-                                      );
-                                    })()}
-                                  </div>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="flex flex-col items-center justify-center p-4 text-center">
-                          <div className="w-12 h-12 mb-2 text-bolt-elements-textTertiary">
-                            <div className="i-ph:file-dashed" />
-                          </div>
-                          <p className="text-sm font-medium text-bolt-elements-textPrimary">
-                            {searchQuery ? 'No matching files' : 'No modified files'}
-                          </p>
-                          <p className="text-xs text-bolt-elements-textTertiary mt-1">
-                            {searchQuery ? 'Try another search' : 'Changes will appear here as you edit'}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {hasChanges && (
-                    <div className="border-t border-bolt-elements-borderColor p-2">
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(filteredFiles.map(([filePath]) => filePath).join('\n'));
-                          toast('File list copied to clipboard', {
-                            icon: <div className="i-ph:check-circle text-accent-500" />,
-                          });
-                        }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-1 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary"
-                      >
-                        Copy File List
-                      </button>
-                    </div>
-                  )}
-                </Popover.Panel>
-              </Transition>
-            </>
-          )}
-        </Popover>
-      </div>
-    );
-  },
-);
+const logger = createScopedLogger('Workbench');
 
 export const Workbench = memo(
-  ({ chatStarted, isStreaming, metadata, updateChatMestaData, setSelectedElement }: WorkspaceProps) => {
+  ({
+    chatStarted,
+    isStreaming,
+    metadata,
+    updateChatMestaData,
+    selectedTemplate,
+    onSendMessage,
+    onSetChatInput,
+    model,
+    provider,
+  }: WorkspaceProps) => {
     renderLogger.trace('Workbench');
 
     const [isSyncing, setIsSyncing] = useState(false);
     const [isPushDialogOpen, setIsPushDialogOpen] = useState(false);
     const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
 
+    // Initialize sync and settings hooks
+    const { forceSync, isInitialized: syncInitialized, syncStatus, currentProjectId } = useSync();
+    const { syncEnabled } = useSettings();
+
+    // Use extracted hooks
+    const { isExecuting, executeAdhocRun } = useAdhocRun();
+
+    // Handle pipeline config messages
+    usePipelineConfigHandler({
+      currentProjectId,
+    });
+
+    // Log the current project ID for debugging
+    useEffect(() => {
+      if (currentProjectId) {
+        logger.info('Workbench using project ID:', currentProjectId);
+        debugProjectId('Workbench.client.tsx - useSync initialization');
+      }
+    }, [currentProjectId]);
+
     // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
 
-    const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
+    // const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
+    const hasPreview = false;
     const showWorkbench = useStore(workbenchStore.showWorkbench);
     const selectedFile = useStore(workbenchStore.selectedFile);
     const currentDocument = useStore(workbenchStore.currentDocument);
     const unsavedFiles = useStore(workbenchStore.unsavedFiles);
     const files = useStore(workbenchStore.files);
     const selectedView = useStore(workbenchStore.currentView);
+
     const { showChat } = useStore(chatStore);
     const canHideChat = showWorkbench || !showChat;
 
     const isSmallViewport = useViewport(1024);
 
-    const setSelectedView = (view: WorkbenchViewType) => {
+    const setSelectedView = (view: any) => {
       workbenchStore.currentView.set(view);
     };
 
+    const handleExecuteAdhocRun = useCallback(
+      async (isEditAndRun: boolean = false) => {
+        await executeAdhocRun(isEditAndRun, selectedTemplate, currentProjectId);
+      },
+      [executeAdhocRun, selectedTemplate, currentProjectId],
+    );
+
+    /*
+     * useEffect(() => {
+     *   if (hasPreview) {
+     *     setSelectedView('preview');
+     *   }
+     * }, [hasPreview]);
+     */
+
+    // Add an effect to set default view to code on init
     useEffect(() => {
-      if (hasPreview) {
-        setSelectedView('preview');
+      // Only set to code if no preview and not already set to something else
+      if (!hasPreview) {
+        setSelectedView('code');
       }
-    }, [hasPreview]);
+    }, []); // Empty dependency array to run once on mount
 
     useEffect(() => {
       workbenchStore.setDocuments(files);
@@ -340,25 +147,215 @@ export const Workbench = memo(
     }, []);
 
     const onFileReset = useCallback(() => {
+      const currentDocument = workbenchStore.currentDocument.get();
+
       workbenchStore.resetCurrentDocument();
-    }, []);
 
-    const handleSyncFiles = useCallback(async () => {
-      setIsSyncing(true);
+      // Clear the file history for the reset file to sync with diff state
+      if (currentDocument?.filePath) {
+        setFileHistory((prev) => {
+          const newHistory = { ...prev };
+          delete newHistory[currentDocument.filePath];
 
-      try {
-        const directoryHandle = await window.showDirectoryPicker();
-        await workbenchStore.syncFiles(directoryHandle);
-        toast.success('Files synced successfully');
-      } catch (error) {
-        console.error('Error syncing files:', error);
-        toast.error('Failed to sync files');
-      } finally {
-        setIsSyncing(false);
+          return newHistory;
+        });
       }
     }, []);
 
-    const handleSelectFile = useCallback((filePath: string) => {
+    const handleSyncFiles = useCallback(async () => {
+      // Check if sync is enabled and initialized
+      if (!syncEnabled) {
+        toast.error('File sync is not enabled. Please enable it in Settings → Features');
+        return;
+      }
+
+      if (!syncInitialized) {
+        // Service not initialized - status indicator will show this
+        return;
+      }
+
+      setIsSyncing(true);
+
+      try {
+        // Use the new Golang API sync instead of browser file system
+        await forceSync();
+        toast.success('Files synced successfully to Golang API and Minio storage');
+      } catch (error) {
+        logger.error('Error syncing files:', error);
+        toast.error('Failed to sync files to Golang API');
+      } finally {
+        setIsSyncing(false);
+      }
+    }, [syncEnabled, syncInitialized, forceSync]);
+
+    // Initialize InternalActionsService with workbench functions
+    useEffect(() => {
+      // Set the executeAdhocRun function for the internal actions service
+      InternalActionsService.setExecuteAdhocRun(handleExecuteAdhocRun);
+
+      // Set the sync function
+      InternalActionsService.setSyncFiles(handleSyncFiles);
+
+      // Set workbench store reference
+      InternalActionsService.setWorkbenchStore(workbenchStore);
+
+      logger.info('InternalActionsService initialized with workbench functions');
+    }, [handleExecuteAdhocRun, handleSyncFiles]);
+
+    // Auto-execute workbench actions from AI messages
+    const lastExecutedAtRef = useRef(0);
+    const isExecutingRef = useRef(false);
+    const executionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+      const handleWorkbenchActionEvent = (event: CustomEvent) => {
+        const { action, parameters, timestamp } = event.detail;
+        console.log('🎯 WORKBENCH: Received workbench-action event!', { action, parameters, timestamp });
+
+        if (action === 'run') {
+          const now = Date.now();
+          const timeSinceLastRun = now - lastExecutedAtRef.current;
+
+          // Enhanced debounce: Check both time-based and execution state
+          if (timeSinceLastRun > 10000 && !isExecutingRef.current) {
+            console.log('🚀 WORKBENCH: Auto-executing run action from AI message!');
+            console.log('📁 WORKBENCH: Current files count:', Object.keys(files || {}).length);
+
+            // Set execution state immediately to prevent concurrent executions
+            lastExecutedAtRef.current = now;
+            isExecutingRef.current = true;
+
+            // Safety timeout to reset execution state after 30 seconds
+            if (executionTimeoutRef.current) {
+              clearTimeout(executionTimeoutRef.current);
+            }
+
+            executionTimeoutRef.current = setTimeout(() => {
+              console.log('⚠️ WORKBENCH: Execution timeout - resetting execution state');
+              isExecutingRef.current = false;
+            }, 30000);
+
+            try {
+              // Show visual indicator in chat
+              const runIndicator = document.createElement('div');
+              runIndicator.className =
+                'flex items-center gap-2 p-3 mb-2 rounded-lg bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent border border-bolt-elements-borderColorActive';
+              runIndicator.innerHTML = `
+                <div class="i-ph:play-circle-fill text-xl animate-pulse"></div>
+                <div class="flex-1">
+                  <div class="font-medium">Auto-Running Application</div>
+                  <div class="text-sm opacity-90">Executing the generated code automatically...</div>
+                </div>
+                <div class="i-ph:spinner animate-spin text-xl"></div>
+              `;
+
+              // Find the chat messages container and append the indicator
+              const messagesContainer =
+                document.querySelector('[class*="messages"]') ||
+                document.querySelector('.flex.flex-col.gap-4') ||
+                document.querySelector('[role="log"]');
+
+              if (messagesContainer) {
+                messagesContainer.appendChild(runIndicator);
+                console.log('📢 WORKBENCH: Added visual run indicator to chat');
+              }
+
+              // Delay to ensure files are fully written
+              console.log('⏳ WORKBENCH: Waiting 3 seconds for files to be written...');
+              setTimeout(async () => {
+                console.log('⚡ WORKBENCH: Executing handleExecuteAdhocRun now!');
+
+                try {
+                  await handleExecuteAdhocRun(false);
+                  console.log('✅ WORKBENCH: Auto-run triggered successfully!');
+
+                  // Update the indicator to show completion
+                  if (runIndicator && runIndicator.parentNode) {
+                    runIndicator.innerHTML = `
+                       <div class="i-ph:check-circle-fill text-xl text-green-500"></div>
+                       <div class="flex-1">
+                         <div class="font-medium">Application Running</div>
+                         <div class="text-sm opacity-90">Check the terminal below for output and logs</div>
+                       </div>
+                     `;
+
+                    // Remove the indicator after a few seconds
+                    setTimeout(() => {
+                      if (runIndicator.parentNode) {
+                        runIndicator.style.transition = 'opacity 0.5s';
+                        runIndicator.style.opacity = '0';
+                        setTimeout(() => runIndicator.remove(), 500);
+                      }
+                    }, 5000);
+                  }
+                } catch (error) {
+                  console.error('❌ WORKBENCH: Auto-run failed:', error);
+
+                  // Update indicator to show error
+                  if (runIndicator && runIndicator.parentNode) {
+                    runIndicator.innerHTML = `
+                       <div class="i-ph:x-circle-fill text-xl text-red-500"></div>
+                       <div class="flex-1">
+                         <div class="font-medium">Execution Failed</div>
+                         <div class="text-sm opacity-90">Check the console for error details</div>
+                       </div>
+                     `;
+                  }
+                } finally {
+                  // Reset execution state after completion or failure
+                  isExecutingRef.current = false;
+
+                  if (executionTimeoutRef.current) {
+                    clearTimeout(executionTimeoutRef.current);
+                    executionTimeoutRef.current = null;
+                  }
+
+                  console.log('🔓 WORKBENCH: Execution state reset, ready for next run');
+                }
+              }, 3000);
+            } catch (error) {
+              console.error('❌ WORKBENCH: Auto-run setup failed:', error);
+              isExecutingRef.current = false; // Reset on setup failure
+
+              if (executionTimeoutRef.current) {
+                clearTimeout(executionTimeoutRef.current);
+                executionTimeoutRef.current = null;
+              }
+            }
+          } else {
+            const timeElapsedSeconds = Math.round(timeSinceLastRun / 1000);
+            const executionStatus = isExecutingRef.current ? ' - another execution in progress' : '';
+            console.log(
+              `⏭️ WORKBENCH: Skipping duplicate execution (only ${timeElapsedSeconds}s since last run${executionStatus})`,
+            );
+          }
+        } else if (action === 'sync') {
+          console.log('🔄 WORKBENCH: Sync action detected - would trigger sync');
+
+          // Could add handleSyncFiles() here if needed
+        } else if (action === 'build') {
+          console.log('🔨 WORKBENCH: Build action detected - would trigger build');
+
+          // Could add build logic here if needed
+        }
+      };
+
+      // Listen for the custom event from the message parser
+      window.addEventListener('workbench-action-detected', handleWorkbenchActionEvent as EventListener);
+      console.log('📡 WORKBENCH: Listening for workbench-action events');
+
+      return () => {
+        window.removeEventListener('workbench-action-detected', handleWorkbenchActionEvent as EventListener);
+
+        // Cleanup timeout on component unmount
+        if (executionTimeoutRef.current) {
+          clearTimeout(executionTimeoutRef.current);
+          executionTimeoutRef.current = null;
+        }
+      };
+    }, [handleExecuteAdhocRun, files]);
+
+    const handleDiffFileSelect = useCallback((filePath: string) => {
       workbenchStore.setSelectedFile(filePath);
       workbenchStore.currentView.set('diff');
     }, []);
@@ -383,7 +380,7 @@ export const Workbench = memo(
             )}
           >
             <div className="absolute inset-0 px-2 lg:px-4">
-              <div className="h-full flex flex-col bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor shadow-sm rounded-lg overflow-hidden">
+              <div className="h-full flex flex-col bg-bolt-elements-bg-depth-1 border border-bolt-elements-borderColor shadow-sm rounded-lg overflow-hidden">
                 <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
                   <button
                     className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
@@ -398,62 +395,75 @@ export const Workbench = memo(
                   <div className="ml-auto" />
                   {selectedView === 'code' && (
                     <div className="flex overflow-y-auto">
-                      <PanelHeaderButton
-                        className="mr-1 text-sm"
-                        onClick={() => {
-                          workbenchStore.toggleTerminal(!workbenchStore.showTerminal.get());
-                        }}
-                      >
-                        <div className="i-ph:terminal" />
-                        Toggle Terminal
-                      </PanelHeaderButton>
-                      <DropdownMenu.Root>
-                        <DropdownMenu.Trigger className="text-sm flex items-center gap-1 text-bolt-elements-item-contentDefault bg-transparent enabled:hover:text-bolt-elements-item-contentActive rounded-md p-1 enabled:hover:bg-bolt-elements-item-backgroundActive disabled:cursor-not-allowed">
-                          <div className="i-ph:box-arrow-up" />
-                          Sync
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Content
-                          className={classNames(
-                            'min-w-[240px] z-[250]',
-                            'bg-white dark:bg-[#141414]',
-                            'rounded-lg shadow-lg',
-                            'border border-gray-200/50 dark:border-gray-800/50',
-                            'animate-in fade-in-0 zoom-in-95',
-                            'py-1',
-                          )}
-                          sideOffset={5}
+                      <div className="flex items-center mr-1">
+                        <ButtonDropdown
+                          onMainClick={() => handleExecuteAdhocRun(false)}
+                          disabled={isExecuting || !currentProjectId}
+                          variant="accent"
+                          size="sm"
+                          className="px-2 py-1 text-sm focus:ring-0 focus:ring-offset-0 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive shadow-sm"
+                          dropdownTriggerClassName="px-2 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive"
+                          options={[
+                            {
+                              label: 'Edit Config & Run',
+                              value: 'edit-config',
+                              icon: 'i-ph:gear text-bolt-elements-item-contentAccent',
+                              onClick: () => handleExecuteAdhocRun(true),
+                            },
+                          ]}
                           align="end"
+                          showArrow={true}
                         >
-                          <DropdownMenu.Item
-                            className={classNames(
-                              'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
-                            )}
-                            onClick={handleSyncFiles}
-                            disabled={isSyncing}
-                          >
-                            <div className="flex items-center gap-2">
-                              {isSyncing ? <div className="i-ph:spinner" /> : <div className="i-ph:cloud-arrow-down" />}
-                              <span>{isSyncing ? 'Syncing...' : 'Sync Files'}</span>
-                            </div>
-                          </DropdownMenu.Item>
-                          <DropdownMenu.Item
-                            className={classNames(
-                              'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
-                            )}
-                            onClick={() => setIsPushDialogOpen(true)}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="i-ph:git-branch" />
-                              Push to GitHub
-                            </div>
-                          </DropdownMenu.Item>
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Root>
+                          {isExecuting ? (
+                            <div className="i-ph:spinner animate-spin text-bolt-elements-item-contentAccent" />
+                          ) : (
+                            <div className="i-ph:play text-bolt-elements-item-contentAccent" />
+                          )}
+                        </ButtonDropdown>
+                      </div>
+                      {/* <PanelHeaderButton
+                      className="mr-1 text-sm"
+                      onClick={() => {
+                        workbenchStore.toggleTerminal(!workbenchStore.showTerminal.get());
+                      }}
+                    >
+                      <div className="i-ph:terminal" />
+                      Toggle Terminal
+                    </PanelHeaderButton> */}
+                      <div className="flex items-center gap-2">
+                        <PanelHeaderButton
+                          className="mr-1 text-sm bg-bolt-elements-bg-depth-3 border border-bolt-elements-borderColor text-bolt-elements-textSecondary hover:bg-bolt-elements-bg-depth-4 hover:text-bolt-elements-textPrimary shadow-sm"
+                          onClick={handleSyncFiles}
+                          disabled={isSyncing || !syncInitialized}
+                        >
+                          {isSyncing ? (
+                            <div className="i-ph:spinner animate-spin text-bolt-elements-item-contentAccent" />
+                          ) : (
+                            <div className="i-ph:cloud-arrow-up text-bolt-elements-item-contentAccent" />
+                          )}
+                          Sync
+                        </PanelHeaderButton>
+                        <StatusIndicator
+                          status={
+                            !syncInitialized
+                              ? 'offline'
+                              : !syncStatus.connected
+                                ? 'warning'
+                                : syncStatus.isRunning
+                                  ? 'loading'
+                                  : syncStatus.pendingChanges > 0
+                                    ? 'warning'
+                                    : 'success'
+                          }
+                          pulse={syncStatus.isRunning}
+                          size="sm"
+                        />
+                      </div>
                     </div>
                   )}
 
                   {selectedView === 'diff' && (
-                    <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleSelectFile} />
+                    <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleDiffFileSelect} />
                   )}
                   <IconButton
                     icon="i-ph:x-circle"
@@ -478,6 +488,10 @@ export const Workbench = memo(
                       onEditorChange={onEditorChange}
                       onFileSave={onFileSave}
                       onFileReset={onFileReset}
+                      onSendMessage={onSendMessage}
+                      onSetChatInput={onSetChatInput}
+                      model={model}
+                      provider={provider}
                     />
                   </View>
                   <View
@@ -486,9 +500,9 @@ export const Workbench = memo(
                   >
                     <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
                   </View>
-                  <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
+                  {/* <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
                     <Preview setSelectedElement={setSelectedElement} />
-                  </View>
+                  </View> */}
                 </div>
               </div>
             </div>
@@ -498,7 +512,7 @@ export const Workbench = memo(
             onClose={() => setIsPushDialogOpen(false)}
             onPush={async (repoName, username, token, isPrivate) => {
               try {
-                console.log('Dialog onPush called with isPrivate =', isPrivate);
+                logger.info('Dialog onPush called with isPrivate =', isPrivate);
 
                 const commitMessage = prompt('Please enter a commit message:', 'Initial commit') || 'Initial commit';
                 const repoUrl = await workbenchStore.pushToGitHub(repoName, commitMessage, username, token, isPrivate);
@@ -512,7 +526,7 @@ export const Workbench = memo(
 
                 return repoUrl;
               } catch (error) {
-                console.error('Error pushing to GitHub:', error);
+                logger.error('Error pushing to GitHub:', error);
                 toast.error('Failed to push to GitHub');
                 throw error;
               }

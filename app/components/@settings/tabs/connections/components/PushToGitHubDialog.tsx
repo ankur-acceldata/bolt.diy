@@ -13,6 +13,7 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { extractRelativePath } from '~/utils/diff';
 import { formatSize } from '~/utils/formatSize';
 import type { FileMap, File } from '~/lib/stores/files';
+import { getBasePath } from '~/utils/api';
 
 // UI Components
 import { Badge, EmptyState, StatusIndicator, SearchInput } from '~/components/ui';
@@ -453,7 +454,7 @@ export function PushToGitHubDialog({ isOpen, onClose, onPush }: PushToGitHubDial
                       Close
                     </motion.button>
                     <motion.a
-                      href="/settings/connections"
+                      href={`${getBasePath()}settings/connections`}
                       className="px-4 py-2 rounded-lg bg-purple-500 text-white text-sm hover:bg-purple-600 inline-flex items-center gap-2"
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}

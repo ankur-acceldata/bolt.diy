@@ -4,3 +4,21 @@ compatibility_flags = ["nodejs_compat"]
 compatibility_date = "2025-03-28"
 pages_build_output_dir = "./build/client"
 send_metrics = false
+
+# No hardcoded base path - configure via environment variables
+# [vars]
+# BASE_PATH = "/your-base-path"  # Set this in your deployment environment
+
+# Dynamic route configuration - these will be updated based on your BASE_PATH
+# Remove these rules if not using a base path, or update the patterns to match your BASE_PATH
+# [[pages.rules]]
+# pattern = "/your-base-path/*"
+# priority = 100
+
+# [[pages.rules]]
+# pattern = "/your-base-path/assets/*"
+# priority = 200
+
+# [[pages.rules]]
+# pattern = "/your-base-path/build/*" 
+# priority = 200

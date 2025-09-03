@@ -29,9 +29,11 @@ export async function createSummary(props: {
     } else if (message.role == 'assistant') {
       let content = message.content;
 
-      content = simplifyBoltActions(content);
-      content = content.replace(/<div class=\\"__boltThought__\\">.*?<\/div>/s, '');
-      content = content.replace(/<think>.*?<\/think>/s, '');
+      if (typeof content === 'string') {
+        content = simplifyBoltActions(content);
+        content = content.replace(/<div class=\\"__boltThought__\\">.*?<\/div>/s, '');
+        content = content.replace(/<think>.*?<\/think>/s, '');
+      }
 
       return { ...message, content };
     }
@@ -69,7 +71,7 @@ export async function createSummary(props: {
   }
 
   let slicedMessages = processedMessages;
-  const { summary } = extractCurrentContext(processedMessages);
+  const { summary } = extractCurrentContext(processedMessages as any);
   let summaryText: string | undefined = undefined;
   let chatId: string | undefined = undefined;
 
@@ -94,10 +96,36 @@ ${summary.summary}`;
 
   logger.debug('Sliced Messages:', slicedMessages.length);
 
-  const extractTextContent = (message: Message) =>
-    Array.isArray(message.content)
-      ? (message.content.find((item) => item.type === 'text')?.text as string) || ''
-      : message.content;
+  const extractTextContent = (message: any) => {
+    if (typeof message.content === 'string') {
+      return message.content;
+    }
+
+    if (Array.isArray(message.content)) {
+      const textItem = message.content.find((item: any) => item.type === 'text');
+
+      if (textItem && textItem.text) {
+        // Handle nested text arrays
+        if (Array.isArray(textItem.text)) {
+          return textItem.text
+            .map((t: any) =>
+              typeof t === 'string'
+                ? t
+                : t && typeof t === 'object' && t.type === 'text'
+                  ? typeof t.text === 'string'
+                    ? t.text
+                    : ''
+                  : '',
+            )
+            .join(' ');
+        }
+
+        return typeof textItem.text === 'string' ? textItem.text : '';
+      }
+    }
+
+    return '';
+  };
 
   // select files from the list of code file from the project that might be useful for the current request from the user
   const resp = await generateText({
@@ -171,7 +199,7 @@ Below is the chat after that:
 <new_chats>
 ${slicedMessages
   .map((x) => {
-    return `---\n[${x.role}] ${extractTextContent(x)}\n---`;
+    return `---\n[${x.role}] ${extractTextContent(x as any)}\n---`;
   })
   .join('\n')}
 </new_chats>

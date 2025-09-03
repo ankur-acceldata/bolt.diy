@@ -13,6 +13,8 @@ import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
+import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
+import { getProjectId } from '~/utils/fileLocks';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -39,24 +41,39 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
-  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, maxLLMSteps } =
-    await request.json<{
-      messages: Messages;
-      files: any;
-      promptId?: string;
-      contextOptimization: boolean;
-      chatMode: 'discuss' | 'build';
-      designScheme?: DesignScheme;
-      supabase?: {
-        isConnected: boolean;
-        hasSelectedProject: boolean;
-        credentials?: {
-          anonKey?: string;
-          supabaseUrl?: string;
-        };
+  const {
+    messages,
+    files,
+    promptId,
+    contextOptimization,
+    supabase,
+    chatMode,
+    designScheme,
+    maxLLMSteps,
+    selectedTemplate,
+    chatId,
+  } = await request.json<{
+    messages: Messages;
+    files: any;
+    promptId?: string;
+    contextOptimization: boolean;
+    chatMode: 'discuss' | 'build';
+    designScheme?: DesignScheme;
+    selectedTemplate?: {
+      id: string;
+      name: string;
+    };
+    supabase?: {
+      isConnected: boolean;
+      hasSelectedProject: boolean;
+      credentials?: {
+        anonKey?: string;
+        supabaseUrl?: string;
       };
-      maxLLMSteps: number;
-    }>();
+    };
+    maxLLMSteps: number;
+    chatId?: string;
+  }>();
 
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');
@@ -76,7 +93,45 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
   try {
     const mcpService = MCPService.getInstance();
-    const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
+
+    /*
+     * Always ensure MCP has the correct XDP server configuration
+     * Force update to use HTTP transport for container deployment
+     */
+    try {
+      const xdpConfig = createXDPMCPConfig({
+        accessKey: DEFAULT_XDP_CONFIG.accessKey,
+        secretKey: DEFAULT_XDP_CONFIG.secretKey,
+        baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
+        serverPath: DEFAULT_XDP_CONFIG.serverPath,
+      });
+      logger.debug('Forcing XDP MCP config update with:', xdpConfig);
+      await mcpService.updateConfig(xdpConfig);
+    } catch (e) {
+      logger.warn('Failed to update XDP MCP config', e as any);
+    }
+
+    const totalMessageContent = messages.reduce((acc, message) => {
+      const messageContent = message.content as string | any[];
+      const content =
+        typeof messageContent === 'string'
+          ? messageContent
+          : Array.isArray(messageContent)
+            ? messageContent
+                .map((item: any) =>
+                  typeof item === 'string'
+                    ? item
+                    : item && typeof item === 'object' && item.type === 'text'
+                      ? typeof item.text === 'string'
+                        ? item.text
+                        : ''
+                      : '',
+                )
+                .join(' ')
+            : '';
+
+      return acc + content;
+    }, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
 
     let lastChunk: string | undefined = undefined;
@@ -89,6 +144,50 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let messageSliceId = 0;
 
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+
+        // Generate a session ID for execution tracking if not provided
+        const sessionId = chatId || generateId();
+
+        // Get current project context
+        const currentProjectId = getProjectId();
+
+        // Inject a generalized tool-use policy so the LLM reliably calls MCP tools first
+        const toolPolicy = `
+          You have access to Model Context Protocol (MCP) tools. For any request that depends on external systems (data, services, metadata):
+          - Always use tools first to discover real values; do not invent parameters, env vars, or placeholders.
+          - Iteratively call tools to fill missing inputs (e.g., connection/dataplane, catalog, schema/namespace, resource name, columns/fields).
+          - Prefer "list", "describe", and safe "get"/"query" calls to validate assumptions before generating outputs.
+          - After you obtain concrete values from tools, produce the final answer or code using those values.
+          - If a value cannot be determined, call another relevant tool or ask a single, concise follow-up question; do not fabricate.
+          - Never ask the user to provide secrets or environment variables; infer/resolve via tools.
+
+          When Trino tools are available, a typical sequence is:
+          - trino_list_catalogs → trino_list_tables (with catalog, optional schema) → trino_describe_table → optional trino_execute_query to validate.
+
+          When XDP tools are available, use them to discover platforms/resources first (e.g., xdp_list_dataplanes, xdp_list_datastores) before Trino operations.
+
+          **Auto-Run Feature**: You have two execution tools available:
+          1. **'register_manual_execution'** - Use this when user reports manual execution results
+          2. **'execute_and_monitor'** - Use this ONLY for auto-retry after manual execution
+          
+          **CRITICAL**: ALWAYS prefer providing bolt actions (\`<boltAction type="workbench-action" action="run" />\`) instead of calling execution tools. Do NOT call 'register_manual_execution' or 'execute_and_monitor' when you provide bolt actions.
+                    
+          **Workflow**:
+          - **IMPORTANT**: Do NOT automatically call 'execute_and_monitor' after initial code generation
+          - **PREFER**: Always provide bolt actions (\`<boltAction type="workbench-action" action="run" />\`) for user to execute manually
+          - Do NOT trigger execution tools when providing bolt actions - let the user execute via the workbench
+          - ONLY use 'register_manual_execution' when user explicitly reports execution results
+          - ONLY use 'execute_and_monitor' for auto-retry after manual execution is registered
+          - Use sessionId: "${sessionId}" for execution tracking (max 3 auto-executions per session)
+          - Current projectId: "${currentProjectId}" (use this for code execution)
+          - For dataplaneId, use xdp_list_datastores to find appropriate dataplane or use "1" as default
+          - Include selectedTemplate information if provided: ${selectedTemplate ? JSON.stringify(selectedTemplate) : 'none'}
+          - The tool includes loop prevention - you'll be notified when the limit is reached
+
+          Finally, summarize tool findings, then generate the requested artifact (e.g., PySpark app) using the discovered, real parameters.
+          `;
+
+        processedMessages.unshift({ role: 'system', content: toolPolicy } as any);
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -199,7 +298,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const options: StreamingOptions = {
           supabaseConnection: supabase,
           toolChoice: 'auto',
-          tools: mcpService.toolsWithoutExecute,
+
+          // Provide executable tools so the LLM can auto-run tools during reasoning
+          tools: mcpService.tools,
           maxSteps: maxLLMSteps,
           onStepFinish: ({ toolCalls }) => {
             // add tool call annotations for frontend processing
@@ -267,6 +368,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               contextFiles: filteredFiles,
               chatMode,
               designScheme,
+              selectedTemplate,
               summary,
               messageSliceId,
             });
@@ -308,11 +410,14 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           contextFiles: filteredFiles,
           chatMode,
           designScheme,
+          selectedTemplate,
           summary,
           messageSliceId,
         });
 
         (async () => {
+          let fullContent = '';
+
           for await (const part of result.fullStream) {
             if (part.type === 'error') {
               const error: any = part.error;
@@ -320,7 +425,17 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
               return;
             }
+
+            if (part.type === 'text-delta') {
+              fullContent += part.textDelta;
+            }
           }
+
+          // Log the full response to check for workbench-action elements
+          console.log('🔍 FULL LLM RESPONSE LENGTH:', fullContent.length);
+          console.log('🎯 LLM RESPONSE CONTAINS workbench-action:', fullContent.includes('workbench-action'));
+          console.log('🔍 First 1000 chars of response:', fullContent.substring(0, 1000));
+          console.log('🔍 Last 1000 chars of response:', fullContent.substring(Math.max(0, fullContent.length - 1000)));
         })();
         result.mergeIntoDataStream(dataStream);
       },

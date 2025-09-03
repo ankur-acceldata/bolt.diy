@@ -34,5 +34,10 @@
     "**/.server/**/*.tsx",
     "**/.client/**/*.ts",
     "**/.client/**/*.tsx"
+  ],
+  "exclude": [
+    "../shared/**/*",
+    "app/lib/sync/bolt-sync-adapter.ts",
+    "functions/**/*"
   ]
 }

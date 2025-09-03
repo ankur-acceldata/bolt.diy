@@ -5,6 +5,10 @@ import { renderToReadableStream } from 'react-dom/server';
 import { renderHeadToString } from 'remix-island';
 import { Head } from './root';
 import { themeStore } from '~/lib/stores/theme';
+import { installFetchInterceptor } from '~/lib/fetch-interceptor';
+
+// Install fetch interceptor for server-side requests
+installFetchInterceptor();
 
 export default async function handleRequest(
   request: Request,
@@ -70,8 +74,8 @@ export default async function handleRequest(
 
   responseHeaders.set('Content-Type', 'text/html');
 
-  responseHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
   responseHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
+  responseHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
 
   return new Response(body, {
     headers: responseHeaders,

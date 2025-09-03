@@ -3,22 +3,29 @@
  * Preventing TS checks with files presented in the video for a better presentation.
  */
 import type { JSONValue, Message } from 'ai';
-import React, { type RefCallback, useEffect, useState } from 'react';
+import { generateId } from 'ai';
+import React, { type RefCallback, useEffect, useState, useRef } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
+import { PostMessageService } from '~/lib/services/postMessageService';
+import { MessageType } from '~/types/communicationBus';
+
 import { Messages } from './Messages.client';
 import { getApiKeysFromCookies } from './APIKeyManager';
 import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import styles from './BaseChat.module.scss';
 import { ImportButtons } from '~/components/chat/chatExportAndImport/ImportButtons';
-import { ExamplePrompts } from '~/components/chat/ExamplePrompts';
-import GitCloneButton from './GitCloneButton';
+
+// import { ExamplePrompts } from '~/components/chat/ExamplePrompts';
+
+// import GitCloneButton from './GitCloneButton';
 import type { ProviderInfo } from '~/types/model';
-import StarterTemplates from './StarterTemplates';
+
+// import StarterTemplates from './StarterTemplates';
 import type { ActionAlert, SupabaseAlert, DeployAlert, LlmErrorAlertType } from '~/types/actions';
 import DeployChatAlert from '~/components/deploy/DeployAlert';
 import ChatAlert from './ChatAlert';
@@ -49,6 +56,7 @@ interface BaseChatProps {
   enhancingPrompt?: boolean;
   promptEnhanced?: boolean;
   input?: string;
+  setInput?: (input: string) => void;
   model?: string;
   setModel?: (model: string) => void;
   provider?: ProviderInfo;
@@ -80,6 +88,8 @@ interface BaseChatProps {
   setDesignScheme?: (scheme: DesignScheme) => void;
   selectedElement?: ElementInfo | null;
   setSelectedElement?: (element: ElementInfo | null) => void;
+  selectedTemplate?: any;
+  setSelectedTemplate?: (template: any) => void;
   addToolResult?: ({ toolCallId, result }: { toolCallId: string; result: any }) => void;
 }
 
@@ -97,6 +107,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setProvider,
       providerList,
       input = '',
+      setInput,
       enhancingPrompt,
       handleInputChange,
 
@@ -127,6 +138,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setDesignScheme,
       selectedElement,
       setSelectedElement,
+      selectedTemplate,
+      setSelectedTemplate,
       addToolResult = () => {
         throw new Error('addToolResult not implemented');
       },
@@ -144,6 +157,19 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
+    const postMessageServiceRef = useRef<PostMessageService | null>(null);
+
+    useEffect(() => {
+      // Initialize PostMessageService
+      if (!postMessageServiceRef.current) {
+        postMessageServiceRef.current = new PostMessageService();
+      }
+
+      return () => {
+        postMessageServiceRef.current?.destroy();
+        postMessageServiceRef.current = null;
+      };
+    }, []);
 
     useEffect(() => {
       if (expoUrl) {
@@ -165,7 +191,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
     useEffect(() => {
       onStreamingChange?.(isStreaming);
-    }, [isStreaming, onStreamingChange]);
+
+      // Only broadcast response status if chat has started
+      if (postMessageServiceRef.current && chatStarted) {
+        const messageType = isStreaming ? MessageType.RESPONSE_IN_PROGRESS : MessageType.RESPONSE_GENERATED;
+
+        postMessageServiceRef.current.sendMessage({
+          type: messageType,
+          payload: { isStreaming },
+        });
+      }
+    }, [isStreaming, onStreamingChange, chatStarted]);
 
     useEffect(() => {
       if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -350,12 +386,16 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full')}>
             {!chatStarted && (
               <div id="intro" className="mt-[16vh] max-w-2xl mx-auto text-center px-4 lg:px-0">
-                <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
+                {/* Commented out intro content - keeping div for animation purposes */}
+                {/* <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
                   Where ideas begin
-                </h1>
-                <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
+                </h1> */}
+                {/* <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
                   Bring ideas to life in seconds or get help on existing projects.
-                </p>
+                </p> */}
+
+                {/* Add minimal content to ensure element exists for animation */}
+                <div className="min-h-[1px] opacity-0"></div>
               </div>
             )}
             <StickToBottom
@@ -465,6 +505,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   setDesignScheme={setDesignScheme}
                   selectedElement={selectedElement}
                   setSelectedElement={setSelectedElement}
+                  selectedTemplate={selectedTemplate}
+                  setSelectedTemplate={setSelectedTemplate}
                 />
               </div>
             </StickToBottom>
@@ -472,10 +514,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               {!chatStarted && (
                 <div className="flex justify-center gap-2">
                   {ImportButtons(importChat)}
-                  <GitCloneButton importChat={importChat} />
+                  {/* <GitCloneButton importChat={importChat} /> */}
                 </div>
               )}
-              <div className="flex flex-col gap-5">
+              {/* <div className="flex flex-col gap-5">
                 {!chatStarted &&
                   ExamplePrompts((event, messageInput) => {
                     if (isStreaming) {
@@ -486,12 +528,53 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     handleSendMessage?.(event, messageInput);
                   })}
                 {!chatStarted && <StarterTemplates />}
-              </div>
+              </div> */}
+
+              {/* Commented out examples section - keeping this comment for reference */}
+              {/*
+              {!chatStarted && (
+                <div id="examples">
+                  {ExamplePrompts((event, messageInput) => {
+                    if (isStreaming) {
+                      handleStop?.();
+                      return;
+                    }
+                    handleSendMessage?.(event, messageInput);
+                  })}
+                </div>
+              )}
+              */}
             </div>
           </div>
           <ClientOnly>
             {() => (
-              <Workbench chatStarted={chatStarted} isStreaming={isStreaming} setSelectedElement={setSelectedElement} />
+              <Workbench
+                chatStarted={chatStarted}
+                isStreaming={isStreaming}
+                setSelectedElement={setSelectedElement}
+                selectedTemplate={selectedTemplate}
+                model={model}
+                provider={provider?.name}
+                onSendMessage={(message: string) => {
+                  if (append) {
+                    append({
+                      id: generateId(),
+                      role: 'user',
+                      content: [
+                        {
+                          type: 'text',
+                          text: message,
+                        },
+                      ] as any,
+                    });
+                  }
+                }}
+                onSetChatInput={(message: string) => {
+                  if (setInput) {
+                    setInput(message);
+                  }
+                }}
+              />
             )}
           </ClientOnly>
         </div>

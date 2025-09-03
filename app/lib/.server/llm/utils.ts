@@ -7,11 +7,46 @@ import type { ContextAnnotation } from '~/types/context';
 export function extractPropertiesFromMessage(message: Omit<Message, 'id'>): {
   model: string;
   provider: string;
-  content: string;
+  content: any;
 } {
+  // Helper function to safely extract text from nested structures
+  function extractText(content: any): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      // Handle nested arrays - flatten and extract text
+      return content
+        .map((item) => {
+          if (typeof item === 'string') {
+            return item;
+          }
+
+          if (item && typeof item === 'object') {
+            if (item.type === 'text') {
+              return typeof item.text === 'string' ? item.text : extractText(item.text);
+            }
+
+            // For other types, return empty string to avoid breaking regex
+            return '';
+          }
+
+          return '';
+        })
+        .join(' ');
+    }
+
+    if (content && typeof content === 'object' && content.type === 'text') {
+      return typeof content.text === 'string' ? content.text : extractText(content.text);
+    }
+
+    return '';
+  }
+
   const textContent = Array.isArray(message.content)
-    ? message.content.find((item) => item.type === 'text')?.text || ''
-    : message.content;
+    ? extractText(message.content.find((item) => item.type === 'text'))
+    : extractText(message.content);
 
   const modelMatch = textContent.match(MODEL_REGEX);
   const providerMatch = textContent.match(PROVIDER_REGEX);
@@ -28,18 +63,42 @@ export function extractPropertiesFromMessage(message: Omit<Message, 'id'>): {
    */
   const provider = providerMatch ? providerMatch[1] : DEFAULT_PROVIDER.name;
 
+  // Helper function to clean content while preserving structure
+  function cleanContent(content: any): any {
+    if (typeof content === 'string') {
+      return content.replace(MODEL_REGEX, '').replace(PROVIDER_REGEX, '');
+    }
+
+    if (Array.isArray(content)) {
+      return content.map((item) => cleanContent(item));
+    }
+
+    if (content && typeof content === 'object') {
+      if (content.type === 'text') {
+        return {
+          ...content,
+          text: cleanContent(content.text),
+        };
+      }
+
+      return content; // Preserve non-text items as is
+    }
+
+    return content;
+  }
+
   const cleanedContent = Array.isArray(message.content)
     ? message.content.map((item) => {
         if (item.type === 'text') {
           return {
             type: 'text',
-            text: item.text?.replace(MODEL_REGEX, '').replace(PROVIDER_REGEX, ''),
+            text: cleanContent(item.text),
           };
         }
 
         return item; // Preserve image_url and other types as is
       })
-    : textContent.replace(MODEL_REGEX, '').replace(PROVIDER_REGEX, '');
+    : cleanContent(message.content);
 
   return { model, provider, content: cleanedContent };
 }

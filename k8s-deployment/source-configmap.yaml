@@ -1,0 +1,1024 @@
+apiVersion: v1
+data:
+  http-server.d.ts: |-
+    #!/usr/bin/env node
+    export {};
+    //# sourceMappingURL=http-server.d.ts.map
+  http-server.d.ts.map: '{"version":3,"file":"http-server.d.ts","sourceRoot":"","sources":["../src/http-server.ts"],"names":[],"mappings":""}'
+  http-server.js: "#!/usr/bin/env node\nimport express from 'express';\nimport cors
+    from 'cors';\nimport { spawn } from 'child_process';\nimport { fileURLToPath }
+    from 'url';\nimport { dirname, join } from 'path';\nconst __filename = fileURLToPath(import.meta.url);\nconst
+    __dirname = dirname(__filename);\nconst app = express();\napp.use(cors());\napp.use(express.json());\n//
+    Health check endpoint\napp.get('/health', (req, res) => {\n    res.json({ status:
+    'healthy', service: 'xdp-mcp-http-bridge' });\n});\n// List available tools\napp.get('/tools',
+    async (req, res) => {\n    try {\n        const result = await executeMCPRequest({\n
+    \           jsonrpc: '2.0',\n            id: Date.now(),\n            method:
+    'tools/list',\n            params: {}\n        });\n        res.json(result);\n
+    \   }\n    catch (error) {\n        res.status(500).json({ error: error.message
+    });\n    }\n});\n// Execute MCP tool\napp.post('/tools/execute', async (req, res)
+    => {\n    try {\n        const { toolName, arguments: toolArgs } = req.body;\n
+    \       if (!toolName) {\n            return res.status(400).json({ error: 'toolName
+    is required' });\n        }\n        const result = await executeMCPRequest({\n
+    \           jsonrpc: '2.0',\n            id: Date.now(),\n            method:
+    'tools/call',\n            params: {\n                name: toolName,\n                arguments:
+    toolArgs || {}\n            }\n        });\n        res.json(result);\n    }\n
+    \   catch (error) {\n        res.status(500).json({ error: error.message });\n
+    \   }\n});\n// List datastores endpoint (direct)\napp.get('/datastores', async
+    (req, res) => {\n    try {\n        const { page = 0, size = 10, sortBy = 'updatedAt:desc'
+    } = req.query;\n        const result = await executeMCPRequest({\n            jsonrpc:
+    '2.0',\n            id: Date.now(),\n            method: 'tools/call',\n            params:
+    {\n                name: 'list-datastores',\n                arguments: {\n                    page:
+    Number(page),\n                    size: Number(size),\n                    sort_by:
+    sortBy\n                }\n            }\n        });\n        res.json(result);\n
+    \   }\n    catch (error) {\n        res.status(500).json({ error: error.message
+    });\n    }\n});\n// Execute Trino query\napp.post('/trino/execute', async (req,
+    res) => {\n    try {\n        const { datastore_id, query, limit = 100 } = req.body;\n
+    \       if (!datastore_id || !query) {\n            return res.status(400).json({
+    error: 'datastore_id and query are required' });\n        }\n        const result
+    = await executeMCPRequest({\n            jsonrpc: '2.0',\n            id: Date.now(),\n
+    \           method: 'tools/call',\n            params: {\n                name:
+    'trino-execute',\n                arguments: {\n                    datastore_id,\n
+    \                   query,\n                    limit\n                }\n            }\n
+    \       });\n        res.json(result);\n    }\n    catch (error) {\n        res.status(500).json({
+    error: error.message });\n    }\n});\n// Function to execute MCP request\nfunction
+    executeMCPRequest(request) {\n    return new Promise((resolve, reject) => {\n
+    \       const mcpPath = join(__dirname, 'index.js');\n        const mcpProcess
+    = spawn('node', [mcpPath], {\n            stdio: ['pipe', 'pipe', 'pipe'],\n            env:
+    {\n                ...process.env,\n                NODE_ENV: process.env.NODE_ENV
+    || 'production'\n            }\n        });\n        let stdout = '';\n        let
+    stderr = '';\n        let responseReceived = false;\n        mcpProcess.stdout.on('data',
+    (data) => {\n            const output = data.toString();\n            stdout +=
+    output;\n            // Try to parse JSON-RPC response\n            const lines
+    = stdout.split('\\n');\n            for (const line of lines) {\n                if
+    (line.trim() && line.includes('\"jsonrpc\"')) {\n                    try {\n                        const
+    response = JSON.parse(line);\n                        if (response.id === request.id)
+    {\n                            responseReceived = true;\n                            resolve(response.result
+    || response);\n                        }\n                    }\n                    catch
+    (e) {\n                        // Not a complete JSON yet, continue\n                    }\n
+    \               }\n            }\n        });\n        mcpProcess.stderr.on('data',
+    (data) => {\n            stderr += data.toString();\n            console.error('MCP
+    stderr:', data.toString());\n        });\n        mcpProcess.on('close', (code)
+    => {\n            if (!responseReceived) {\n                if (code !== 0) {\n
+    \                   reject(new Error(`MCP process exited with code ${code}: ${stderr}`));\n
+    \               }\n                else {\n                    // Try to extract
+    result from stdout\n                    try {\n                        const lines
+    = stdout.split('\\n');\n                        for (const line of lines) {\n
+    \                           if (line.trim() && line.includes('\"result\"')) {\n
+    \                               const response = JSON.parse(line);\n                                resolve(response.result
+    || response);\n                                return;\n                            }\n
+    \                       }\n                        resolve({ stdout, stderr });\n
+    \                   }\n                    catch (e) {\n                        reject(new
+    Error(`Failed to parse MCP response: ${stdout}`));\n                    }\n                }\n
+    \           }\n        });\n        mcpProcess.on('error', (error) => {\n            reject(error);\n
+    \       });\n        // Send the request\n        mcpProcess.stdin.write(JSON.stringify(request)
+    + '\\n');\n        mcpProcess.stdin.end();\n    });\n}\nconst PORT = process.env.HTTP_PORT
+    || 3000;\nconst HOST = '0.0.0.0';\napp.listen(PORT, HOST, () => {\n    console.log(`\U0001F680
+    XDP MCP HTTP Bridge running on http://${HOST}:${PORT}`);\n    console.log('\U0001F4CA
+    Available endpoints:');\n    console.log('  GET  /health');\n    console.log('
+    \ GET  /tools');\n    console.log('  POST /tools/execute');\n    console.log('
+    \ GET  /datastores');\n    console.log('  POST /trino/execute');\n});\n//# sourceMappingURL=http-server.js.map"
+  http-server.js.map: '{"version":3,"file":"http-server.js","sourceRoot":"","sources":["../src/http-server.ts"],"names":[],"mappings":"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"}'
+  http-wrapper.d.ts: |-
+    export {};
+    //# sourceMappingURL=http-wrapper.d.ts.map
+  http-wrapper.d.ts.map: '{"version":3,"file":"http-wrapper.d.ts","sourceRoot":"","sources":["../src/http-wrapper.ts"],"names":[],"mappings":""}'
+  http-wrapper.js: |-
+    import express from 'express';
+    import { spawn } from 'child_process';
+    const app = express();
+    app.use(express.json());
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+        res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+    });
+    // MCP tool execution endpoint
+    app.post('/execute-tool', async (req, res) => {
+        try {
+            const { toolName, arguments: toolArgs } = req.body;
+            // Spawn MCP server process
+            const mcpProcess = spawn('node', ['dist/index.js'], {
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+            // Send MCP request
+            const request = {
+                jsonrpc: '2.0',
+                id: Date.now(),
+                method: 'tools/call',
+                params: {
+                    name: toolName,
+                    arguments: toolArgs
+                }
+            };
+            mcpProcess.stdin.write(JSON.stringify(request) + '\n');
+            mcpProcess.stdin.end();
+            let response = '';
+            mcpProcess.stdout.on('data', (data) => {
+                response += data.toString();
+            });
+            mcpProcess.on('close', (code) => {
+                try {
+                    const result = JSON.parse(response);
+                    res.json(result);
+                }
+                catch (error) {
+                    res.status(500).json({ error: 'Invalid MCP response', raw: response });
+                }
+            });
+            mcpProcess.on('error', (error) => {
+                res.status(500).json({ error: error.message });
+            });
+        }
+        catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+    const PORT = parseInt(process.env.HTTP_PORT || '3000');
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`HTTP wrapper running on port ${PORT}`);
+    });
+    //# sourceMappingURL=http-wrapper.js.map
+  http-wrapper.js.map: '{"version":3,"file":"http-wrapper.js","sourceRoot":"","sources":["../src/http-wrapper.ts"],"names":[],"mappings":"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"}'
+  index.d.ts: |-
+    #!/usr/bin/env node
+    /**
+     * XDP MCP Server
+     *
+     * A Model Context Protocol server that provides access to XDP (eXtended Data Platform) functionality.
+     * This server connects to XDP API to fetch data stores and other data engineering resources.
+     */
+    declare class XDPMCPServer {
+        private server;
+        private xdpClient;
+        private executionTracking;
+        constructor();
+        private setupHandlers;
+        /**
+         * Handle the xdp_list_datastores tool
+         */
+        private handleListDataStores;
+        /**
+         * Handle Trino query execution
+         */
+        private handleTrinoExecuteQuery;
+        /**
+         * Handle listing Trino catalogs
+         */
+        private handleTrinoListCatalogs;
+        /**
+         * Handle listing Trino tables
+         */
+        private handleTrinoListTables;
+        /**
+         * Handle describing a Trino table
+         */
+        private handleTrinoDescribeTable;
+        /**
+         * Handle the execute_and_monitor tool with loop prevention and manual-first requirement
+         */
+        private handleExecuteAndMonitor;
+        /**
+         * Handle registering a manual execution to enable auto-retry
+         */
+        private handleRegisterManualExecution;
+        /**
+         * Format the datastore response for display
+         */
+        private formatDataStoresResponse;
+        /**
+         * Format Trino query response
+         */
+        private formatTrinoQueryResponse;
+        /**
+         * Format Trino catalogs response
+         */
+        private formatTrinoCatalogsResponse;
+        /**
+         * Format Trino tables response
+         */
+        private formatTrinoTablesResponse;
+        /**
+         * Format Trino table columns response
+         */
+        private formatTrinoTableColumnsResponse;
+        /**
+         * Start the MCP server
+         */
+        start(): Promise<void>;
+    }
+    export { XDPMCPServer };
+    //# sourceMappingURL=index.d.ts.map
+  index.d.ts.map: '{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../src/index.ts"],"names":[],"mappings":";AAEA;;;;;GAKG;AAWH,cAAM,YAAY;IAChB,OAAO,CAAC,MAAM,CAAS;IACvB,OAAO,CAAC,SAAS,CAAe;IAChC,OAAO,CAAC,iBAAiB,CAMV;;IA+Bf,OAAO,CAAC,aAAa;IAmOrB;;OAEG;YACW,oBAAoB;IAuBlC;;OAEG;YACW,uBAAuB;IAqBrC;;OAEG;YACW,uBAAuB;IAqBrC;;OAEG;YACW,qBAAqB;IAqBnC;;OAEG;YACW,wBAAwB;IA0BtC;;OAEG;YACW,uBAAuB;IAoIrC;;OAEG;YACW,6BAA6B;IA8C3C;;OAEG;IACH,OAAO,CAAC,wBAAwB;IAkChC;;OAEG;IACH,OAAO,CAAC,wBAAwB;IAwChC;;OAEG;IACH,OAAO,CAAC,2BAA2B;IAgBnC;;OAEG;IACH,OAAO,CAAC,yBAAyB;IAoCjC;;OAEG;IACH,OAAO,CAAC,+BAA+B;IAyBvC;;OAEG;IACG,KAAK;CAoBZ;AAGD,OAAO,EAAE,YAAY,EAAE,CAAC"}'
+  index.js: "#!/usr/bin/env node\n/**\n * XDP MCP Server\n *\n * A Model Context Protocol
+    server that provides access to XDP (eXtended Data Platform) functionality.\n *
+    This server connects to XDP API to fetch data stores and other data engineering
+    resources.\n */\nimport { Server } from '@modelcontextprotocol/sdk/server/index.js';\nimport
+    { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';\nimport
+    { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextprotocol/sdk/types.js';\nimport
+    { XDPApiClient } from './services/xdp-api-client.js';\nclass XDPMCPServer {\n
+    \   server;\n    xdpClient;\n    executionTracking = new Map();\n    constructor()
+    {\n        console.error('\U0001F680 Initializing XDP MCP Server...');\n        try
+    {\n            // Initialize XDP API client\n            this.xdpClient = new
+    XDPApiClient();\n            console.error('✅ XDP API client initialized');\n
+    \           console.error('\U0001F4CA Config:', this.xdpClient.getConfig());\n
+    \       }\n        catch (error) {\n            console.error('❌ Failed to initialize
+    XDP API client:', error);\n            process.exit(1);\n        }\n        //
+    Initialize MCP server\n        this.server = new Server({\n            name: 'xdp-mcp-server',\n
+    \           version: '1.0.0',\n        }, {\n            capabilities: {\n                tools:
+    {},\n            },\n        });\n        this.setupHandlers();\n    }\n    setupHandlers()
+    {\n        // List available tools\n        this.server.setRequestHandler(ListToolsRequestSchema,
+    async () => {\n            console.error('\U0001F4CB Listing available tools...');\n
+    \           return {\n                tools: [\n                    {\n                        name:
+    'xdp_list_datastores',\n                        description: 'List all data stores
+    from XDP platform with pagination support',\n                        inputSchema:
+    {\n                            type: 'object',\n                            properties:
+    {\n                                page: {\n                                    type:
+    'number',\n                                    description: 'Page number (0-based)',\n
+    \                                   default: 0,\n                                    minimum:
+    0\n                                },\n                                size: {\n
+    \                                   type: 'number',\n                                    description:
+    'Number of items per page',\n                                    default: 20,\n
+    \                                   minimum: 1,\n                                    maximum:
+    100\n                                },\n                                sortBy:
+    {\n                                    type: 'string',\n                                    description:
+    'Sort field and direction (e.g., \"updatedAt:asc\", \"name:desc\")',\n                                    default:
+    'updatedAt:asc'\n                                }\n                            }\n
+    \                       }\n                    },\n                    {\n                        name:
+    'trino_execute_query',\n                        description: 'Execute a custom
+    Trino SQL query on the specified dataplane',\n                        inputSchema:
+    {\n                            type: 'object',\n                            properties:
+    {\n                                dataplane: {\n                                    type:
+    'string',\n                                    description: 'The dataplane ID
+    to execute the query on'\n                                },\n                                query:
+    {\n                                    type: 'string',\n                                    description:
+    'The Trino SQL query to execute'\n                                }\n                            },\n
+    \                           required: ['dataplane', 'query']\n                        }\n
+    \                   },\n                    {\n                        name: 'trino_list_catalogs',\n
+    \                       description: 'List all available Trino catalogs in the
+    specified dataplane',\n                        inputSchema: {\n                            type:
+    'object',\n                            properties: {\n                                dataplane:
+    {\n                                    type: 'string',\n                                    description:
+    'The dataplane ID to list catalogs from'\n                                }\n
+    \                           },\n                            required: ['dataplane']\n
+    \                       }\n                    },\n                    {\n                        name:
+    'trino_list_tables',\n                        description: 'List tables in a Trino
+    catalog and schema',\n                        inputSchema: {\n                            type:
+    'object',\n                            properties: {\n                                dataplane:
+    {\n                                    type: 'string',\n                                    description:
+    'The dataplane ID'\n                                },\n                                catalog:
+    {\n                                    type: 'string',\n                                    description:
+    'The Trino catalog name'\n                                },\n                                schema:
+    {\n                                    type: 'string',\n                                    description:
+    'The schema name (optional, if not provided lists all tables in catalog)'\n                                }\n
+    \                           },\n                            required: ['dataplane',
+    'catalog']\n                        }\n                    },\n                    {\n
+    \                       name: 'trino_describe_table',\n                        description:
+    'Get column information for a specific Trino table',\n                        inputSchema:
+    {\n                            type: 'object',\n                            properties:
+    {\n                                dataplane: {\n                                    type:
+    'string',\n                                    description: 'The dataplane ID'\n
+    \                               },\n                                catalog: {\n
+    \                                   type: 'string',\n                                    description:
+    'The Trino catalog name'\n                                },\n                                schema:
+    {\n                                    type: 'string',\n                                    description:
+    'The schema name'\n                                },\n                                table:
+    {\n                                    type: 'string',\n                                    description:
+    'The table name'\n                                }\n                            },\n
+    \                           required: ['dataplane', 'catalog', 'schema', 'table']\n
+    \                       }\n                    },\n                    {\n                        name:
+    'execute_and_monitor',\n                        description: 'Execute code and
+    monitor logs. First execution must be manual, then auto-retry on errors (max 3
+    executions per session)',\n                        inputSchema: {\n                            type:
+    'object',\n                            properties: {\n                                sessionId:
+    {\n                                    type: 'string',\n                                    description:
+    'Unique session ID for tracking execution limits'\n                                },\n
+    \                               projectId: {\n                                    type:
+    'string',\n                                    description: 'Project ID for the
+    code to execute'\n                                },\n                                dataplaneId:
+    {\n                                    type: 'string',\n                                    description:
+    'Dataplane ID where code should be executed'\n                                },\n
+    \                               isEditAndRun: {\n                                    type:
+    'boolean',\n                                    description: 'Whether to edit
+    config before running',\n                                    default: false\n
+    \                               },\n                                selectedTemplate:
+    {\n                                    type: 'object',\n                                    description:
+    'Template configuration for execution',\n                                    properties:
+    {\n                                        id: { type: 'string' },\n                                        name:
+    { type: 'string' }\n                                    }\n                                },\n
+    \                               isManualTrigger: {\n                                    type:
+    'boolean',\n                                    description: 'Whether this is
+    a manual user trigger (required for first execution)',\n                                    default:
+    false\n                                }\n                            },\n                            required:
+    ['sessionId', 'projectId', 'dataplaneId']\n                        }\n                    },\n
+    \                   {\n                        name: 'register_manual_execution',\n
+    \                       description: 'Register that a manual execution occurred,
+    enabling auto-retry for this session',\n                        inputSchema: {\n
+    \                           type: 'object',\n                            properties:
+    {\n                                sessionId: {\n                                    type:
+    'string',\n                                    description: 'Session ID to enable
+    auto-retry for'\n                                },\n                                runId:
+    {\n                                    type: 'string',\n                                    description:
+    'Run ID from the manual execution'\n                                },\n                                success:
+    {\n                                    type: 'boolean',\n                                    description:
+    'Whether the manual execution was successful'\n                                }\n
+    \                           },\n                            required: ['sessionId',
+    'success']\n                        }\n                    }\n                ]\n
+    \           };\n        });\n        // Handle tool calls\n        this.server.setRequestHandler(CallToolRequestSchema,
+    async (request) => {\n            const { name, arguments: args } = request.params;\n
+    \           console.error(`\U0001F527 Executing tool: ${name}`);\n            console.error(`\U0001F4DD
+    Arguments:`, args);\n            try {\n                switch (name) {\n                    case
+    'xdp_list_datastores':\n                        return await this.handleListDataStores(args);\n
+    \                   case 'trino_execute_query':\n                        return
+    await this.handleTrinoExecuteQuery(args);\n                    case 'trino_list_catalogs':\n
+    \                       return await this.handleTrinoListCatalogs(args);\n                    case
+    'trino_list_tables':\n                        return await this.handleTrinoListTables(args);\n
+    \                   case 'trino_describe_table':\n                        return
+    await this.handleTrinoDescribeTable(args);\n                    case 'execute_and_monitor':\n
+    \                       return await this.handleExecuteAndMonitor(args);\n                    case
+    'register_manual_execution':\n                        return await this.handleRegisterManualExecution(args);\n
+    \                   default:\n                        throw new Error(`Unknown
+    tool: ${name}`);\n                }\n            }\n            catch (error)
+    {\n                console.error(`❌ Tool execution failed:`, error);\n                return
+    {\n                    content: [\n                        {\n                            type:
+    'text',\n                            text: `Error executing ${name}: ${error instanceof
+    Error ? error.message : 'Unknown error'}`\n                        }\n                    ],\n
+    \                   isError: true\n                };\n            }\n        });\n
+    \   }\n    /**\n     * Handle the xdp_list_datastores tool\n     */\n    async
+    handleListDataStores(params) {\n        console.error('\U0001F4CA Fetching datastores
+    from XDP API...');\n        try {\n            const result = await this.xdpClient.listDataStores(params);\n
+    \           // Format the response for better readability\n            const responseText
+    = this.formatDataStoresResponse(result);\n            return {\n                content:
+    [\n                    {\n                        type: 'text',\n                        text:
+    responseText\n                    }\n                ]\n            };\n        }\n
+    \       catch (error) {\n            console.error('❌ Failed to fetch datastores:',
+    error);\n            throw error;\n        }\n    }\n    /**\n     * Handle Trino
+    query execution\n     */\n    async handleTrinoExecuteQuery(params) {\n        console.error('\U0001F50D
+    Executing Trino query...');\n        try {\n            const result = await this.xdpClient.executeTrinoQuery(params);\n
+    \           const responseText = this.formatTrinoQueryResponse(result, params.query);\n
+    \           return {\n                content: [\n                    {\n                        type:
+    'text',\n                        text: responseText\n                    }\n                ]\n
+    \           };\n        }\n        catch (error) {\n            console.error('❌
+    Failed to execute Trino query:', error);\n            throw error;\n        }\n
+    \   }\n    /**\n     * Handle listing Trino catalogs\n     */\n    async handleTrinoListCatalogs(params)
+    {\n        console.error('\U0001F4DA Listing Trino catalogs...');\n        try
+    {\n            const result = await this.xdpClient.listTrinoCatalogs(params.dataplane);\n
+    \           const responseText = this.formatTrinoCatalogsResponse(result);\n            return
+    {\n                content: [\n                    {\n                        type:
+    'text',\n                        text: responseText\n                    }\n                ]\n
+    \           };\n        }\n        catch (error) {\n            console.error('❌
+    Failed to list Trino catalogs:', error);\n            throw error;\n        }\n
+    \   }\n    /**\n     * Handle listing Trino tables\n     */\n    async handleTrinoListTables(params)
+    {\n        console.error('\U0001F4CB Listing Trino tables...');\n        try {\n
+    \           const result = await this.xdpClient.listTrinoTables(params.dataplane,
+    params.catalog, params.schema || '');\n            const responseText = this.formatTrinoTablesResponse(result,
+    params.catalog, params.schema);\n            return {\n                content:
+    [\n                    {\n                        type: 'text',\n                        text:
+    responseText\n                    }\n                ]\n            };\n        }\n
+    \       catch (error) {\n            console.error('❌ Failed to list Trino tables:',
+    error);\n            throw error;\n        }\n    }\n    /**\n     * Handle describing
+    a Trino table\n     */\n    async handleTrinoDescribeTable(params) {\n        console.error('\U0001F50D
+    Describing Trino table...');\n        try {\n            const result = await
+    this.xdpClient.getTrinoTableColumns(params.dataplane, params.catalog, params.schema,
+    params.table);\n            const responseText = this.formatTrinoTableColumnsResponse(result,
+    params.catalog, params.schema, params.table);\n            return {\n                content:
+    [\n                    {\n                        type: 'text',\n                        text:
+    responseText\n                    }\n                ]\n            };\n        }\n
+    \       catch (error) {\n            console.error('❌ Failed to describe Trino
+    table:', error);\n            throw error;\n        }\n    }\n    /**\n     *
+    Handle the execute_and_monitor tool with loop prevention and manual-first requirement\n
+    \    */\n    async handleExecuteAndMonitor(params) {\n        console.error('\U0001F680
+    Executing code with monitoring and loop prevention...');\n        const { sessionId,
+    projectId, dataplaneId, isEditAndRun = false, selectedTemplate, isManualTrigger
+    = false } = params;\n        const MAX_EXECUTIONS = 3;\n        const MIN_DELAY_MS
+    = 30000; // 30 seconds between executions\n        try {\n            // Get or
+    initialize execution tracking\n            const tracking = this.executionTracking.get(sessionId)
+    || {\n                count: 0,\n                lastExecution: new Date(0),\n
+    \               hasManualExecution: false\n            };\n            const timeSinceLastExecution
+    = Date.now() - tracking.lastExecution.getTime();\n            // Check if this
+    is the first execution and not manual\n            if (!tracking.hasManualExecution
+    && !isManualTrigger) {\n                return {\n                    content:
+    [\n                        {\n                            type: 'text',\n                            text:
+    `\U0001F5B1️ **Manual Execution Required**\\n\\nFor the first run of your code,
+    please use the **Run** button in the workbench to execute manually.\\n\\nAfter
+    the first manual execution:\\n- I can automatically retry if errors occur\\n-
+    Auto-execution will be available for error recovery (up to ${MAX_EXECUTIONS} attempts
+    per session)\\n- This ensures you have full control over when code first runs`\n
+    \                       }\n                    ]\n                };\n            }\n
+    \           if (tracking.count >= MAX_EXECUTIONS) {\n                return {\n
+    \                   content: [\n                        {\n                            type:
+    'text',\n                            text: `\U0001F6AB **Auto-execution limit
+    reached (${tracking.count}/${MAX_EXECUTIONS})**\\n\\nYou've reached the maximum
+    number of automatic executions for this session. This prevents infinite loops.\\n\\n**To
+    continue:**\\n- Review and manually fix any remaining issues\\n- Start a new chat
+    session to reset the counter\\n- Use the manual Run button in the workbench\\n\\n**Last
+    error:** ${tracking.lastError || 'None recorded'}`\n                        }\n
+    \                   ],\n                    isError: true\n                };\n
+    \           }\n            if (timeSinceLastExecution < MIN_DELAY_MS && tracking.count
+    > 0) {\n                const remainingDelay = Math.ceil((MIN_DELAY_MS - timeSinceLastExecution)
+    / 1000);\n                return {\n                    content: [\n                        {\n
+    \                           type: 'text',\n                            text: `⏱️
+    **Execution cooldown active**\\n\\nPlease wait ${remainingDelay} more seconds
+    before the next automatic execution. This prevents rapid-fire executions that
+    could cause issues.\\n\\n**Current execution count:** ${tracking.count}/${MAX_EXECUTIONS}`\n
+    \                       }\n                    ]\n                };\n            }\n
+    \           // Update execution tracking\n            tracking.count += 1;\n            tracking.lastExecution
+    = new Date();\n            // Mark that we have a manual execution for this session\n
+    \           if (isManualTrigger) {\n                tracking.hasManualExecution
+    = true;\n                console.error(`✋ Manual execution registered for session
+    ${sessionId}`);\n            }\n            this.executionTracking.set(sessionId,
+    tracking);\n            const executionType = isManualTrigger ? 'Manual' : 'Auto-retry';\n
+    \           console.error(`\U0001F522 ${executionType} execution ${tracking.count}/${MAX_EXECUTIONS}
+    for session ${sessionId}`);\n            // Call the Bolt.DIY adhoc run API\n
+    \           const executionResult = await this.xdpClient.executeAdhocRun({\n                projectId,\n
+    \               dataplaneId,\n                isEditAndRun,\n                selectedTemplate\n
+    \           });\n            if (!executionResult.success) {\n                //
+    Track the error\n                tracking.lastError = executionResult.error ||
+    'Execution failed';\n                this.executionTracking.set(sessionId, tracking);\n
+    \               const executionLabel = isManualTrigger ? `Manual Execution` :
+    `Auto-retry ${tracking.count}/${MAX_EXECUTIONS}`;\n                const nextSteps
+    = isManualTrigger\n                    ? `**Next steps:**\\n- I can now automatically
+    retry if you'd like me to fix the code\\n- Auto-retry will be available for error
+    recovery (${MAX_EXECUTIONS - tracking.count} attempts remaining)`\n                    :
+    `**Next steps:**\\n- Review the error above\\n- I can automatically fix the code
+    and try again (${MAX_EXECUTIONS - tracking.count} attempts remaining)\\n- Or you
+    can manually review and fix the issues`;\n                return {\n                    content:
+    [\n                        {\n                            type: 'text',\n                            text:
+    `❌ **${executionLabel} Failed**\\n\\n**Error:** ${executionResult.error}\\n\\n**Run
+    ID:** ${executionResult.runId || 'N/A'}\\n\\n**Logs:**\\n\\`\\`\\`\\n${executionResult.logs
+    || 'No logs available'}\\n\\`\\`\\`\\n\\n${nextSteps}`\n                        }\n
+    \                   ]\n                };\n            }\n            // Success
+    case\n            const successLabel = isManualTrigger ? `Manual Execution` :
+    `Auto-retry ${tracking.count}/${MAX_EXECUTIONS}`;\n            const remainingInfo
+    = isManualTrigger\n                ? `**Auto-retry now enabled** for error recovery
+    (${MAX_EXECUTIONS - tracking.count} attempts available)`\n                : `**Remaining
+    auto-executions:** ${MAX_EXECUTIONS - tracking.count}`;\n            const successMessage
+    = `✅ **${successLabel} Successful**\\n\\n**Run ID:** ${executionResult.runId}\\n**Status:**
+    ${executionResult.status}\\n\\n**Logs:**\\n\\`\\`\\`\\n${executionResult.logs
+    || 'Execution completed successfully'}\\n\\`\\`\\`\\n\\n${remainingInfo}`;\n            return
+    {\n                content: [\n                    {\n                        type:
+    'text',\n                        text: successMessage\n                    }\n
+    \               ]\n            };\n        }\n        catch (error) {\n            //
+    Track the error\n            const tracking = this.executionTracking.get(sessionId);\n
+    \           if (tracking) {\n                tracking.lastError = error instanceof
+    Error ? error.message : 'Unknown error';\n                this.executionTracking.set(sessionId,
+    tracking);\n            }\n            console.error('❌ Failed to execute and
+    monitor:', error);\n            throw error;\n        }\n    }\n    /**\n     *
+    Handle registering a manual execution to enable auto-retry\n     */\n    async
+    handleRegisterManualExecution(params) {\n        console.error('\U0001F4DD Registering
+    manual execution...');\n        const { sessionId, runId, success } = params;\n
+    \       try {\n            // Get or initialize execution tracking\n            const
+    tracking = this.executionTracking.get(sessionId) || {\n                count:
+    0,\n                lastExecution: new Date(0),\n                hasManualExecution:
+    false\n            };\n            // Mark that manual execution has occurred\n
+    \           tracking.hasManualExecution = true;\n            if (runId) {\n                tracking.lastRunId
+    = runId;\n            }\n            this.executionTracking.set(sessionId, tracking);\n
+    \           const statusMessage = success\n                ? `✅ **Manual Execution
+    Successful**\\n\\nAuto-retry is now enabled for this session. If errors occur
+    in future runs, I can automatically retry up to 3 times.`\n                : `❌
+    **Manual Execution Failed**\\n\\nAuto-retry is now enabled for this session. I
+    can help fix the issues and automatically retry up to 3 times.`;\n            console.error(`✋
+    Manual execution registered for session ${sessionId}: ${success ? 'SUCCESS' :
+    'FAILED'}`);\n            return {\n                content: [\n                    {\n
+    \                       type: 'text',\n                        text: statusMessage\n
+    \                   }\n                ]\n            };\n        }\n        catch
+    (error) {\n            console.error('❌ Failed to register manual execution:',
+    error);\n            throw error;\n        }\n    }\n    /**\n     * Format the
+    datastore response for display\n     */\n    formatDataStoresResponse(result)
+    {\n        const { datastores, pagination } = result;\n        let response =
+    `# XDP Data Stores\\n\\n`;\n        response += `**Total**: ${pagination.totalElements}
+    datastores\\n`;\n        response += `**Page**: ${pagination.page + 1} of ${pagination.totalPages}\\n`;\n
+    \       response += `**Showing**: ${datastores.length} items\\n\\n`;\n        if
+    (datastores.length === 0) {\n            response += `No data stores found.\\n`;\n
+    \           return response;\n        }\n        response += `## Data Stores\\n\\n`;\n
+    \       datastores.forEach((ds, index) => {\n            response += `### ${index
+    + 1}. ${ds.name || 'Unnamed'}\\n`;\n            response += `- **ID**: ${ds.id}\\n`;\n
+    \           response += `- **Type**: ${ds.dataStoreType || 'Unknown'}\\n`;\n            response
+    += `- **Dataplane ID**: ${ds.dataplaneId}\\n`;\n            response += `- **Tenant**:
+    ${ds.tenantId}\\n`;\n            response += `- **Credentials Configured**: ${ds.isCredentialConfigured
+    ? '✅ Yes' : '❌ No'}\\n`;\n            if (ds.config && ds.config.url) {\n                response
+    += `- **URL**: ${ds.config.url}\\n`;\n            }\n            if (ds.updatedAt)
+    {\n                response += `- **Last Updated**: ${new Date(ds.updatedAt).toLocaleString()}\\n`;\n
+    \           }\n            response += `\\n`;\n        });\n        return response;\n
+    \   }\n    /**\n     * Format Trino query response\n     */\n    formatTrinoQueryResponse(result,
+    query) {\n        let response = `# Trino Query Result\\n\\n`;\n        response
+    += `**Query**: \\`\\`\\`sql\\n${query}\\n\\`\\`\\`\\n\\n`;\n        response +=
+    `**Status**: ${result.status}\\n`;\n        response += `**Query ID**: ${result.queryId}\\n\\n`;\n
+    \       if (!result.result || !result.result.data) {\n            response +=
+    `No results returned.\\n`;\n            return response;\n        }\n        const
+    { columns, data } = result.result;\n        if (!columns || columns.length ===
+    0) {\n            response += `No columns in result set.\\n`;\n            return
+    response;\n        }\n        response += `**Results**: ${data.length} rows\\n\\n`;\n
+    \       // Format as a table\n        if (data.length > 0) {\n            // Table
+    header\n            response += '| ' + columns.map((c) => c.name).join(' | ')
+    + ' |\\n';\n            response += '|' + columns.map(() => '---').join('|') +
+    '|\\n';\n            // Table rows (limit to first 50 for readability)\n            const
+    displayRows = data.slice(0, 50);\n            displayRows.forEach((row) => {\n
+    \               response += '| ' + row.map(val => val === null ? 'NULL' : String(val)).join('
+    | ') + ' |\\n';\n            });\n            if (data.length > 50) {\n                response
+    += `\\n*Showing first 50 of ${data.length} rows*\\n`;\n            }\n        }\n
+    \       return response;\n    }\n    /**\n     * Format Trino catalogs response\n
+    \    */\n    formatTrinoCatalogsResponse(result) {\n        let response = `#
+    Trino Catalogs\\n\\n`;\n        if (!result.result || !result.result.data || result.result.data.length
+    === 0) {\n            response += `No catalogs found.\\n`;\n            return
+    response;\n        }\n        response += `**Available Catalogs**:\\n\\n`;\n        result.result.data.forEach((row,
+    index) => {\n            response += `${index + 1}. ${row[0]}\\n`;\n        });\n
+    \       return response;\n    }\n    /**\n     * Format Trino tables response\n
+    \    */\n    formatTrinoTablesResponse(result, catalog, schema) {\n        let
+    response = `# Trino Tables\\n\\n`;\n        response += `**Catalog**: ${catalog}\\n`;\n
+    \       if (schema) {\n            response += `**Schema**: ${schema}\\n`;\n        }\n
+    \       response += '\\n';\n        if (!result.result || !result.result.data
+    || result.result.data.length === 0) {\n            response += `No tables found.\\n`;\n
+    \           return response;\n        }\n        const { columns, data } = result.result;\n
+    \       // If we have multiple columns (schema, table, type), show as table\n
+    \       if (columns && columns.length > 1) {\n            response += '| ' + columns.map((c)
+    => c.name).join(' | ') + ' |\\n';\n            response += '|' + columns.map(()
+    => '---').join('|') + '|\\n';\n            data.forEach((row) => {\n                response
+    += '| ' + row.map(val => val === null ? 'NULL' : String(val)).join(' | ') + '
+    |\\n';\n            });\n        }\n        else {\n            // Simple list
+    of table names\n            response += `**Tables**:\\n\\n`;\n            data.forEach((row,
+    index) => {\n                response += `${index + 1}. ${row[0]}\\n`;\n            });\n
+    \       }\n        response += `\\n**Total**: ${data.length} tables\\n`;\n        return
+    response;\n    }\n    /**\n     * Format Trino table columns response\n     */\n
+    \   formatTrinoTableColumnsResponse(result, catalog, schema, table) {\n        let
+    response = `# Table Structure\\n\\n`;\n        response += `**Table**: ${catalog}.${schema}.${table}\\n\\n`;\n
+    \       if (!result.result || !result.result.data || result.result.data.length
+    === 0) {\n            response += `No columns found.\\n`;\n            return
+    response;\n        }\n        const { data } = result.result;\n        response
+    += `## Columns\\n\\n`;\n        response += '| Position | Column Name | Data Type
+    | Nullable | Default |\\n';\n        response += '|----------|-------------|-----------|----------|---------|\\n';\n
+    \       data.forEach((row) => {\n            const [columnName, dataType, isNullable,
+    columnDefault, ordinalPosition] = row;\n            response += `| ${ordinalPosition}
+    | ${columnName} | ${dataType} | ${isNullable} | ${columnDefault || 'NULL'} |\\n`;\n
+    \       });\n        response += `\\n**Total Columns**: ${data.length}\\n`;\n
+    \       return response;\n    }\n    /**\n     * Start the MCP server\n     */\n
+    \   async start() {\n        console.error('\U0001F50C Starting MCP server with
+    stdio transport...');\n        // Test XDP API connection before starting\n        try
+    {\n            const isConnected = await this.xdpClient.testConnection();\n            if
+    (isConnected) {\n                console.error('✅ XDP API connection test passed');\n
+    \           }\n            else {\n                console.error('⚠️  XDP API
+    connection test failed, but continuing...');\n            }\n        }\n        catch
+    (error) {\n            console.error('⚠️  XDP API connection test error:', error);\n
+    \           console.error('\U0001F504 Continuing anyway - will retry on tool execution');\n
+    \       }\n        const transport = new StdioServerTransport();\n        await
+    this.server.connect(transport);\n        console.error('✅ XDP MCP Server started
+    and ready for connections');\n    }\n}\n// Export for use in other modules\nexport
+    { XDPMCPServer };\n// Start the server\nif (import.meta.url === `file://${process.argv[1]}`)
+    {\n    const server = new XDPMCPServer();\n    server.start().catch((error) =>
+    {\n        console.error('\U0001F4A5 Failed to start XDP MCP Server:', error);\n
+    \       process.exit(1);\n    });\n}\n//# sourceMappingURL=index.js.map"
+  index.js.map: '{"version":3,"file":"index.js","sourceRoot":"","sources":["../src/index.ts"],"names":[],"mappings":"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"}'
+  mcp-websocket-client.d.ts: |-
+    /**
+     * MCP WebSocket Client for Bolt.diy
+     *
+     * This client can be used by Bolt.diy to connect to the MCP server
+     * running in Kubernetes via WebSocket.
+     */
+    export interface MCPTool {
+        name: string;
+        description: string;
+        inputSchema: any;
+    }
+    export interface MCPToolResult {
+        content?: any;
+        error?: string;
+        isError?: boolean;
+    }
+    export interface MCPClientConfig {
+        url: string;
+        reconnectInterval?: number;
+        maxReconnectAttempts?: number;
+        pingInterval?: number;
+        authToken?: string;
+    }
+    export declare class MCPWebSocketClient {
+        private ws;
+        private config;
+        private reconnectAttempts;
+        private isConnected;
+        private pingTimer;
+        private messageQueue;
+        private requestId;
+        private pendingRequests;
+        constructor(config: MCPClientConfig);
+        /**
+         * Connect to the MCP WebSocket server
+         */
+        connect(): Promise<void>;
+        /**
+         * Disconnect from the MCP server
+         */
+        disconnect(): void;
+        /**
+         * List available tools from the MCP server
+         */
+        listTools(): Promise<MCPTool[]>;
+        /**
+         * Execute a tool on the MCP server
+         */
+        executeTool(toolName: string, params: any): Promise<MCPToolResult>;
+        /**
+         * Execute a custom query via HTTP fallback
+         */
+        executeCustomQuery(endpoint: string, params: any): Promise<any>;
+        /**
+         * Send a JSON-RPC request
+         */
+        private sendRequest;
+        /**
+         * Handle incoming messages
+         */
+        private handleMessage;
+        /**
+         * Start ping timer
+         */
+        private startPing;
+        /**
+         * Stop ping timer
+         */
+        private stopPing;
+        /**
+         * Handle reconnection
+         */
+        private handleReconnect;
+        /**
+         * Process queued messages after reconnection
+         */
+        private processMessageQueue;
+        /**
+         * Check if client is connected
+         */
+        isClientConnected(): boolean;
+        /**
+         * Get WebSocket ready state
+         */
+        getReadyState(): number;
+    }
+    export default MCPWebSocketClient;
+    //# sourceMappingURL=mcp-websocket-client.d.ts.map
+  mcp-websocket-client.d.ts.map: '{"version":3,"file":"mcp-websocket-client.d.ts","sourceRoot":"","sources":["../src/mcp-websocket-client.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AAIH,MAAM,WAAW,OAAO;IACtB,IAAI,EAAE,MAAM,CAAC;IACb,WAAW,EAAE,MAAM,CAAC;IACpB,WAAW,EAAE,GAAG,CAAC;CAClB;AAED,MAAM,WAAW,aAAa;IAC5B,OAAO,CAAC,EAAE,GAAG,CAAC;IACd,KAAK,CAAC,EAAE,MAAM,CAAC;IACf,OAAO,CAAC,EAAE,OAAO,CAAC;CACnB;AAED,MAAM,WAAW,eAAe;IAC9B,GAAG,EAAE,MAAM,CAAC;IACZ,iBAAiB,CAAC,EAAE,MAAM,CAAC;IAC3B,oBAAoB,CAAC,EAAE,MAAM,CAAC;IAC9B,YAAY,CAAC,EAAE,MAAM,CAAC;IACtB,SAAS,CAAC,EAAE,MAAM,CAAC;CACpB;AAED,qBAAa,kBAAkB;IAC7B,OAAO,CAAC,EAAE,CAA0B;IACpC,OAAO,CAAC,MAAM,CAAkB;IAChC,OAAO,CAAC,iBAAiB,CAAK;IAC9B,OAAO,CAAC,WAAW,CAAS;IAC5B,OAAO,CAAC,SAAS,CAA+B;IAChD,OAAO,CAAC,YAAY,CAAoE;IACxF,OAAO,CAAC,SAAS,CAAK;IACtB,OAAO,CAAC,eAAe,CAA8D;gBAEzE,MAAM,EAAE,eAAe;IASnC;;OAEG;IACG,OAAO,IAAI,OAAO,CAAC,IAAI,CAAC;IAoD9B;;OAEG;IACH,UAAU,IAAI,IAAI;IASlB;;OAEG;IACG,SAAS,IAAI,OAAO,CAAC,OAAO,EAAE,CAAC;IAKrC;;OAEG;IACG,WAAW,CAAC,QAAQ,EAAE,MAAM,EAAE,MAAM,EAAE,GAAG,GAAG,OAAO,CAAC,aAAa,CAAC;IAQxE;;OAEG;IACG,kBAAkB,CAAC,QAAQ,EAAE,MAAM,EAAE,MAAM,EAAE,GAAG,GAAG,OAAO,CAAC,GAAG,CAAC;IAqBrE;;OAEG;IACH,OAAO,CAAC,WAAW;IA4BnB;;OAEG;IACH,OAAO,CAAC,aAAa;IA+BrB;;OAEG;IACH,OAAO,CAAC,SAAS;IAUjB;;OAEG;IACH,OAAO,CAAC,QAAQ;IAOhB;;OAEG;IACH,OAAO,CAAC,eAAe;IAgBvB;;OAEG;IACH,OAAO,CAAC,mBAAmB;IAS3B;;OAEG;IACH,iBAAiB,IAAI,OAAO;IAI5B;;OAEG;IACH,aAAa,IAAI,MAAM;CAGxB;AAGD,eAAe,kBAAkB,CAAC"}'
+  mcp-websocket-client.js: "/**\n * MCP WebSocket Client for Bolt.diy\n *\n * This
+    client can be used by Bolt.diy to connect to the MCP server\n * running in Kubernetes
+    via WebSocket.\n */\nimport WebSocket from 'ws';\nexport class MCPWebSocketClient
+    {\n    ws = null;\n    config;\n    reconnectAttempts = 0;\n    isConnected =
+    false;\n    pingTimer = null;\n    messageQueue = [];\n    requestId = 0;\n    pendingRequests
+    = new Map();\n    constructor(config) {\n        this.config = {\n            reconnectInterval:
+    5000,\n            maxReconnectAttempts: 10,\n            pingInterval: 30000,\n
+    \           ...config\n        };\n    }\n    /**\n     * Connect to the MCP WebSocket
+    server\n     */\n    async connect() {\n        return new Promise((resolve, reject)
+    => {\n            try {\n                const headers = {};\n                if
+    (this.config.authToken) {\n                    headers['Authorization'] = `Bearer
+    ${this.config.authToken}`;\n                }\n                this.ws = new WebSocket(this.config.url,
+    { headers });\n                this.ws.on('open', () => {\n                    console.log('✅
+    Connected to MCP WebSocket server');\n                    this.isConnected = true;\n
+    \                   this.reconnectAttempts = 0;\n                    this.startPing();\n
+    \                   this.processMessageQueue();\n                    resolve();\n
+    \               });\n                this.ws.on('message', (data) => {\n                    try
+    {\n                        const message = JSON.parse(data.toString());\n                        this.handleMessage(message);\n
+    \                   }\n                    catch (error) {\n                        console.error('Error
+    parsing message:', error);\n                    }\n                });\n                this.ws.on('close',
+    () => {\n                    console.log('\U0001F50C WebSocket connection closed');\n
+    \                   this.isConnected = false;\n                    this.stopPing();\n
+    \                   this.handleReconnect();\n                });\n                this.ws.on('error',
+    (error) => {\n                    console.error('WebSocket error:', error);\n
+    \                   if (!this.isConnected) {\n                        reject(error);\n
+    \                   }\n                });\n                this.ws.on('pong',
+    () => {\n                    // Keep-alive received\n                });\n            }\n
+    \           catch (error) {\n                reject(error);\n            }\n        });\n
+    \   }\n    /**\n     * Disconnect from the MCP server\n     */\n    disconnect()
+    {\n        this.stopPing();\n        if (this.ws) {\n            this.ws.close();\n
+    \           this.ws = null;\n        }\n        this.isConnected = false;\n    }\n
+    \   /**\n     * List available tools from the MCP server\n     */\n    async listTools()
+    {\n        const response = await this.sendRequest('tools/list', {});\n        return
+    response.tools || [];\n    }\n    /**\n     * Execute a tool on the MCP server\n
+    \    */\n    async executeTool(toolName, params) {\n        const response = await
+    this.sendRequest('tools/call', {\n            name: toolName,\n            arguments:
+    params\n        });\n        return response;\n    }\n    /**\n     * Execute
+    a custom query via HTTP fallback\n     */\n    async executeCustomQuery(endpoint,
+    params) {\n        // This can be used as a fallback to HTTP if WebSocket fails\n
+    \       const baseUrl = this.config.url.replace('ws://', 'http://').replace('wss://',
+    'https://');\n        const apiUrl = baseUrl.replace('/ws', '');\n        const
+    response = await fetch(`${apiUrl}/api${endpoint}`, {\n            method: 'POST',\n
+    \           headers: {\n                'Content-Type': 'application/json',\n
+    \               ...(this.config.authToken ? { 'Authorization': `Bearer ${this.config.authToken}`
+    } : {})\n            },\n            body: JSON.stringify(params)\n        });\n
+    \       if (!response.ok) {\n            throw new Error(`HTTP error! status:
+    ${response.status}`);\n        }\n        return await response.json();\n    }\n
+    \   /**\n     * Send a JSON-RPC request\n     */\n    sendRequest(method, params)
+    {\n        return new Promise((resolve, reject) => {\n            if (!this.isConnected
+    || !this.ws) {\n                // Queue the message if not connected\n                this.messageQueue.push({
+    resolve, reject, message: { method, params } });\n                this.handleReconnect();\n
+    \               return;\n            }\n            const id = ++this.requestId;\n
+    \           const request = {\n                jsonrpc: '2.0',\n                id,\n
+    \               method,\n                params\n            };\n            this.pendingRequests.set(id,
+    { resolve, reject });\n            try {\n                this.ws.send(JSON.stringify(request));\n
+    \           }\n            catch (error) {\n                this.pendingRequests.delete(id);\n
+    \               reject(error);\n            }\n        });\n    }\n    /**\n     *
+    Handle incoming messages\n     */\n    handleMessage(message) {\n        // Handle
+    JSON-RPC responses\n        if (message.jsonrpc === '2.0' && message.id !== undefined)
+    {\n            const pending = this.pendingRequests.get(message.id);\n            if
+    (pending) {\n                this.pendingRequests.delete(message.id);\n                if
+    (message.error) {\n                    pending.reject(new Error(message.error.message
+    || 'Unknown error'));\n                }\n                else {\n                    pending.resolve(message.result);\n
+    \               }\n            }\n            return;\n        }\n        // Handle
+    other message types\n        switch (message.type) {\n            case 'connection':\n
+    \               console.log(`Connected with session ID: ${message.sessionId}`);\n
+    \               break;\n            case 'pong':\n                // Pong received\n
+    \               break;\n            case 'error':\n                console.error('Server
+    error:', message.error);\n                break;\n            default:\n                console.log('Received
+    message:', message);\n        }\n    }\n    /**\n     * Start ping timer\n     */\n
+    \   startPing() {\n        if (this.config.pingInterval) {\n            this.pingTimer
+    = setInterval(() => {\n                if (this.ws && this.isConnected) {\n                    this.ws.send(JSON.stringify({
+    type: 'ping' }));\n                }\n            }, this.config.pingInterval);\n
+    \       }\n    }\n    /**\n     * Stop ping timer\n     */\n    stopPing() {\n
+    \       if (this.pingTimer) {\n            clearInterval(this.pingTimer);\n            this.pingTimer
+    = null;\n        }\n    }\n    /**\n     * Handle reconnection\n     */\n    handleReconnect()
+    {\n        if (this.reconnectAttempts >= (this.config.maxReconnectAttempts ||
+    10)) {\n            console.error('Max reconnection attempts reached');\n            return;\n
+    \       }\n        this.reconnectAttempts++;\n        console.log(`Attempting
+    to reconnect (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})...`);\n
+    \       setTimeout(() => {\n            this.connect().catch(error => {\n                console.error('Reconnection
+    failed:', error);\n            });\n        }, this.config.reconnectInterval);\n
+    \   }\n    /**\n     * Process queued messages after reconnection\n     */\n    processMessageQueue()
+    {\n        while (this.messageQueue.length > 0) {\n            const { resolve,
+    reject, message } = this.messageQueue.shift();\n            this.sendRequest(message.method,
+    message.params)\n                .then((result) => resolve(result))\n                .catch((error)
+    => reject(error));\n        }\n    }\n    /**\n     * Check if client is connected\n
+    \    */\n    isClientConnected() {\n        return this.isConnected;\n    }\n
+    \   /**\n     * Get WebSocket ready state\n     */\n    getReadyState() {\n        return
+    this.ws ? this.ws.readyState : WebSocket.CLOSED;\n    }\n}\n// Export for use
+    in Bolt.diy\nexport default MCPWebSocketClient;\n//# sourceMappingURL=mcp-websocket-client.js.map"
+  mcp-websocket-client.js.map: '{"version":3,"file":"mcp-websocket-client.js","sourceRoot":"","sources":["../src/mcp-websocket-client.ts"],"names":[],"mappings":"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"}'
+  websocket-server.d.ts: |-
+    /**
+     * WebSocket Server for XDP MCP
+     *
+     * Provides WebSocket and HTTP endpoints for the MCP server to enable
+     * communication in Kubernetes environments where stdio is not available.
+     */
+    export declare class XDPWebSocketServer {
+        private app;
+        private httpServer;
+        private wss;
+        private sessions;
+        private xdpClient;
+        private port;
+        constructor(port?: number);
+        private setupMiddleware;
+        private setupRoutes;
+        private setupWebSocket;
+        private handleWebSocketMessage;
+        private handleMCPMessage;
+        private getAvailableTools;
+        private executeTool;
+        private generateSessionId;
+        private startSessionCleanup;
+        start(): void;
+        stop(): void;
+    }
+    //# sourceMappingURL=websocket-server.d.ts.map
+  websocket-server.d.ts.map: '{"version":3,"file":"websocket-server.d.ts","sourceRoot":"","sources":["../src/websocket-server.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AAwCH,qBAAa,kBAAkB;IAC7B,OAAO,CAAC,GAAG,CAAsB;IACjC,OAAO,CAAC,UAAU,CAAM;IACxB,OAAO,CAAC,GAAG,CAAkB;IAC7B,OAAO,CAAC,QAAQ,CAAuC;IACvD,OAAO,CAAC,SAAS,CAAe;IAChC,OAAO,CAAC,IAAI,CAAS;gBAET,IAAI,GAAE,MAAa;IAwB/B,OAAO,CAAC,eAAe;IAWvB,OAAO,CAAC,WAAW;IAkOnB,OAAO,CAAC,cAAc;YAyDR,sBAAsB;YAqCtB,gBAAgB;YAmDhB,iBAAiB;YAqEjB,WAAW;IAiCzB,OAAO,CAAC,iBAAiB;IAIzB,OAAO,CAAC,mBAAmB;IAiBpB,KAAK;IAUL,IAAI;CAOZ"}'
+  websocket-server.js: "/**\n * WebSocket Server for XDP MCP\n *\n * Provides WebSocket
+    and HTTP endpoints for the MCP server to enable\n * communication in Kubernetes
+    environments where stdio is not available.\n */\nimport express from 'express';\nimport
+    { createServer } from 'http';\nimport { WebSocketServer, WebSocket } from 'ws';\nimport
+    cors from 'cors';\nimport { XDPApiClient } from './services/xdp-api-client.js';\nexport
+    class XDPWebSocketServer {\n    app;\n    httpServer;\n    wss;\n    sessions
+    = new Map();\n    xdpClient;\n    port;\n    constructor(port = 9099) {\n        this.port
+    = port;\n        this.app = express();\n        this.httpServer = createServer(this.app);\n
+    \       this.wss = new WebSocketServer({\n            server: this.httpServer,\n
+    \           path: '/ws'\n        });\n        // Initialize XDP client\n        try
+    {\n            this.xdpClient = new XDPApiClient();\n            console.log('✅
+    XDP API client initialized');\n        }\n        catch (error) {\n            console.error('❌
+    Failed to initialize XDP API client:', error);\n            process.exit(1);\n
+    \       }\n        this.setupMiddleware();\n        this.setupRoutes();\n        this.setupWebSocket();\n
+    \       this.startSessionCleanup();\n    }\n    setupMiddleware() {\n        this.app.use(cors());\n
+    \       this.app.use(express.json());\n        // Request logging\n        this.app.use((req,
+    res, next) => {\n            console.log(`${new Date().toISOString()} ${req.method}
+    ${req.path}`);\n            next();\n        });\n    }\n    setupRoutes() {\n
+    \       // Health check endpoint\n        this.app.get('/health', (req, res) =>
+    {\n            res.json({\n                status: 'healthy',\n                timestamp:
+    new Date().toISOString(),\n                sessions: this.sessions.size\n            });\n
+    \       });\n        // Readiness check endpoint\n        this.app.get('/ready',
+    async (req, res) => {\n            try {\n                const isReady = await
+    this.xdpClient.testConnection();\n                if (isReady) {\n                    res.json({\n
+    \                       status: 'ready',\n                        xdp: 'connected'\n
+    \                   });\n                }\n                else {\n                    res.status(503).json({\n
+    \                       status: 'not ready',\n                        xdp: 'disconnected'\n
+    \                   });\n                }\n            }\n            catch (error)
+    {\n                res.status(503).json({\n                    status: 'not ready',\n
+    \                   error: error instanceof Error ? error.message : 'Unknown error'\n
+    \               });\n            }\n        });\n        // MCP Streamable HTTP
+    endpoint for Bolt.diy integration\n        this.app.post('/api/mcp', async (req,
+    res) => {\n            try {\n                const { jsonrpc, id, method, params
+    } = req.body;\n                // Validate JSON-RPC 2.0 format\n                if
+    (jsonrpc !== '2.0') {\n                    return res.status(400).json({\n                        jsonrpc:
+    '2.0',\n                        id: id || null,\n                        error:
+    { code: -32600, message: 'Invalid Request: jsonrpc must be \"2.0\"' }\n                    });\n
+    \               }\n                if (!method) {\n                    return
+    res.status(400).json({\n                        jsonrpc: '2.0',\n                        id:
+    id || null,\n                        error: { code: -32600, message: 'Invalid
+    Request: method is required' }\n                    });\n                }\n                //
+    Handle authentication via headers\n                const accessKey = req.headers['x-xdp-access-key'];\n
+    \               const secretKey = req.headers['x-xdp-secret-key'];\n                const
+    baseUrl = req.headers['x-xdp-base-url'];\n                if (accessKey && secretKey
+    && baseUrl) {\n                    // Create temporary XDP client with custom
+    credentials\n                    // For now, we'll use the existing client but
+    this could be enhanced\n                    console.log('MCP API call with custom
+    credentials');\n                }\n                let result;\n                switch
+    (method) {\n                    case 'initialize':\n                        //
+    MCP initialization - return server info and capabilities\n                        result
+    = {\n                            protocolVersion: '2024-11-05',\n                            capabilities:
+    {\n                                tools: {},\n                                resources:
+    {},\n                                prompts: {},\n                                logging:
+    {}\n                            },\n                            serverInfo: {\n
+    \                               name: 'xdp-mcp-server',\n                                version:
+    '1.0.0'\n                            }\n                        };\n                        break;\n
+    \                   case 'tools/list':\n                        result = await
+    this.getAvailableTools();\n                        break;\n                    case
+    'tools/call':\n                        const { name, arguments: args } = params;\n
+    \                       result = await this.executeTool(name, args);\n                        break;\n
+    \                   default:\n                        return res.json({\n                            jsonrpc:
+    '2.0',\n                            id,\n                            error: {
+    code: -32601, message: `Method not found: ${method}` }\n                        });\n
+    \               }\n                // Return proper JSON-RPC 2.0 response\n                res.json({\n
+    \                   jsonrpc: '2.0',\n                    id,\n                    result\n
+    \               });\n            }\n            catch (error) {\n                console.error('MCP
+    API error:', error);\n                res.json({\n                    jsonrpc:
+    '2.0',\n                    id: req.body.id || null,\n                    error:
+    {\n                        code: -32603,\n                        message: error
+    instanceof Error ? error.message : 'Internal error'\n                    }\n                });\n
+    \           }\n        });\n        // HTTP endpoints for tools (REST API alternative)\n
+    \       this.app.post('/api/tools/list', async (req, res) => {\n            try
+    {\n                const tools = await this.getAvailableTools();\n                res.json(tools);\n
+    \           }\n            catch (error) {\n                res.status(500).json({\n
+    \                   error: error instanceof Error ? error.message : 'Unknown error'\n
+    \               });\n            }\n        });\n        this.app.post('/api/tools/execute',
+    async (req, res) => {\n            try {\n                const { tool, params
+    } = req.body;\n                const result = await this.executeTool(tool, params);\n
+    \               res.json(result);\n            }\n            catch (error) {\n
+    \               res.status(500).json({\n                    error: error instanceof
+    Error ? error.message : 'Unknown error'\n                });\n            }\n
+    \       });\n        // XDP-specific endpoints\n        this.app.get('/api/xdp/datastores',
+    async (req, res) => {\n            try {\n                const params = {\n                    page:
+    parseInt(req.query.page) || 0,\n                    size: parseInt(req.query.size)
+    || 20,\n                    sortBy: req.query.sortBy || 'updatedAt:asc'\n                };\n
+    \               const result = await this.xdpClient.listDataStores(params);\n
+    \               res.json(result);\n            }\n            catch (error) {\n
+    \               res.status(500).json({\n                    error: error instanceof
+    Error ? error.message : 'Unknown error'\n                });\n            }\n
+    \       });\n        this.app.post('/api/trino/query', async (req, res) => {\n
+    \           try {\n                const { dataplane, query } = req.body;\n                const
+    result = await this.xdpClient.executeTrinoQuery({ dataplane, query });\n                res.json(result);\n
+    \           }\n            catch (error) {\n                res.status(500).json({\n
+    \                   error: error instanceof Error ? error.message : 'Unknown error'\n
+    \               });\n            }\n        });\n        this.app.get('/api/trino/:dataplane/catalogs',
+    async (req, res) => {\n            try {\n                const result = await
+    this.xdpClient.listTrinoCatalogs(req.params.dataplane);\n                res.json(result);\n
+    \           }\n            catch (error) {\n                res.status(500).json({\n
+    \                   error: error instanceof Error ? error.message : 'Unknown error'\n
+    \               });\n            }\n        });\n        this.app.get('/api/trino/:dataplane/tables',
+    async (req, res) => {\n            try {\n                const { catalog, schema
+    } = req.query;\n                const result = await this.xdpClient.listTrinoTables(req.params.dataplane,
+    catalog, schema || '');\n                res.json(result);\n            }\n            catch
+    (error) {\n                res.status(500).json({\n                    error:
+    error instanceof Error ? error.message : 'Unknown error'\n                });\n
+    \           }\n        });\n        this.app.get('/api/trino/:dataplane/table',
+    async (req, res) => {\n            try {\n                const { catalog, schema,
+    table } = req.query;\n                const result = await this.xdpClient.getTrinoTableColumns(req.params.dataplane,
+    catalog, schema, table);\n                res.json(result);\n            }\n            catch
+    (error) {\n                res.status(500).json({\n                    error:
+    error instanceof Error ? error.message : 'Unknown error'\n                });\n
+    \           }\n        });\n        // Session info endpoint\n        this.app.get('/api/sessions',
+    (req, res) => {\n            const sessionInfo = Array.from(this.sessions.entries()).map(([id,
+    session]) => ({\n                id,\n                lastActivity: session.lastActivity,\n
+    \               readyState: session.ws.readyState\n            }));\n            res.json(sessionInfo);\n
+    \       });\n    }\n    setupWebSocket() {\n        this.wss.on('connection',
+    (ws, req) => {\n            const sessionId = this.generateSessionId();\n            console.log(`\U0001F50C
+    New WebSocket connection: ${sessionId}`);\n            // Create session\n            const
+    session = {\n                id: sessionId,\n                ws,\n                lastActivity:
+    new Date()\n            };\n            this.sessions.set(sessionId, session);\n
+    \           // Send welcome message\n            ws.send(JSON.stringify({\n                type:
+    'connection',\n                sessionId,\n                timestamp: new Date().toISOString()\n
+    \           }));\n            // Handle messages\n            ws.on('message',
+    async (data) => {\n                try {\n                    session.lastActivity
+    = new Date();\n                    const message = JSON.parse(data.toString());\n
+    \                   await this.handleWebSocketMessage(session, message);\n                }\n
+    \               catch (error) {\n                    console.error('Error handling
+    WebSocket message:', error);\n                    ws.send(JSON.stringify({\n                        type:
+    'error',\n                        error: error instanceof Error ? error.message
+    : 'Unknown error'\n                    }));\n                }\n            });\n
+    \           // Handle close\n            ws.on('close', () => {\n                console.log(`\U0001F50C
+    WebSocket disconnected: ${sessionId}`);\n                this.sessions.delete(sessionId);\n
+    \           });\n            // Handle error\n            ws.on('error', (error)
+    => {\n                console.error(`WebSocket error for session ${sessionId}:`,
+    error);\n            });\n            // Ping to keep connection alive\n            const
+    pingInterval = setInterval(() => {\n                if (ws.readyState === WebSocket.OPEN)
+    {\n                    ws.ping();\n                }\n                else {\n
+    \                   clearInterval(pingInterval);\n                }\n            },
+    30000);\n        });\n    }\n    async handleWebSocketMessage(session, message)
+    {\n        const { ws } = session;\n        // Handle JSON-RPC messages for MCP
+    protocol\n        if (message.jsonrpc === '2.0') {\n            await this.handleMCPMessage(session,
+    message);\n            return;\n        }\n        // Handle custom message types\n
+    \       switch (message.type) {\n            case 'ping':\n                ws.send(JSON.stringify({
+    type: 'pong', timestamp: new Date().toISOString() }));\n                break;\n
+    \           case 'list_tools':\n                const tools = await this.getAvailableTools();\n
+    \               ws.send(JSON.stringify({ type: 'tools', data: tools }));\n                break;\n
+    \           case 'execute_tool':\n                const result = await this.executeTool(message.tool,
+    message.params);\n                ws.send(JSON.stringify({\n                    type:
+    'tool_result',\n                    tool: message.tool,\n                    data:
+    result\n                }));\n                break;\n            default:\n                ws.send(JSON.stringify({\n
+    \                   type: 'error',\n                    error: `Unknown message
+    type: ${message.type}`\n                }));\n        }\n    }\n    async handleMCPMessage(session,
+    message) {\n        const { ws } = session;\n        try {\n            let response;\n
+    \           switch (message.method) {\n                case 'tools/list':\n                    const
+    tools = await this.getAvailableTools();\n                    response = {\n                        jsonrpc:
+    '2.0',\n                        id: message.id,\n                        result:
+    tools\n                    };\n                    break;\n                case
+    'tools/call':\n                    const { name, arguments: args } = message.params;\n
+    \                   const result = await this.executeTool(name, args);\n                    response
+    = {\n                        jsonrpc: '2.0',\n                        id: message.id,\n
+    \                       result: result\n                    };\n                    break;\n
+    \               default:\n                    response = {\n                        jsonrpc:
+    '2.0',\n                        id: message.id,\n                        error:
+    {\n                            code: -32601,\n                            message:
+    `Method not found: ${message.method}`\n                        }\n                    };\n
+    \           }\n            ws.send(JSON.stringify(response));\n        }\n        catch
+    (error) {\n            const errorResponse = {\n                jsonrpc: '2.0',\n
+    \               id: message.id,\n                error: {\n                    code:
+    -32603,\n                    message: error instanceof Error ? error.message :
+    'Internal error'\n                }\n            };\n            ws.send(JSON.stringify(errorResponse));\n
+    \       }\n    }\n    async getAvailableTools() {\n        return {\n            tools:
+    [\n                {\n                    name: 'xdp_list_datastores',\n                    description:
+    'List all data stores from XDP platform with pagination support',\n                    inputSchema:
+    {\n                        type: 'object',\n                        properties:
+    {\n                            page: { type: 'number', default: 0 },\n                            size:
+    { type: 'number', default: 20 },\n                            sortBy: { type:
+    'string', default: 'updatedAt:asc' }\n                        }\n                    }\n
+    \               },\n                {\n                    name: 'trino_execute_query',\n
+    \                   description: 'Execute a custom Trino SQL query on the specified
+    dataplane',\n                    inputSchema: {\n                        type:
+    'object',\n                        properties: {\n                            dataplane:
+    { type: 'string' },\n                            query: { type: 'string' }\n                        },\n
+    \                       required: ['dataplane', 'query']\n                    }\n
+    \               },\n                {\n                    name: 'trino_list_catalogs',\n
+    \                   description: 'List all available Trino catalogs in the specified
+    dataplane',\n                    inputSchema: {\n                        type:
+    'object',\n                        properties: {\n                            dataplane:
+    { type: 'string' }\n                        },\n                        required:
+    ['dataplane']\n                    }\n                },\n                {\n
+    \                   name: 'trino_list_tables',\n                    description:
+    'List tables in a Trino catalog and schema',\n                    inputSchema:
+    {\n                        type: 'object',\n                        properties:
+    {\n                            dataplane: { type: 'string' },\n                            catalog:
+    { type: 'string' },\n                            schema: { type: 'string' }\n
+    \                       },\n                        required: ['dataplane', 'catalog']\n
+    \                   }\n                },\n                {\n                    name:
+    'trino_describe_table',\n                    description: 'Get column information
+    for a specific Trino table',\n                    inputSchema: {\n                        type:
+    'object',\n                        properties: {\n                            dataplane:
+    { type: 'string' },\n                            catalog: { type: 'string' },\n
+    \                           schema: { type: 'string' },\n                            table:
+    { type: 'string' }\n                        },\n                        required:
+    ['dataplane', 'catalog', 'schema', 'table']\n                    }\n                }\n
+    \           ]\n        };\n    }\n    async executeTool(toolName, params) {\n
+    \       console.log(`\U0001F527 Executing tool: ${toolName}`);\n        switch
+    (toolName) {\n            case 'xdp_list_datastores':\n                return
+    await this.xdpClient.listDataStores(params);\n            case 'trino_execute_query':\n
+    \               return await this.xdpClient.executeTrinoQuery(params);\n            case
+    'trino_list_catalogs':\n                return await this.xdpClient.listTrinoCatalogs(params.dataplane);\n
+    \           case 'trino_list_tables':\n                return await this.xdpClient.listTrinoTables(params.dataplane,
+    params.catalog, params.schema || '');\n            case 'trino_describe_table':\n
+    \               return await this.xdpClient.getTrinoTableColumns(params.dataplane,
+    params.catalog, params.schema, params.table);\n            default:\n                throw
+    new Error(`Unknown tool: ${toolName}`);\n        }\n    }\n    generateSessionId()
+    {\n        return `session-${Date.now()}-${Math.random().toString(36).substr(2,
+    9)}`;\n    }\n    startSessionCleanup() {\n        // Clean up inactive sessions
+    every 5 minutes\n        setInterval(() => {\n            const now = new Date();\n
+    \           const timeout = 30 * 60 * 1000; // 30 minutes\n            this.sessions.forEach((session,
+    id) => {\n                const inactiveTime = now.getTime() - session.lastActivity.getTime();\n
+    \               if (inactiveTime > timeout) {\n                    console.log(`\U0001F9F9
+    Cleaning up inactive session: ${id}`);\n                    session.ws.close();\n
+    \                   this.sessions.delete(id);\n                }\n            });\n
+    \       }, 5 * 60 * 1000);\n    }\n    start() {\n        this.httpServer.listen(this.port,
+    () => {\n            console.log(`\U0001F680 XDP MCP WebSocket Server running
+    on port ${this.port}`);\n            console.log(`\U0001F4E1 WebSocket endpoint:
+    ws://localhost:${this.port}/ws`);\n            console.log(`\U0001F310 HTTP API
+    endpoint: http://localhost:${this.port}/api`);\n            console.log(`\U0001F49A
+    Health check: http://localhost:${this.port}/health`);\n            console.log(`✅
+    Readiness check: http://localhost:${this.port}/ready`);\n        });\n    }\n
+    \   stop() {\n        console.log('\U0001F6D1 Shutting down server...');\n        this.wss.close();\n
+    \       this.httpServer.close();\n        this.sessions.forEach(session => session.ws.close());\n
+    \       this.sessions.clear();\n    }\n}\n// Start server if run directly\nif
+    (import.meta.url === `file://${process.argv[1]}`) {\n    const port = parseInt(process.env.PORT
+    || '9099');\n    const server = new XDPWebSocketServer(port);\n    // Graceful
+    shutdown\n    process.on('SIGTERM', () => {\n        console.log('Received SIGTERM,
+    shutting down gracefully...');\n        server.stop();\n        process.exit(0);\n
+    \   });\n    process.on('SIGINT', () => {\n        console.log('Received SIGINT,
+    shutting down gracefully...');\n        server.stop();\n        process.exit(0);\n
+    \   });\n    server.start();\n}\n//# sourceMappingURL=websocket-server.js.map"
+  websocket-server.js.map: '{"version":3,"file":"websocket-server.js","sourceRoot":"","sources":["../src/websocket-server.ts"],"names":[],"mappings":"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"}'
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: xdp-mcp-source
+  namespace: mcp-server

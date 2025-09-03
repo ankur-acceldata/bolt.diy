@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ClientOnly } from 'remix-utils/client-only';
+import { useCommunicationBusChild } from './lib/hooks/useCommunicationBus';
 
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
@@ -66,11 +67,32 @@ export const Head = createHead(() => (
 ));
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const theme = useStore(themeStore);
+  const themeConfig = useStore(themeStore);
+
+  // Initialize communication bus for iframe child
+  useCommunicationBusChild({
+    logLevel: 'error',
+    targetOrigin: '*',
+  });
 
   useEffect(() => {
-    document.querySelector('html')?.setAttribute('data-theme', theme);
-  }, [theme]);
+    const html = document.querySelector('html');
+
+    if (!html) {
+      return;
+    }
+
+    // Set theme mode attribute
+    html.setAttribute('data-theme', themeConfig.mode);
+
+    // Remove all existing color theme classes
+    html.classList.remove('color-blue', 'color-green', 'color-purple', 'color-orange');
+
+    // Add color theme class if not default
+    if (themeConfig.color !== 'default') {
+      html.classList.add(`color-${themeConfig.color}`);
+    }
+  }, [themeConfig]);
 
   return (
     <>
@@ -84,11 +106,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 import { logStore } from './lib/stores/logs';
 
 export default function App() {
-  const theme = useStore(themeStore);
+  const themeConfig = useStore(themeStore);
 
   useEffect(() => {
     logStore.logSystem('Application initialized', {
-      theme,
+      theme: themeConfig,
       platform: navigator.platform,
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),

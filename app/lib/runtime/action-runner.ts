@@ -1,11 +1,20 @@
 import type { WebContainer } from '@webcontainer/api';
 import { path as nodePath } from '~/utils/path';
 import { atom, map, type MapStore } from 'nanostores';
-import type { ActionAlert, BoltAction, DeployAlert, FileHistory, SupabaseAction, SupabaseAlert } from '~/types/actions';
+import type {
+  ActionAlert,
+  BoltAction,
+  DeployAlert,
+  FileHistory,
+  SupabaseAction,
+  SupabaseAlert,
+  WorkbenchAction,
+} from '~/types/actions';
 import { createScopedLogger } from '~/utils/logger';
 import { unreachable } from '~/utils/unreachable';
 import type { ActionCallbackData } from './message-parser';
 import type { BoltShell } from '~/utils/shell';
+import { InternalActionsService } from '~/lib/services/internalActionsService';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -156,8 +165,9 @@ export class ActionRunner {
     try {
       switch (action.type) {
         case 'shell': {
-          await this.#runShellAction(action);
-          break;
+          // Don't automatically execute shell commands, just mark as pending for user interaction
+          this.#updateAction(actionId, { status: 'pending', executed: false });
+          return;
         }
         case 'file': {
           await this.#runFileAction(action);
@@ -179,44 +189,35 @@ export class ActionRunner {
           break;
         }
         case 'build': {
-          const buildOutput = await this.#runBuildAction(action);
-
-          // Store build output for deployment
-          this.buildOutput = buildOutput;
-          break;
+          // Don't automatically execute build commands, just mark as pending for user interaction
+          this.#updateAction(actionId, { status: 'pending', executed: false });
+          return;
         }
         case 'start': {
-          // making the start app non blocking
+          // Don't automatically execute start commands, just mark as pending for user interaction
+          this.#updateAction(actionId, { status: 'pending', executed: false });
+          return;
+        }
+        case 'workbench-action': {
+          console.log('🚀 WORKBENCH ACTION DETECTED:', JSON.stringify(action, null, 2));
+          console.log('🎯 Action Runner executing workbench action:', (action as WorkbenchAction).action);
 
-          this.#runStartAction(action)
-            .then(() => this.#updateAction(actionId, { status: 'complete' }))
-            .catch((err: Error) => {
-              if (action.abortSignal.aborted) {
-                return;
-              }
+          try {
+            await this.handleWorkbenchAction(action as WorkbenchAction);
+            console.log('✅ WORKBENCH ACTION COMPLETED SUCCESSFULLY');
+          } catch (error: any) {
+            console.log('❌ WORKBENCH ACTION FAILED:', error.message);
 
-              this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
-              logger.error(`[${action.type}]:Action failed\n\n`, err);
-
-              if (!(err instanceof ActionCommandError)) {
-                return;
-              }
-
-              this.onAlert?.({
-                type: 'error',
-                title: 'Dev Server Failed',
-                description: err.header,
-                content: err.output,
-              });
+            // Update action status
+            this.#updateAction(actionId, {
+              status: 'failed',
+              error: error instanceof Error ? error.message : 'Workbench action failed',
             });
 
-          /*
-           * adding a delay to avoid any race condition between 2 start actions
-           * i am up for a better approach
-           */
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-
-          return;
+            // Return early without re-throwing
+            return;
+          }
+          break;
         }
       }
 
@@ -304,8 +305,13 @@ export class ActionRunner {
       unreachable('Expected file action');
     }
 
+    console.log('DEBUG: Starting file action:', { filePath: action.filePath, contentLength: action.content.length });
+
     const webcontainer = await this.#webcontainer;
+    console.log('DEBUG: WebContainer obtained, workdir:', webcontainer.workdir);
+
     const relativePath = nodePath.relative(webcontainer.workdir, action.filePath);
+    console.log('DEBUG: Calculated relative path:', relativePath);
 
     let folder = nodePath.dirname(relativePath);
 
@@ -314,17 +320,22 @@ export class ActionRunner {
 
     if (folder !== '.') {
       try {
+        console.log('DEBUG: Creating folder:', folder);
         await webcontainer.fs.mkdir(folder, { recursive: true });
         logger.debug('Created folder', folder);
       } catch (error) {
+        console.error('DEBUG: Failed to create folder:', folder, error);
         logger.error('Failed to create folder\n\n', error);
       }
     }
 
     try {
+      console.log('DEBUG: Writing file:', relativePath, 'with content length:', action.content.length);
       await webcontainer.fs.writeFile(relativePath, action.content);
+      console.log('DEBUG: File written successfully:', relativePath);
       logger.debug(`File written ${relativePath}`);
     } catch (error) {
+      console.error('DEBUG: Failed to write file:', relativePath, error);
       logger.error('Failed to write file\n\n', error);
     }
   }
@@ -499,6 +510,42 @@ export class ActionRunner {
     }
   }
 
+  async handleWorkbenchAction(action: WorkbenchAction) {
+    const { action: workbenchAction, parameters = {} } = action;
+    console.log('🔥 HANDLE WORKBENCH ACTION CALLED - Action:', workbenchAction, 'Parameters:', parameters);
+    logger.debug('[Workbench Action]:', { workbenchAction, parameters });
+
+    try {
+      const internalActionsService = InternalActionsService.getInstance();
+      console.log('🛠️ Got InternalActionsService instance');
+
+      // Map workbench actions to internal tool names
+      const toolName = `workbench.${workbenchAction}`;
+      console.log('🎯 Mapped to internal tool:', toolName);
+
+      if (!internalActionsService.isValidToolName(toolName)) {
+        console.log('❌ Tool validation failed - tool does not exist:', toolName);
+        throw new Error(`Workbench action '${workbenchAction}' is not available`);
+      }
+
+      console.log('✅ Tool validation passed');
+
+      // Execute the internal tool
+      console.log('⚡ About to execute internal tool...');
+
+      const result = await internalActionsService.executeTool(toolName, parameters);
+      console.log('🎉 Internal tool execution completed:', result);
+
+      logger.debug(`Workbench action '${workbenchAction}' result:`, result);
+
+      return { success: true, result };
+    } catch (error) {
+      console.log('💥 Workbench action execution error:', error);
+      logger.error('Workbench action failed:', error);
+      throw error;
+    }
+  }
+
   // Add this method declaration to the class
   handleDeployAction(
     stage: 'building' | 'deploying' | 'complete',
@@ -548,5 +595,65 @@ export class ActionRunner {
       deployStatus: deployStatus as any,
       source: details?.source || 'netlify',
     });
+  }
+
+  async executeUserAction(actionId: string) {
+    const action = this.actions.get()[actionId];
+
+    if (!action) {
+      logger.error(`Action ${actionId} not found`);
+      return;
+    }
+
+    if (action.executed) {
+      logger.debug(`Action ${actionId} already executed`);
+      return;
+    }
+
+    this.#updateAction(actionId, { status: 'running' });
+
+    try {
+      switch (action.type) {
+        case 'shell': {
+          await this.#runShellAction(action);
+          break;
+        }
+        case 'start': {
+          await this.#runStartAction(action);
+          break;
+        }
+        case 'build': {
+          const buildOutput = await this.#runBuildAction(action);
+          this.buildOutput = buildOutput;
+          break;
+        }
+        default: {
+          logger.error(`Action type ${action.type} not supported for manual execution`);
+          return;
+        }
+      }
+
+      this.#updateAction(actionId, { status: 'complete', executed: true });
+    } catch (error) {
+      if (action.abortSignal.aborted) {
+        return;
+      }
+
+      this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
+      logger.error(`[${action.type}]:Action failed\n\n`, error);
+
+      if (!(error instanceof ActionCommandError)) {
+        return;
+      }
+
+      this.onAlert?.({
+        type: 'error',
+        title: 'Command Failed',
+        description: error.header,
+        content: error.output,
+      });
+
+      throw error;
+    }
   }
 }

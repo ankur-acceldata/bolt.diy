@@ -1,6 +1,7 @@
 import { atom, map } from 'nanostores';
 import Cookies from 'js-cookie';
 import { createScopedLogger } from '~/utils/logger';
+import { isEventLogsEnabled } from '~/lib/stores/settings';
 
 const logger = createScopedLogger('LogStore');
 
@@ -134,6 +135,20 @@ class LogStore {
     metadata?: LogEntry['metadata'],
   ) {
     const id = this._generateId();
+
+    // Respect global setting to disable event logging
+    try {
+      const enabled = isEventLogsEnabled.get();
+
+      if (!enabled) {
+        // Return a valid id but skip persisting the log
+
+        return id;
+      }
+    } catch {
+      // If settings store is not initialized, proceed without blocking
+    }
+
     const entry: LogEntry = {
       id,
       timestamp: new Date().toISOString(),

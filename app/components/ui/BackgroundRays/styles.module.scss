@@ -1,13 +1,13 @@
 .rayContainer {
-  // Theme-specific colors
-  --ray-color-primary: color-mix(in srgb, var(--primary-color), transparent 30%);
-  --ray-color-secondary: color-mix(in srgb, var(--secondary-color), transparent 30%);
-  --ray-color-accent: color-mix(in srgb, var(--accent-color), transparent 30%);
+  // Theme-specific colors using our theming system
+  --ray-color-primary: color-mix(in srgb, var(--bolt-elements-item-contentAccent), transparent 60%);
+  --ray-color-secondary: color-mix(in srgb, var(--bolt-elements-textSecondary), transparent 70%);
+  --ray-color-accent: color-mix(in srgb, var(--bolt-elements-item-contentAccent), transparent 50%);
 
   // Theme-specific gradients
-  --ray-gradient-primary: radial-gradient(var(--ray-color-primary) 0%, transparent 70%);
-  --ray-gradient-secondary: radial-gradient(var(--ray-color-secondary) 0%, transparent 70%);
-  --ray-gradient-accent: radial-gradient(var(--ray-color-accent) 0%, transparent 70%);
+  --ray-gradient-primary: radial-gradient(var(--ray-color-primary) 0%, transparent 80%);
+  --ray-gradient-secondary: radial-gradient(var(--ray-color-secondary) 0%, transparent 85%);
+  --ray-gradient-accent: radial-gradient(var(--ray-color-accent) 0%, transparent 75%);
 
   position: fixed;
   inset: 0;
@@ -19,10 +19,29 @@
 
   :global(html[data-theme='dark']) & {
     mix-blend-mode: screen;
+    opacity: 0.8;
   }
 
   :global(html[data-theme='light']) & {
     mix-blend-mode: multiply;
+    opacity: 0.6;
+  }
+
+  // Color theme variations
+  :global(html.color-blue) & {
+    --ray-color-accent: color-mix(in srgb, #2f6af9, transparent 50%);
+  }
+
+  :global(html.color-green) & {
+    --ray-color-accent: color-mix(in srgb, #10b981, transparent 50%);
+  }
+
+  :global(html.color-purple) & {
+    --ray-color-accent: color-mix(in srgb, #8b5cf6, transparent 50%);
+  }
+
+  :global(html.color-orange) & {
+    --ray-color-accent: color-mix(in srgb, #f59e0b, transparent 50%);
   }
 }
 
@@ -32,11 +51,12 @@
 
   :global(html[data-theme='dark']) & {
     mix-blend-mode: screen;
+    opacity: 0.7;
   }
 
   :global(html[data-theme='light']) & {
     mix-blend-mode: multiply;
-    opacity: 0.4;
+    opacity: 0.5;
   }
 }
 
@@ -48,7 +68,7 @@
   top: -500px;
   left: -100px;
   filter: blur(80px);
-  opacity: 0.6;
+  opacity: 0.4;
   animation: float1 15s infinite ease-in-out;
 }
 
@@ -60,7 +80,7 @@
   top: -300px;
   left: 200px;
   filter: blur(60px);
-  opacity: 0.6;
+  opacity: 0.3;
   animation: float2 18s infinite ease-in-out;
 }
 
@@ -71,7 +91,7 @@
   top: -320px;
   left: 500px;
   filter: blur(65px);
-  opacity: 0.5;
+  opacity: 0.4;
   animation: float3 20s infinite ease-in-out;
 }
 
@@ -82,7 +102,7 @@
   top: -350px;
   left: 800px;
   filter: blur(55px);
-  opacity: 0.55;
+  opacity: 0.3;
   animation: float4 17s infinite ease-in-out;
 }
 
@@ -94,7 +114,7 @@
   top: -250px;
   left: 1000px;
   filter: blur(45px);
-  opacity: 0.6;
+  opacity: 0.35;
   animation: float5 16s infinite ease-in-out;
 }
 
@@ -106,7 +126,7 @@
   top: -400px;
   left: 600px;
   filter: blur(75px);
-  opacity: 0.45;
+  opacity: 0.25;
   animation: float6 19s infinite ease-in-out;
 }
 
@@ -118,7 +138,7 @@
   top: -450px;
   left: 350px;
   filter: blur(65px);
-  opacity: 0.55;
+  opacity: 0.3;
   animation: float7 21s infinite ease-in-out;
 }
 
@@ -130,7 +150,7 @@
   top: -380px;
   left: 750px;
   filter: blur(58px);
-  opacity: 0.6;
+  opacity: 0.35;
   animation: float8 14s infinite ease-in-out;
 }
 

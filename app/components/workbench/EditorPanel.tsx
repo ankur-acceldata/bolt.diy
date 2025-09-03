@@ -20,7 +20,8 @@ import { renderLogger } from '~/utils/logger';
 import { isMobile } from '~/utils/mobile';
 import { FileBreadcrumb } from './FileBreadcrumb';
 import { FileTree } from './FileTree';
-import { DEFAULT_TERMINAL_SIZE, TerminalTabs } from './terminal/TerminalTabs';
+import { DEFAULT_TERMINAL_SIZE } from './terminal/TerminalTabs';
+import { LogViewer } from './LogViewer';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { Search } from './Search'; // <-- Ensure Search is imported
 import { classNames } from '~/utils/classNames'; // <-- Import classNames if not already present
@@ -38,6 +39,10 @@ interface EditorPanelProps {
   onFileSelect?: (value?: string) => void;
   onFileSave?: OnEditorSave;
   onFileReset?: () => void;
+  onSendMessage?: (message: string) => void;
+  onSetChatInput?: (message: string) => void;
+  model?: string;
+  provider?: string;
 }
 
 const DEFAULT_EDITOR_SIZE = 100 - DEFAULT_TERMINAL_SIZE;
@@ -57,11 +62,18 @@ export const EditorPanel = memo(
     onEditorScroll,
     onFileSave,
     onFileReset,
+    onSendMessage,
+    onSetChatInput,
+    model,
+    provider,
   }: EditorPanelProps) => {
     renderLogger.trace('EditorPanel');
 
-    const theme = useStore(themeStore);
+    const themeConfig = useStore(themeStore);
+    const theme = themeConfig.mode;
     const showTerminal = useStore(workbenchStore.showTerminal);
+    const showLogViewer = useStore(workbenchStore.showLogViewer);
+    const logViewerConfig = useStore(workbenchStore.logViewerConfig);
 
     const activeFileSegments = useMemo(() => {
       if (!editorDocument) {
@@ -178,8 +190,23 @@ export const EditorPanel = memo(
             </Panel>
           </PanelGroup>
         </Panel>
-        <PanelResizeHandle />
-        <TerminalTabs />
+        {showLogViewer && (
+          <>
+            <PanelResizeHandle />
+            <Panel defaultSize={30} minSize={15} maxSize={60}>
+              <LogViewer
+                dataplaneId={logViewerConfig?.dataplaneId}
+                runId={logViewerConfig?.runId}
+                isOpen={showLogViewer}
+                onClose={() => workbenchStore.toggleLogViewer(false)}
+                onSendMessage={onSendMessage}
+                onSetChatInput={onSetChatInput}
+                model={model}
+                provider={provider}
+              />
+            </Panel>
+          </>
+        )}
       </PanelGroup>
     );
   },

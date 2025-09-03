@@ -1,0 +1,12 @@
+[
+  {
+    "id": "python-application",
+    "name": "Python Application",
+    "selected": true
+  },
+  {
+    "id": "java-application",
+    "name": "Java Application",
+    "disabled": true
+  }
+]

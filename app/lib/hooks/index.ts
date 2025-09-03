@@ -7,3 +7,6 @@ export { default } from './useViewport';
 export { useFeatures } from './useFeatures';
 export { useNotifications } from './useNotifications';
 export { useConnectionStatus } from './useConnectionStatus';
+export { useSync } from './useSync';
+export { useLogStream } from './useLogStream';
+export * from './useCommunicationBus';

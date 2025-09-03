@@ -8,6 +8,11 @@ import {
   autoSelectStarterTemplate,
   enableContextOptimizationStore,
   tabConfigurationStore,
+  syncEnabledStore,
+  syncAutoSyncStore,
+  syncIntervalStore,
+  syncRemoteUrlStore,
+  autoExecutionLimitStore,
   resetTabConfiguration as resetTabConfig,
   updateProviderSettings as updateProviderSettingsStore,
   updateLatestBranch,
@@ -15,6 +20,11 @@ import {
   updateContextOptimization,
   updateEventLogs,
   updatePromptId,
+  updateSyncEnabled,
+  updateSyncAutoSync,
+  updateSyncInterval,
+  updateSyncRemoteUrl,
+  updateAutoExecutionLimit,
 } from '~/lib/stores/settings';
 import { useCallback, useEffect, useState } from 'react';
 import Cookies from 'js-cookie';
@@ -62,6 +72,20 @@ export interface UseSettingsReturn {
   // Tab configuration
   tabConfiguration: TabWindowConfig;
   resetTabConfiguration: () => void;
+
+  // Sync settings
+  syncEnabled: boolean;
+  setSyncEnabled: (enabled: boolean) => void;
+  syncAutoSync: boolean;
+  setSyncAutoSync: (enabled: boolean) => void;
+  syncInterval: number;
+  setSyncInterval: (interval: number) => void;
+  syncRemoteUrl: string;
+  setSyncRemoteUrl: (url: string) => void;
+
+  // Auto-execution settings
+  autoExecutionLimit: number;
+  setAutoExecutionLimit: (limit: number) => void;
 }
 
 // Add interface to match ProviderSetting type
@@ -79,13 +103,23 @@ export function useSettings(): UseSettingsReturn {
   const [activeProviders, setActiveProviders] = useState<ProviderInfo[]>([]);
   const contextOptimizationEnabled = useStore(enableContextOptimizationStore);
   const tabConfiguration = useStore(tabConfigurationStore);
+
+  // Sync settings
+  const syncEnabled = useStore(syncEnabledStore);
+  const syncAutoSync = useStore(syncAutoSyncStore);
+  const syncInterval = useStore(syncIntervalStore);
+  const syncRemoteUrl = useStore(syncRemoteUrlStore);
+
+  // Auto-execution settings
+  const autoExecutionLimit = useStore(autoExecutionLimitStore);
+
   const [settings, setSettings] = useState<Settings>(() => {
     const storedSettings = getLocalStorage('settings');
     return {
       theme: storedSettings?.theme || 'system',
       language: storedSettings?.language || 'en',
       notifications: storedSettings?.notifications ?? true,
-      eventLogs: storedSettings?.eventLogs ?? true,
+      eventLogs: storedSettings?.eventLogs ?? false,
       timezone: storedSettings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       tabConfiguration,
     };
@@ -141,6 +175,32 @@ export function useSettings(): UseSettingsReturn {
   const enableContextOptimization = useCallback((enabled: boolean) => {
     updateContextOptimization(enabled);
     logStore.logSystem(`Context optimization ${enabled ? 'enabled' : 'disabled'}`);
+  }, []);
+
+  // Sync settings callbacks
+  const setSyncEnabled = useCallback((enabled: boolean) => {
+    updateSyncEnabled(enabled);
+    logStore.logSystem(`Sync ${enabled ? 'enabled' : 'disabled'}`);
+  }, []);
+
+  const setSyncAutoSync = useCallback((enabled: boolean) => {
+    updateSyncAutoSync(enabled);
+    logStore.logSystem(`Auto sync ${enabled ? 'enabled' : 'disabled'}`);
+  }, []);
+
+  const setSyncInterval = useCallback((interval: number) => {
+    updateSyncInterval(interval);
+    logStore.logSystem(`Sync interval updated to ${interval}ms`);
+  }, []);
+
+  const setSyncRemoteUrl = useCallback((url: string) => {
+    updateSyncRemoteUrl(url);
+    logStore.logSystem(`Sync remote URL updated to ${url || 'none'}`);
+  }, []);
+
+  const setAutoExecutionLimit = useCallback((limit: number) => {
+    updateAutoExecutionLimit(limit);
+    logStore.logSystem(`Auto-execution limit updated to ${limit}`);
   }, []);
 
   const setTheme = useCallback(
@@ -204,5 +264,19 @@ export function useSettings(): UseSettingsReturn {
     settings,
     tabConfiguration,
     resetTabConfiguration: resetTabConfig,
+
+    // Sync settings
+    syncEnabled,
+    setSyncEnabled,
+    syncAutoSync,
+    setSyncAutoSync,
+    syncInterval,
+    setSyncInterval,
+    syncRemoteUrl,
+    setSyncRemoteUrl,
+
+    // Auto-execution settings
+    autoExecutionLimit,
+    setAutoExecutionLimit,
   };
 }

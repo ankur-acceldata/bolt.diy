@@ -6,6 +6,7 @@ import { rehypePlugins, remarkPlugins, allowedHTMLElements } from '~/utils/markd
 import { Artifact, openArtifactInWorkbench } from './Artifact';
 import { CodeBlock } from './CodeBlock';
 import type { Message } from 'ai';
+import { generateId } from 'ai';
 import styles from './Markdown.module.scss';
 import ThoughtBox from './ThoughtBox';
 import type { ProviderInfo } from '~/types/model';
@@ -145,7 +146,7 @@ export const Markdown = memo(
                     openArtifactInWorkbench(path);
                   } else if (type === 'message' && append) {
                     append({
-                      id: `quick-action-message-${Date.now()}`,
+                      id: generateId(),
                       content: [
                         {
                           type: 'text',
@@ -158,7 +159,7 @@ export const Markdown = memo(
                   } else if (type === 'implement' && append && setChatMode) {
                     setChatMode('build');
                     append({
-                      id: `quick-action-implement-${Date.now()}`,
+                      id: generateId(),
                       content: [
                         {
                           type: 'text',

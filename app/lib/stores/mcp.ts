@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { MCPConfig, MCPServerTools } from '~/lib/services/mcpService';
+import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
 
 const MCP_SETTINGS_KEY = 'mcp_settings';
 const isBrowser = typeof window !== 'undefined';
@@ -9,12 +10,19 @@ type MCPSettings = {
   maxLLMSteps: number;
 };
 
-const defaultSettings = {
+// Create default MCP configuration with XDP server (lazy initialization)
+const getDefaultXDPConfig = () =>
+  createXDPMCPConfig({
+    accessKey: DEFAULT_XDP_CONFIG.accessKey,
+    secretKey: DEFAULT_XDP_CONFIG.secretKey,
+    baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
+    serverPath: DEFAULT_XDP_CONFIG.serverPath,
+  });
+
+const getDefaultSettings = (): MCPSettings => ({
   maxLLMSteps: 5,
-  mcpConfig: {
-    mcpServers: {},
-  },
-} satisfies MCPSettings;
+  mcpConfig: getDefaultXDPConfig(),
+});
 
 type Store = {
   isInitialized: boolean;
@@ -32,7 +40,7 @@ type Actions = {
 
 export const useMCPStore = create<Store & Actions>((set, get) => ({
   isInitialized: false,
-  settings: defaultSettings,
+  settings: getDefaultSettings(),
   serverTools: {},
   error: null,
   isUpdatingConfig: false,
@@ -47,8 +55,18 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
       if (savedConfig) {
         try {
           const settings = JSON.parse(savedConfig) as MCPSettings;
-          const serverTools = await updateServerConfig(settings.mcpConfig);
-          set(() => ({ settings, serverTools }));
+
+          // Always override with fresh XDP config to pick up environment variables
+          const freshDefaultSettings = getDefaultSettings();
+          const updatedSettings = {
+            ...settings,
+            mcpConfig: freshDefaultSettings.mcpConfig,
+          };
+
+          localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(updatedSettings));
+
+          const serverTools = await updateServerConfig(updatedSettings.mcpConfig);
+          set(() => ({ settings: updatedSettings, serverTools }));
         } catch (error) {
           console.error('Error parsing saved mcp config:', error);
           set(() => ({
@@ -56,7 +74,12 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
           }));
         }
       } else {
+        // Initialize with default XDP configuration
+        const defaultSettings = getDefaultSettings();
         localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(defaultSettings));
+
+        const serverTools = await updateServerConfig(defaultSettings.mcpConfig);
+        set(() => ({ settings: defaultSettings, serverTools }));
       }
     }
 

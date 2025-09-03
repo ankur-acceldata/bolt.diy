@@ -1,0 +1,1466 @@
+diff --git a/.gitignore b/.gitignore
+index 4bc03e1..c21cc6c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -44,5 +44,5 @@ app/commit.json
+ changelogUI.md
+ docs/instructions/Roadmap.md
+ .cursorrules
+-*.md
++# *.md
+ .qodo
+diff --git a/app/components/@settings/core/ControlPanel.tsx b/app/components/@settings/core/ControlPanel.tsx
+index df32755..25ae5f6 100644
+--- a/app/components/@settings/core/ControlPanel.tsx
++++ b/app/components/@settings/core/ControlPanel.tsx
+@@ -103,8 +103,8 @@ const AnimatedSwitch = ({ checked, onCheckedChange, id, label }: AnimatedSwitchP
+           'relative inline-flex h-6 w-11 items-center rounded-full',
+           'transition-all duration-300 ease-[cubic-bezier(0.87,_0,_0.13,_1)]',
+           'bg-gray-200 dark:bg-gray-700',
+-          'data-[state=checked]:bg-purple-500',
+-          'focus:outline-none focus:ring-2 focus:ring-purple-500/20',
++          'data-[state=checked]:bg-bolt-elements-item-contentAccent',
++          'focus:outline-none focus:ring-2 focus:ring-bolt-elements-borderColorActive/20',
+           'cursor-pointer',
+           'group',
+         )}
+diff --git a/app/components/@settings/shared/components/DraggableTabList.tsx b/app/components/@settings/shared/components/DraggableTabList.tsx
+index a868183..92e90ce 100644
+--- a/app/components/@settings/shared/components/DraggableTabList.tsx
++++ b/app/components/@settings/shared/components/DraggableTabList.tsx
+@@ -103,7 +103,7 @@ const DraggableTabItem = ({
+             <Switch
+               checked={tab.visible}
+               onCheckedChange={(checked: boolean) => onVisibilityChange?.(tab, checked)}
+-              className="data-[state=checked]:bg-purple-500"
++              className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
+               aria-label={`Toggle ${TAB_LABELS[tab.id]} visibility`}
+             />
+             <label className="text-sm text-bolt-elements-textSecondary">Visible</label>
+@@ -113,7 +113,7 @@ const DraggableTabItem = ({
+             <Switch
+               checked={tab.window === 'developer'}
+               onCheckedChange={(checked: boolean) => onWindowChange?.(tab, checked ? 'developer' : 'user')}
+-              className="data-[state=checked]:bg-purple-500"
++              className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
+               aria-label={`Toggle ${TAB_LABELS[tab.id]} window assignment`}
+             />
+             <label className="text-sm text-bolt-elements-textSecondary">Dev</label>
+diff --git a/app/components/@settings/shared/components/TabManagement.tsx b/app/components/@settings/shared/components/TabManagement.tsx
+index 9ae1601..cc76d5f 100644
+--- a/app/components/@settings/shared/components/TabManagement.tsx
++++ b/app/components/@settings/shared/components/TabManagement.tsx
+@@ -50,7 +50,9 @@ const BETA_TABS = new Set<TabType>(['task-manager', 'service-status', 'update',
+ 
+ // Beta label component
+ const BetaLabel = () => (
+-  <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-purple-500/10 text-purple-500 font-medium">BETA</span>
++  <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent font-medium">
++    BETA
++  </span>
+ );
+ 
+ export const TabManagement = () => {
+@@ -214,7 +216,7 @@ export const TabManagement = () => {
+               >
+                 {/* Status Badges */}
+                 <div className="absolute top-1 right-1.5 flex gap-1">
+-                  <span className="px-1.5 py-0.25 text-xs rounded-full bg-purple-500/10 text-purple-500 font-medium mr-2">
++                  <span className="px-1.5 py-0.25 text-xs rounded-full bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent font-medium mr-2">
+                     Default
+                   </span>
+                 </div>
+@@ -260,7 +262,7 @@ export const TabManagement = () => {
+                             handleTabVisibilityChange(tab.id, checked);
+                           }
+                         }}
+-                        className={classNames('data-[state=checked]:bg-purple-500 ml-4', {
++                        className={classNames('data-[state=checked]:bg-bolt-elements-item-contentAccent ml-4', {
+                           'opacity-50 pointer-events-none':
+                             !DEFAULT_USER_TABS.includes(tab.id) && !OPTIONAL_USER_TABS.includes(tab.id),
+                         })}
+@@ -354,7 +356,7 @@ export const TabManagement = () => {
+                             handleTabVisibilityChange(tab.id, checked);
+                           }
+                         }}
+-                        className={classNames('data-[state=checked]:bg-purple-500 ml-4', {
++                        className={classNames('data-[state=checked]:bg-bolt-elements-item-contentAccent ml-4', {
+                           'opacity-50 pointer-events-none':
+                             !DEFAULT_USER_TABS.includes(tab.id) && !OPTIONAL_USER_TABS.includes(tab.id),
+                         })}
+diff --git a/app/components/@settings/shared/components/TabTile.tsx b/app/components/@settings/shared/components/TabTile.tsx
+index ea409d6..8d5be41 100644
+--- a/app/components/@settings/shared/components/TabTile.tsx
++++ b/app/components/@settings/shared/components/TabTile.tsx
+@@ -36,12 +36,14 @@ export const TabTile: React.FC<TabTileProps> = ({
+             className={classNames(
+               'relative flex flex-col items-center p-6 rounded-xl',
+               'w-full h-full min-h-[160px]',
+-              'bg-white dark:bg-[#141414]',
+-              'border border-[#E5E5E5] dark:border-[#333333]',
++              'bg-bolt-elements-background-depth-1',
++              'border border-bolt-elements-borderColor',
+               'group',
+-              'hover:bg-purple-50 dark:hover:bg-[#1a1a1a]',
+-              'hover:border-purple-200 dark:hover:border-purple-900/30',
+-              isActive ? 'border-purple-500 dark:border-purple-500/50 bg-purple-500/5 dark:bg-purple-500/10' : '',
++              'hover:bg-bolt-elements-item-backgroundAccent',
++              'hover:border-bolt-elements-borderColorActive/30',
++              isActive
++                ? 'border-bolt-elements-borderColorActive dark:border-bolt-elements-borderColorActive/50 bg-bolt-elements-item-backgroundAccent'
++                : '',
+               isLoading ? 'cursor-wait opacity-70' : '',
+               className || '',
+             )}
+@@ -55,20 +57,24 @@ export const TabTile: React.FC<TabTileProps> = ({
+                   'w-14 h-14',
+                   'flex items-center justify-center',
+                   'rounded-xl',
+-                  'bg-gray-100 dark:bg-gray-800',
+-                  'ring-1 ring-gray-200 dark:ring-gray-700',
+-                  'group-hover:bg-purple-100 dark:group-hover:bg-gray-700/80',
+-                  'group-hover:ring-purple-200 dark:group-hover:ring-purple-800/30',
+-                  isActive ? 'bg-purple-500/10 dark:bg-purple-500/10 ring-purple-500/30 dark:ring-purple-500/20' : '',
++                  'bg-bolt-elements-background-depth-2',
++                  'ring-1 ring-bolt-elements-borderColor',
++                  'group-hover:bg-bolt-elements-item-backgroundAccent dark:group-hover:bg-gray-700/80',
++                  'group-hover:ring-bolt-elements-borderColorActive/30',
++                  isActive
++                    ? 'bg-bolt-elements-item-backgroundAccent dark:bg-bolt-elements-item-backgroundAccent ring-bolt-elements-borderColorActive/30'
++                    : '',
+                 )}
+               >
+                 <motion.div
+                   className={classNames(
+                     TAB_ICONS[tab.id],
+                     'w-8 h-8',
+-                    'text-gray-600 dark:text-gray-300',
+-                    'group-hover:text-purple-500 dark:group-hover:text-purple-400/80',
+-                    isActive ? 'text-purple-500 dark:text-purple-400/90' : '',
++                    'text-bolt-elements-textSecondary',
++                    'group-hover:text-bolt-elements-item-contentAccent dark:opacity-80',
++                    isActive
++                      ? 'text-bolt-elements-item-contentAccent dark:text-bolt-elements-item-contentAccent dark:opacity-90'
++                      : '',
+                   )}
+                 />
+               </motion.div>
+@@ -78,9 +84,9 @@ export const TabTile: React.FC<TabTileProps> = ({
+                 <h3
+                   className={classNames(
+                     'text-[15px] font-medium leading-snug mb-2',
+-                    'text-gray-700 dark:text-gray-200',
+-                    'group-hover:text-purple-600 dark:group-hover:text-purple-300/90',
+-                    isActive ? 'text-purple-500 dark:text-purple-400/90' : '',
++                    'text-bolt-elements-textPrimary',
++                    'group-hover:text-bolt-elements-item-contentAccent dark:opacity-90',
++                    isActive ? 'text-bolt-elements-item-contentAccent dark:opacity-90' : '',
+                   )}
+                 >
+                   {TAB_LABELS[tab.id]}
+@@ -89,11 +95,11 @@ export const TabTile: React.FC<TabTileProps> = ({
+                   <p
+                     className={classNames(
+                       'text-[13px] leading-relaxed',
+-                      'text-gray-500 dark:text-gray-400',
++                      'text-bolt-elements-textTertiary',
+                       'max-w-[85%]',
+                       'text-center',
+-                      'group-hover:text-purple-500 dark:group-hover:text-purple-400/70',
+-                      isActive ? 'text-purple-400 dark:text-purple-400/80' : '',
++                      'group-hover:text-bolt-elements-item-contentAccent dark:opacity-70',
++                      isActive ? 'text-bolt-elements-item-contentAccent dark:opacity-80' : '',
+                     )}
+                   >
+                     {description}
+@@ -105,12 +111,12 @@ export const TabTile: React.FC<TabTileProps> = ({
+             {/* Update Indicator with Tooltip */}
+             {hasUpdate && (
+               <>
+-                <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-pulse" />
++                <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-bolt-elements-item-contentAccent dark:bg-bolt-elements-item-contentAccent animate-pulse" />
+                 <Tooltip.Portal>
+                   <Tooltip.Content
+                     className={classNames(
+                       'px-3 py-1.5 rounded-lg',
+-                      'bg-[#18181B] text-white',
++                      'bg-bolt-elements-background-depth-3 text-bolt-elements-textPrimary',
+                       'text-sm font-medium',
+                       'select-none',
+                       'z-[100]',
+@@ -119,7 +125,7 @@ export const TabTile: React.FC<TabTileProps> = ({
+                     sideOffset={5}
+                   >
+                     {statusMessage}
+-                    <Tooltip.Arrow className="fill-[#18181B]" />
++                    <Tooltip.Arrow className="fill-bolt-elements-background-depth-3" />
+                   </Tooltip.Content>
+                 </Tooltip.Portal>
+               </>
+diff --git a/app/components/@settings/tabs/event-logs/EventLogsTab.tsx b/app/components/@settings/tabs/event-logs/EventLogsTab.tsx
+index f3983df..572a717 100644
+--- a/app/components/@settings/tabs/event-logs/EventLogsTab.tsx
++++ b/app/components/@settings/tabs/event-logs/EventLogsTab.tsx
+@@ -912,7 +912,7 @@ export function EventLogsTab() {
+             <Switch
+               checked={showTimestamps}
+               onCheckedChange={(value) => handlePreferenceChange('timestamps', value)}
+-              className="data-[state=checked]:bg-purple-500"
++              className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
+             />
+             <span className="text-sm text-gray-500 dark:text-gray-400">Show Timestamps</span>
+           </div>
+@@ -921,7 +921,7 @@ export function EventLogsTab() {
+             <Switch
+               checked={use24Hour}
+               onCheckedChange={(value) => handlePreferenceChange('24hour', value)}
+-              className="data-[state=checked]:bg-purple-500"
++              className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
+             />
+             <span className="text-sm text-gray-500 dark:text-gray-400">24h Time</span>
+           </div>
+@@ -930,7 +930,7 @@ export function EventLogsTab() {
+             <Switch
+               checked={autoExpand}
+               onCheckedChange={(value) => handlePreferenceChange('autoExpand', value)}
+-              className="data-[state=checked]:bg-purple-500"
++              className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
+             />
+             <span className="text-sm text-gray-500 dark:text-gray-400">Auto Expand</span>
+           </div>
+diff --git a/app/components/chat/APIKeyManager.tsx b/app/components/chat/APIKeyManager.tsx
+index 9226336..f0e1884 100644
+--- a/app/components/chat/APIKeyManager.tsx
++++ b/app/components/chat/APIKeyManager.tsx
+@@ -121,8 +121,8 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey,
+               value={tempKey}
+               placeholder="Enter API Key"
+               onChange={(e) => setTempKey(e.target.value)}
+-              className="w-[300px] px-3 py-1.5 text-sm rounded border border-bolt-elements-borderColor 
+-                        bg-bolt-elements-prompt-background text-bolt-elements-textPrimary 
++              className="w-[300px] px-3 py-1.5 text-sm rounded border border-bolt-elements-borderColor
++                        bg-bolt-elements-prompt-background text-bolt-elements-textPrimary
+                         focus:outline-none focus:ring-2 focus:ring-bolt-elements-focus"
+             />
+             <IconButton
+@@ -155,7 +155,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey,
+               <IconButton
+                 onClick={() => window.open(provider?.getApiKeyLink)}
+                 title="Get API Key"
+-                className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 flex items-center gap-2"
++                className="bg-bolt-elements-item-backgroundAccent hover:bg-bolt-elements-item-backgroundAccent hover:opacity-80 text-bolt-elements-item-contentAccent flex items-center gap-2"
+               >
+                 <span className="text-xs whitespace-nowrap">{provider?.labelForGetApiKey || 'Get API Key'}</span>
+                 <div className={`${provider?.icon || 'i-ph:key'} w-4 h-4`} />
+diff --git a/app/components/chat/BaseChat.tsx b/app/components/chat/BaseChat.tsx
+index f027abe..24d0839 100644
+--- a/app/components/chat/BaseChat.tsx
++++ b/app/components/chat/BaseChat.tsx
+@@ -15,10 +15,13 @@ import Cookies from 'js-cookie';
+ import * as Tooltip from '@radix-ui/react-tooltip';
+ import styles from './BaseChat.module.scss';
+ import { ImportButtons } from '~/components/chat/chatExportAndImport/ImportButtons';
+-import { ExamplePrompts } from '~/components/chat/ExamplePrompts';
+-import GitCloneButton from './GitCloneButton';
++
++// import { ExamplePrompts } from '~/components/chat/ExamplePrompts';
++
++// import GitCloneButton from './GitCloneButton';
+ import type { ProviderInfo } from '~/types/model';
+-import StarterTemplates from './StarterTemplates';
++
++// import StarterTemplates from './StarterTemplates';
+ import type { ActionAlert, SupabaseAlert, DeployAlert } from '~/types/actions';
+ import DeployChatAlert from '~/components/deploy/DeployAlert';
+ import ChatAlert from './ChatAlert';
+@@ -341,12 +344,16 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
+           <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full')}>
+             {!chatStarted && (
+               <div id="intro" className="mt-[16vh] max-w-2xl mx-auto text-center px-4 lg:px-0">
+-                <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
++                {/* Commented out intro content - keeping div for animation purposes */}
++                {/* <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
+                   Where ideas begin
+-                </h1>
+-                <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
++                </h1> */}
++                {/* <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
+                   Bring ideas to life in seconds or get help on existing projects.
+-                </p>
++                </p> */}
++
++                {/* Add minimal content to ensure element exists for animation */}
++                <div className="min-h-[1px] opacity-0"></div>
+               </div>
+             )}
+             <StickToBottom
+@@ -461,10 +468,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
+               {!chatStarted && (
+                 <div className="flex justify-center gap-2">
+                   {ImportButtons(importChat)}
+-                  <GitCloneButton importChat={importChat} />
++                  {/* <GitCloneButton importChat={importChat} /> */}
+                 </div>
+               )}
+-              <div className="flex flex-col gap-5">
++              {/* <div className="flex flex-col gap-5">
+                 {!chatStarted &&
+                   ExamplePrompts((event, messageInput) => {
+                     if (isStreaming) {
+@@ -475,7 +482,22 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
+                     handleSendMessage?.(event, messageInput);
+                   })}
+                 {!chatStarted && <StarterTemplates />}
+-              </div>
++              </div> */}
++
++              {/* Commented out examples section - keeping this comment for reference */}
++              {/*
++              {!chatStarted && (
++                <div id="examples">
++                  {ExamplePrompts((event, messageInput) => {
++                    if (isStreaming) {
++                      handleStop?.();
++                      return;
++                    }
++                    handleSendMessage?.(event, messageInput);
++                  })}
++                </div>
++              )}
++              */}
+             </div>
+           </div>
+           <ClientOnly>
+diff --git a/app/components/chat/Chat.client.tsx b/app/components/chat/Chat.client.tsx
+index be5ff42..9999a98 100644
+--- a/app/components/chat/Chat.client.tsx
++++ b/app/components/chat/Chat.client.tsx
+@@ -286,18 +286,47 @@ export const ChatImpl = memo(
+     }, [input, textareaRef]);
+ 
+     const runAnimation = async () => {
++      console.log('runAnimation called, chatStarted:', chatStarted);
++
+       if (chatStarted) {
++        console.log('Animation skipped - chat already started');
+         return;
+       }
+ 
+-      await Promise.all([
+-        animate('#examples', { opacity: 0, display: 'none' }, { duration: 0.1 }),
+-        animate('#intro', { opacity: 0, flex: 1 }, { duration: 0.2, ease: cubicEasingFn }),
+-      ]);
++      // Check which elements exist before trying to animate them
++      const examplesEl = document.getElementById('examples');
++      const introEl = document.getElementById('intro');
+ 
+-      chatStore.setKey('started', true);
++      console.log('Elements found:', { examplesEl, introEl });
++
++      const animations = [];
++
++      // Only animate #examples if it exists (currently removed/commented out)
++      if (examplesEl) {
++        animations.push(animate('#examples', { opacity: 0, display: 'none' }, { duration: 0.1 }));
++      } else {
++        console.log('Skipping #examples animation - element not found');
++      }
++
++      // Only animate #intro if it exists
++      if (introEl) {
++        animations.push(animate('#intro', { opacity: 0, flex: 1 }, { duration: 0.2, ease: cubicEasingFn }));
++      } else {
++        console.log('Skipping #intro animation - element not found');
++      }
++
++      // If no elements to animate, just proceed with setting the state
++      if (animations.length > 0) {
++        console.log('Running animations for', animations.length, 'elements');
++        await Promise.all(animations);
++      } else {
++        console.log('No elements to animate, proceeding to set chat started');
++      }
+ 
++      chatStore.setKey('started', true);
+       setChatStarted(true);
++
++      console.log('Animation completed, chatStarted set to true');
+     };
+ 
+     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
+@@ -321,7 +350,12 @@ export const ChatImpl = memo(
+         finalMessageContent = messageContent + elementInfo;
+       }
+ 
+-      runAnimation();
++      console.log('About to run animation, chatStarted:', chatStarted);
++
++      // Make runAnimation awaitable to ensure it completes before proceeding
++      await runAnimation();
++
++      console.log('Animation completed, proceeding with message processing');
+ 
+       if (!chatStarted) {
+         setFakeLoading(true);
+diff --git a/app/components/chat/ChatBox.tsx b/app/components/chat/ChatBox.tsx
+index 99aa835..3a92ba3 100644
+--- a/app/components/chat/ChatBox.tsx
++++ b/app/components/chat/ChatBox.tsx
+@@ -11,8 +11,6 @@ import { SendButton } from './SendButton.client';
+ import { IconButton } from '~/components/ui/IconButton';
+ import { toast } from 'react-toastify';
+ import { SpeechRecognitionButton } from '~/components/chat/SpeechRecognition';
+-import { SupabaseConnection } from './SupabaseConnection';
+-import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
+ import styles from './BaseChat.module.scss';
+ import type { ProviderInfo } from '~/types/model';
+ import { ColorSchemeDialog } from '~/components/ui/ColorSchemeDialog';
+@@ -86,10 +84,10 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
+             gradientUnits="userSpaceOnUse"
+             gradientTransform="rotate(-45)"
+           >
+-            <stop offset="0%" stopColor="#b44aff" stopOpacity="0%"></stop>
+-            <stop offset="40%" stopColor="#b44aff" stopOpacity="80%"></stop>
+-            <stop offset="50%" stopColor="#b44aff" stopOpacity="80%"></stop>
+-            <stop offset="100%" stopColor="#b44aff" stopOpacity="0%"></stop>
++            <stop offset="0%" stopColor="var(--accent-color)" stopOpacity="0%"></stop>
++            <stop offset="40%" stopColor="var(--accent-color)" stopOpacity="80%"></stop>
++            <stop offset="50%" stopColor="var(--accent-color)" stopOpacity="80%"></stop>
++            <stop offset="100%" stopColor="var(--accent-color)" stopOpacity="0%"></stop>
+           </linearGradient>
+           <linearGradient id="shine-gradient">
+             <stop offset="0%" stopColor="white" stopOpacity="0%"></stop>
+@@ -323,8 +321,8 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
+               <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd> a new line
+             </div>
+           ) : null}
+-          <SupabaseConnection />
+-          <ExpoQrModal open={props.qrModalOpen} onClose={() => props.setQrModalOpen(false)} />
++          {/* <SupabaseConnection /> */}
++          {/* <ExpoQrModal open={props.qrModalOpen} onClose={() => props.setQrModalOpen(false)} /> */}
+         </div>
+       </div>
+     </div>
+diff --git a/app/components/header/Header.tsx b/app/components/header/Header.tsx
+index 1d509ce..148410d 100644
+--- a/app/components/header/Header.tsx
++++ b/app/components/header/Header.tsx
+@@ -1,6 +1,7 @@
+ import { useStore } from '@nanostores/react';
+ import { ClientOnly } from 'remix-utils/client-only';
+ import { chatStore } from '~/lib/stores/chat';
++import { toggleMenu } from '~/lib/stores/menu';
+ import { classNames } from '~/utils/classNames';
+ import { HeaderActionButtons } from './HeaderActionButtons.client';
+ import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
+@@ -8,6 +9,11 @@ import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
+ export function Header() {
+   const chat = useStore(chatStore);
+ 
++  const handleMenuToggle = () => {
++    // Use the convenience toggle method from the store
++    toggleMenu();
++  };
++
+   return (
+     <header
+       className={classNames('flex items-center px-4 border-b h-[var(--header-height)]', {
+@@ -16,12 +22,18 @@ export function Header() {
+       })}
+     >
+       <div className="flex items-center gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
+-        <div className="i-ph:sidebar-simple-duotone text-xl" />
+-        <a href="/" className="text-2xl font-semibold text-accent flex items-center">
+-          {/* <span className="i-bolt:logo-text?mask w-[46px] inline-block" /> */}
+-          <img src="/logo-light-styled.png" alt="logo" className="w-[90px] inline-block dark:hidden" />
++        <button
++          onClick={handleMenuToggle}
++          className="flex items-center justify-center text-bolt-elements-item-contentDefault bg-transparent enabled:hover:text-bolt-elements-item-contentActive rounded-md p-1 enabled:hover:bg-bolt-elements-item-backgroundActive transition-colors focus:outline-none"
++          aria-label="Toggle menu"
++        >
++          <div className="i-ph:sidebar-simple-duotone text-xl" />
++        </button>
++        {/* <a href="/" className="text-2xl font-semibold text-accent flex items-center">
++          <span className="i-bolt:logo-text?mask w-[46px] inline-block" />
++          <img src="/logo-light-styled.png" alt="logo" className="w-[90px] inline-block dark:hidden" /
+           <img src="/logo-dark-styled.png" alt="logo" className="w-[90px] inline-block hidden dark:block" />
+-        </a>
++        </a> */}
+       </div>
+       {chat.started && ( // Display ChatDescription and HeaderActionButtons only when the chat has started.
+         <>
+diff --git a/app/components/sidebar/Menu.client.tsx b/app/components/sidebar/Menu.client.tsx
+index f0e975e..f191a11 100644
+--- a/app/components/sidebar/Menu.client.tsx
++++ b/app/components/sidebar/Menu.client.tsx
+@@ -2,9 +2,14 @@ import { motion, type Variants } from 'framer-motion';
+ import { useCallback, useEffect, useRef, useState } from 'react';
+ import { toast } from 'react-toastify';
+ import { Dialog, DialogButton, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
++
++// Add useStore import for the menu store
++import { useStore } from '@nanostores/react';
++import { menuStore } from '~/lib/stores/menu';
+ import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
+ import { ControlPanel } from '~/components/@settings/core/ControlPanel';
+-import { SettingsButton } from '~/components/ui/SettingsButton';
++
++// import { SettingsButton } from '~/components/ui/SettingsButton';
+ import { Button } from '~/components/ui/Button';
+ import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
+ import { cubicEasingFn } from '~/utils/easings';
+@@ -12,8 +17,11 @@ import { HistoryItem } from './HistoryItem';
+ import { binDates } from './date-binning';
+ import { useSearchFilter } from '~/lib/hooks/useSearchFilter';
+ import { classNames } from '~/utils/classNames';
+-import { useStore } from '@nanostores/react';
+-import { profileStore } from '~/lib/stores/profile';
++
++/*
++ * import { useStore } from '@nanostores/react';
++ * import { profileStore } from '~/lib/stores/profile';
++ */
+ 
+ const menuVariants = {
+   closed: {
+@@ -41,36 +49,43 @@ type DialogContent =
+   | { type: 'bulkDelete'; items: ChatHistoryItem[] }
+   | null;
+ 
+-function CurrentDateTime() {
+-  const [dateTime, setDateTime] = useState(new Date());
+-
+-  useEffect(() => {
+-    const timer = setInterval(() => {
+-      setDateTime(new Date());
+-    }, 60000);
+-
+-    return () => clearInterval(timer);
+-  }, []);
+-
+-  return (
+-    <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800/50">
+-      <div className="h-4 w-4 i-ph:clock opacity-80" />
+-      <div className="flex gap-2">
+-        <span>{dateTime.toLocaleDateString()}</span>
+-        <span>{dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+-      </div>
+-    </div>
+-  );
+-}
++/*
++ * function CurrentDateTime() {
++ * const [dateTime, setDateTime] = useState(new Date());
++ *
++ * useEffect(() => {
++ *  const timer = setInterval(() => {
++ *    setDateTime(new Date());
++ *  }, 60000);
++ *
++ *  return () => clearInterval(timer);
++ * }, []);
++ *
++ * return (
++ *  <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800/50">
++ *    <div className="h-4 w-4 i-ph:clock opacity-80" />
++ *    <div className="flex gap-2">
++ *      <span>{dateTime.toLocaleDateString()}</span>
++ *      <span>{dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
++ *    </div>
++ *  </div>
++ * );
++ * }
++ */
+ 
+ export const Menu = () => {
+   const { duplicateCurrentChat, exportChat } = useChatHistory();
+   const menuRef = useRef<HTMLDivElement>(null);
+   const [list, setList] = useState<ChatHistoryItem[]>([]);
+-  const [open, setOpen] = useState(false);
++
++  // Replace local state with the store
++  const open = useStore(menuStore);
++
++  // Remove: const [open, setOpen] = useState(false);
+   const [dialogContent, setDialogContent] = useState<DialogContent>(null);
+   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+-  const profile = useStore(profileStore);
++
++  // const profile = useStore(profileStore);
+   const [selectionMode, setSelectionMode] = useState(false);
+   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+ 
+@@ -278,40 +293,46 @@ export const Menu = () => {
+     }
+   }, [open, selectionMode]);
+ 
+-  useEffect(() => {
+-    const enterThreshold = 20;
+-    const exitThreshold = 20;
+-
+-    function onMouseMove(event: MouseEvent) {
+-      if (isSettingsOpen) {
+-        return;
+-      }
+-
+-      if (event.pageX < enterThreshold) {
+-        setOpen(true);
+-      }
+-
+-      if (menuRef.current && event.clientX > menuRef.current.getBoundingClientRect().right + exitThreshold) {
+-        setOpen(false);
+-      }
+-    }
+-
+-    window.addEventListener('mousemove', onMouseMove);
+-
+-    return () => {
+-      window.removeEventListener('mousemove', onMouseMove);
+-    };
+-  }, [isSettingsOpen]);
++  // Comment out mouse movement control - now controlled by header button click
++  /*
++   * useEffect(() => {
++   *   const enterThreshold = 20;
++   *   const exitThreshold = 20;
++   *
++   *   function onMouseMove(event: MouseEvent) {
++   *     if (isSettingsOpen) {
++   *       return;
++   *     }
++   *
++   *     if (event.pageX < enterThreshold) {
++   *       setOpen(true);
++   *     }
++   *
++   *     if (menuRef.current && event.clientX > menuRef.current.getBoundingClientRect().right + exitThreshold) {
++   *       setOpen(false);
++   *     }
++   *   }
++   *
++   *   window.addEventListener('mousemove', onMouseMove);
++   *
++   *   return () => {
++   *     window.removeEventListener('mousemove', onMouseMove);
++   *   };
++   * }, [isSettingsOpen]);
++   */
+ 
+   const handleDuplicate = async (id: string) => {
+     await duplicateCurrentChat(id);
+     loadEntries(); // Reload the list after duplication
+   };
+ 
+-  const handleSettingsClick = () => {
+-    setIsSettingsOpen(true);
+-    setOpen(false);
+-  };
++  /*
++   * Settings button handler - currently not used as settings button is commented out
++   * const handleSettingsClick = () => {
++   *   setIsSettingsOpen(true);
++   *   closeMenu(); // Use store method instead of setOpen(false)
++   * };
++   */
+ 
+   const handleSettingsClose = () => {
+     setIsSettingsOpen(false);
+@@ -326,7 +347,7 @@ export const Menu = () => {
+     <>
+       <motion.div
+         ref={menuRef}
+-        initial="closed"
++        initial="open"
+         animate={open ? 'open' : 'closed'}
+         variants={menuVariants}
+         style={{ width: '340px' }}
+@@ -340,10 +361,10 @@ export const Menu = () => {
+         <div className="h-12 flex items-center justify-between px-4 border-b border-gray-100 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-900/50 rounded-tr-2xl">
+           <div className="text-gray-900 dark:text-white font-medium"></div>
+           <div className="flex items-center gap-3">
+-            <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
++            {/* <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
+               {profile?.username || 'Guest User'}
+-            </span>
+-            <div className="flex items-center justify-center w-[32px] h-[32px] overflow-hidden bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-500 rounded-full shrink-0">
++            </span> */}
++            {/* <div className="flex items-center justify-center w-[32px] h-[32px] overflow-hidden bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-500 rounded-full shrink-0">
+               {profile?.avatar ? (
+                 <img
+                   src={profile.avatar}
+@@ -355,16 +376,16 @@ export const Menu = () => {
+               ) : (
+                 <div className="i-ph:user-fill text-lg" />
+               )}
+-            </div>
++            </div> */}
+           </div>
+         </div>
+-        <CurrentDateTime />
++        {/* <CurrentDateTime /> */}
+         <div className="flex-1 flex flex-col h-full w-full overflow-hidden">
+           <div className="p-4 space-y-3">
+             <div className="flex gap-2">
+               <a
+                 href="/"
+-                className="flex-1 flex gap-2 items-center bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 rounded-lg px-4 py-2 transition-colors"
++                className="flex-1 flex gap-2 items-center bg-bolt-elements-item-backgroundAccent opacity-20 dark:bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent font-medium dark:text-bolt-elements-item-contentAccent dark:opacity-80 hover:bg-bolt-elements-item-backgroundAccent hover:opacity-30 dark:hover:bg-bolt-elements-item-backgroundAccent dark:hover:opacity-40 rounded-lg px-4 py-2 transition-colors"
+               >
+                 <span className="inline-block i-ph:plus-circle h-4 w-4" />
+                 <span className="text-sm font-medium">Start new chat</span>
+@@ -374,7 +395,7 @@ export const Menu = () => {
+                 className={classNames(
+                   'flex gap-1 items-center rounded-lg px-3 py-2 transition-colors',
+                   selectionMode
+-                    ? 'bg-purple-600 dark:bg-purple-500 text-white border border-purple-700 dark:border-purple-600'
++                    ? 'bg-bolt-elements-item-contentAccent text-white border border-bolt-elements-borderColorActive opacity-90 dark:border-bolt-elements-borderColorActive dark:opacity-90'
+                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700',
+                 )}
+                 aria-label={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
+@@ -525,7 +546,7 @@ export const Menu = () => {
+             </DialogRoot>
+           </div>
+           <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-800 px-4 py-3">
+-            <SettingsButton onClick={handleSettingsClick} />
++            {/* <SettingsButton onClick={handleSettingsClick} /> */}
+             <ThemeSwitch />
+           </div>
+         </div>
+diff --git a/app/components/ui/Badge.tsx b/app/components/ui/Badge.tsx
+index 14729e6..d4df4cd 100644
+--- a/app/components/ui/Badge.tsx
++++ b/app/components/ui/Badge.tsx
+@@ -15,7 +15,8 @@ const badgeVariants = cva(
+           'border-transparent bg-bolt-elements-background text-bolt-elements-textSecondary hover:bg-bolt-elements-background/80',
+         destructive: 'border-transparent bg-red-500/10 text-red-500 hover:bg-red-500/20',
+         outline: 'text-bolt-elements-textPrimary',
+-        primary: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
++        primary:
++          'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent dark:text-bolt-elements-item-contentAccent dark:opacity-90',
+         success: 'bg-green-500/10 text-green-600 dark:text-green-400',
+         warning: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+         danger: 'bg-red-500/10 text-red-600 dark:text-red-400',
+diff --git a/app/components/ui/Checkbox.tsx b/app/components/ui/Checkbox.tsx
+index e21e9e2..40285aa 100644
+--- a/app/components/ui/Checkbox.tsx
++++ b/app/components/ui/Checkbox.tsx
+@@ -13,10 +13,10 @@ const Checkbox = React.forwardRef<
+       'peer h-4 w-4 shrink-0 rounded-sm border transition-colors',
+       'bg-transparent dark:bg-transparent',
+       'border-gray-400 dark:border-gray-600',
+-      'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-purple-500 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950',
++      'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-bolt-elements-borderColorActive focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950',
+       'disabled:cursor-not-allowed disabled:opacity-50',
+-      'data-[state=checked]:bg-purple-500 dark:data-[state=checked]:bg-purple-500',
+-      'data-[state=checked]:border-purple-500 dark:data-[state=checked]:border-purple-500',
++      'data-[state=checked]:bg-bolt-elements-item-contentAccent dark:data-[state=checked]:bg-bolt-elements-item-contentAccent',
++      'data-[state=checked]:border-bolt-elements-borderColorActive dark:data-[state=checked]:border-bolt-elements-borderColorActive',
+       'data-[state=checked]:text-white',
+       className,
+     )}
+diff --git a/app/components/ui/CodeBlock.tsx b/app/components/ui/CodeBlock.tsx
+index 71dfbc2..3f2189c 100644
+--- a/app/components/ui/CodeBlock.tsx
++++ b/app/components/ui/CodeBlock.tsx
+@@ -81,7 +81,9 @@ export function CodeBlock({
+               <tr
+                 key={index}
+                 className={classNames(
+-                  highlightLines.includes(index + 1) ? 'bg-purple-500/10 dark:bg-purple-500/20' : '',
++                  highlightLines.includes(index + 1)
++                    ? 'bg-bolt-elements-item-backgroundAccent dark:bg-bolt-elements-item-backgroundAccent dark:opacity-80'
++                    : '',
+                   'hover:bg-bolt-elements-background-depth-3 dark:hover:bg-bolt-elements-background-depth-4',
+                 )}
+               >
+diff --git a/app/components/ui/Dialog.tsx b/app/components/ui/Dialog.tsx
+index ed072dd..da63b0a 100644
+--- a/app/components/ui/Dialog.tsx
++++ b/app/components/ui/Dialog.tsx
+@@ -24,7 +24,7 @@ export const DialogButton = memo(({ type, children, onClick, disabled }: DialogB
+       className={classNames(
+         'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors',
+         type === 'primary'
+-          ? 'bg-purple-500 text-white hover:bg-purple-600 dark:bg-purple-500 dark:hover:bg-purple-600'
++          ? 'bg-bolt-elements-item-contentAccent text-white hover:bg-bolt-elements-item-contentAccent hover:opacity-90 dark:bg-bolt-elements-item-contentAccent dark:hover:bg-bolt-elements-item-contentAccent dark:hover:opacity-90'
+           : type === 'secondary'
+             ? 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+             : 'bg-transparent text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10',
+diff --git a/app/components/ui/EmptyState.tsx b/app/components/ui/EmptyState.tsx
+index 22375f0..41bf4d1 100644
+--- a/app/components/ui/EmptyState.tsx
++++ b/app/components/ui/EmptyState.tsx
+@@ -133,7 +133,7 @@ export function EmptyState({
+                 onClick={onAction}
+                 variant="default"
+                 size={styles.buttonSize}
+-                className="bg-purple-500 hover:bg-purple-600 text-white"
++                className="bg-bolt-elements-item-contentAccent hover:bg-bolt-elements-item-contentAccent hover:opacity-90 text-white"
+               >
+                 {actionLabel}
+               </Button>
+diff --git a/app/components/ui/FileIcon.tsx b/app/components/ui/FileIcon.tsx
+index 00d9671..596002e 100644
+--- a/app/components/ui/FileIcon.tsx
++++ b/app/components/ui/FileIcon.tsx
+@@ -199,7 +199,7 @@ export function FileIcon({ filename, size = 'md', className }: FileIconProps) {
+     }
+ 
+     if (['php'].includes(extension)) {
+-      return 'text-purple-500';
++      return 'text-bolt-elements-item-contentAccent';
+     }
+ 
+     if (['rb', 'ruby'].includes(extension)) {
+diff --git a/app/components/ui/FilterChip.tsx b/app/components/ui/FilterChip.tsx
+index 705cec2..1f311cc 100644
+--- a/app/components/ui/FilterChip.tsx
++++ b/app/components/ui/FilterChip.tsx
+@@ -45,7 +45,7 @@ export function FilterChip({ label, value, onRemove, active = false, icon, class
+       className={classNames(
+         'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all',
+         active
+-          ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30'
++          ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent dark:text-bolt-elements-item-contentAccent border border-bolt-elements-borderColorActive/30'
+           : 'bg-bolt-elements-background-depth-2 dark:bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary dark:text-bolt-elements-textSecondary-dark border border-bolt-elements-borderColor dark:border-bolt-elements-borderColor-dark',
+         onRemove && 'pr-1',
+         className,
+diff --git a/app/components/ui/GradientCard.tsx b/app/components/ui/GradientCard.tsx
+index 154bf97..b99c31a 100644
+--- a/app/components/ui/GradientCard.tsx
++++ b/app/components/ui/GradientCard.tsx
+@@ -72,7 +72,7 @@ export function GradientCard({
+         'p-5 rounded-xl bg-gradient-to-br',
+         gradientClass,
+         borderEffect
+-          ? 'border border-bolt-elements-borderColor dark:border-bolt-elements-borderColor-dark hover:border-purple-500/40'
++          ? 'border border-bolt-elements-borderColor dark:border-bolt-elements-borderColor-dark hover:border-bolt-elements-borderColorActive/40'
+           : '',
+         'transition-all duration-300 shadow-sm',
+         hoverEffect ? 'hover:shadow-md' : '',
+diff --git a/app/components/ui/TabsWithSlider.tsx b/app/components/ui/TabsWithSlider.tsx
+index 8dee0f4..5e18553 100644
+--- a/app/components/ui/TabsWithSlider.tsx
++++ b/app/components/ui/TabsWithSlider.tsx
+@@ -99,7 +99,10 @@ export function TabsWithSlider({
+ 
+       {/* Animated slider */}
+       <motion.div
+-        className={classNames('absolute bottom-0 left-0 h-10 rounded-lg bg-purple-500 -z-10', sliderClassName)}
++        className={classNames(
++          'absolute bottom-0 left-0 h-10 rounded-lg bg-bolt-elements-item-contentAccent -z-10',
++          sliderClassName,
++        )}
+         initial={false}
+         animate={{
+           width: sliderDimensions.width,
+diff --git a/app/components/workbench/Workbench.client.tsx b/app/components/workbench/Workbench.client.tsx
+index e5d3069..a223650 100644
+--- a/app/components/workbench/Workbench.client.tsx
++++ b/app/components/workbench/Workbench.client.tsx
+@@ -20,7 +20,6 @@ import { classNames } from '~/utils/classNames';
+ import { cubicEasingFn } from '~/utils/easings';
+ import { renderLogger } from '~/utils/logger';
+ import { EditorPanel } from './EditorPanel';
+-import { Preview } from './Preview';
+ import useViewport from '~/lib/hooks';
+ import { PushToGitHubDialog } from '~/components/@settings/tabs/connections/components/PushToGitHubDialog';
+ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+@@ -45,14 +44,17 @@ const sliderOptions: SliderOptions<WorkbenchViewType> = {
+     value: 'code',
+     text: 'Code',
+   },
+-  middle: {
++  right: {
+     value: 'diff',
+     text: 'Diff',
+   },
+-  right: {
+-    value: 'preview',
+-    text: 'Preview',
+-  },
++
++  /*
++   * right: {
++   *   value: 'preview',
++   *   text: 'Preview',
++   * },
++   */
+ };
+ 
+ const workbenchVariants = {
+@@ -278,251 +280,249 @@ const FileModifiedDropdown = memo(
+   },
+ );
+ 
+-export const Workbench = memo(
+-  ({ chatStarted, isStreaming, metadata, updateChatMestaData, setSelectedElement }: WorkspaceProps) => {
+-    renderLogger.trace('Workbench');
+-
+-    const [isSyncing, setIsSyncing] = useState(false);
+-    const [isPushDialogOpen, setIsPushDialogOpen] = useState(false);
+-    const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
+-
+-    // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
+-
+-    const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
+-    const showWorkbench = useStore(workbenchStore.showWorkbench);
+-    const selectedFile = useStore(workbenchStore.selectedFile);
+-    const currentDocument = useStore(workbenchStore.currentDocument);
+-    const unsavedFiles = useStore(workbenchStore.unsavedFiles);
+-    const files = useStore(workbenchStore.files);
+-    const selectedView = useStore(workbenchStore.currentView);
+-    const { showChat } = useStore(chatStore);
+-    const canHideChat = showWorkbench || !showChat;
+-
+-    const isSmallViewport = useViewport(1024);
+-
+-    const setSelectedView = (view: WorkbenchViewType) => {
+-      workbenchStore.currentView.set(view);
+-    };
+-
+-    useEffect(() => {
+-      if (hasPreview) {
+-        setSelectedView('preview');
+-      }
+-    }, [hasPreview]);
+-
+-    useEffect(() => {
+-      workbenchStore.setDocuments(files);
+-    }, [files]);
+-
+-    const onEditorChange = useCallback<OnEditorChange>((update) => {
+-      workbenchStore.setCurrentDocumentContent(update.content);
+-    }, []);
+-
+-    const onEditorScroll = useCallback<OnEditorScroll>((position) => {
+-      workbenchStore.setCurrentDocumentScrollPosition(position);
+-    }, []);
+-
+-    const onFileSelect = useCallback((filePath: string | undefined) => {
+-      workbenchStore.setSelectedFile(filePath);
+-    }, []);
+-
+-    const onFileSave = useCallback(() => {
+-      workbenchStore
+-        .saveCurrentDocument()
+-        .then(() => {
+-          // Explicitly refresh all previews after a file save
+-          const previewStore = usePreviewStore();
+-          previewStore.refreshAllPreviews();
+-        })
+-        .catch(() => {
+-          toast.error('Failed to update file content');
+-        });
+-    }, []);
+-
+-    const onFileReset = useCallback(() => {
+-      workbenchStore.resetCurrentDocument();
+-    }, []);
+-
+-    const handleSyncFiles = useCallback(async () => {
+-      setIsSyncing(true);
+-
+-      try {
+-        const directoryHandle = await window.showDirectoryPicker();
+-        await workbenchStore.syncFiles(directoryHandle);
+-        toast.success('Files synced successfully');
+-      } catch (error) {
+-        console.error('Error syncing files:', error);
+-        toast.error('Failed to sync files');
+-      } finally {
+-        setIsSyncing(false);
+-      }
+-    }, []);
+-
+-    const handleSelectFile = useCallback((filePath: string) => {
+-      workbenchStore.setSelectedFile(filePath);
+-      workbenchStore.currentView.set('diff');
+-    }, []);
++export const Workbench = memo(({ chatStarted, isStreaming, metadata, updateChatMestaData }: WorkspaceProps) => {
++  renderLogger.trace('Workbench');
+ 
+-    return (
+-      chatStarted && (
+-        <motion.div
+-          initial="closed"
+-          animate={showWorkbench ? 'open' : 'closed'}
+-          variants={workbenchVariants}
+-          className="z-workbench"
++  const [isSyncing, setIsSyncing] = useState(false);
++  const [isPushDialogOpen, setIsPushDialogOpen] = useState(false);
++  const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
++
++  // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
++
++  const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
++  const showWorkbench = useStore(workbenchStore.showWorkbench);
++  const selectedFile = useStore(workbenchStore.selectedFile);
++  const currentDocument = useStore(workbenchStore.currentDocument);
++  const unsavedFiles = useStore(workbenchStore.unsavedFiles);
++  const files = useStore(workbenchStore.files);
++  const selectedView = useStore(workbenchStore.currentView);
++  const { showChat } = useStore(chatStore);
++  const canHideChat = showWorkbench || !showChat;
++
++  const isSmallViewport = useViewport(1024);
++
++  const setSelectedView = (view: WorkbenchViewType) => {
++    workbenchStore.currentView.set(view);
++  };
++
++  useEffect(() => {
++    if (hasPreview) {
++      setSelectedView('preview');
++    }
++  }, [hasPreview]);
++
++  useEffect(() => {
++    workbenchStore.setDocuments(files);
++  }, [files]);
++
++  const onEditorChange = useCallback<OnEditorChange>((update) => {
++    workbenchStore.setCurrentDocumentContent(update.content);
++  }, []);
++
++  const onEditorScroll = useCallback<OnEditorScroll>((position) => {
++    workbenchStore.setCurrentDocumentScrollPosition(position);
++  }, []);
++
++  const onFileSelect = useCallback((filePath: string | undefined) => {
++    workbenchStore.setSelectedFile(filePath);
++  }, []);
++
++  const onFileSave = useCallback(() => {
++    workbenchStore
++      .saveCurrentDocument()
++      .then(() => {
++        // Explicitly refresh all previews after a file save
++        const previewStore = usePreviewStore();
++        previewStore.refreshAllPreviews();
++      })
++      .catch(() => {
++        toast.error('Failed to update file content');
++      });
++  }, []);
++
++  const onFileReset = useCallback(() => {
++    workbenchStore.resetCurrentDocument();
++  }, []);
++
++  const handleSyncFiles = useCallback(async () => {
++    setIsSyncing(true);
++
++    try {
++      const directoryHandle = await window.showDirectoryPicker();
++      await workbenchStore.syncFiles(directoryHandle);
++      toast.success('Files synced successfully');
++    } catch (error) {
++      console.error('Error syncing files:', error);
++      toast.error('Failed to sync files');
++    } finally {
++      setIsSyncing(false);
++    }
++  }, []);
++
++  const handleSelectFile = useCallback((filePath: string) => {
++    workbenchStore.setSelectedFile(filePath);
++    workbenchStore.currentView.set('diff');
++  }, []);
++
++  return (
++    chatStarted && (
++      <motion.div
++        initial="closed"
++        animate={showWorkbench ? 'open' : 'closed'}
++        variants={workbenchVariants}
++        className="z-workbench"
++      >
++        <div
++          className={classNames(
++            'fixed top-[calc(var(--header-height)+1.2rem)] bottom-6 w-[var(--workbench-inner-width)] z-0 transition-[left,width] duration-200 bolt-ease-cubic-bezier',
++            {
++              'w-full': isSmallViewport,
++              'left-0': showWorkbench && isSmallViewport,
++              'left-[var(--workbench-left)]': showWorkbench,
++              'left-[100%]': !showWorkbench,
++            },
++          )}
+         >
+-          <div
+-            className={classNames(
+-              'fixed top-[calc(var(--header-height)+1.2rem)] bottom-6 w-[var(--workbench-inner-width)] z-0 transition-[left,width] duration-200 bolt-ease-cubic-bezier',
+-              {
+-                'w-full': isSmallViewport,
+-                'left-0': showWorkbench && isSmallViewport,
+-                'left-[var(--workbench-left)]': showWorkbench,
+-                'left-[100%]': !showWorkbench,
+-              },
+-            )}
+-          >
+-            <div className="absolute inset-0 px-2 lg:px-4">
+-              <div className="h-full flex flex-col bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor shadow-sm rounded-lg overflow-hidden">
+-                <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
+-                  <button
+-                    className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
+-                    disabled={!canHideChat || isSmallViewport}
+-                    onClick={() => {
+-                      if (canHideChat) {
+-                        chatStore.setKey('showChat', !showChat);
+-                      }
+-                    }}
+-                  />
+-                  <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
+-                  <div className="ml-auto" />
+-                  {selectedView === 'code' && (
+-                    <div className="flex overflow-y-auto">
+-                      <PanelHeaderButton
+-                        className="mr-1 text-sm"
+-                        onClick={() => {
+-                          workbenchStore.toggleTerminal(!workbenchStore.showTerminal.get());
+-                        }}
++          <div className="absolute inset-0 px-2 lg:px-4">
++            <div className="h-full flex flex-col bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor shadow-sm rounded-lg overflow-hidden">
++              <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
++                <button
++                  className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
++                  disabled={!canHideChat || isSmallViewport}
++                  onClick={() => {
++                    if (canHideChat) {
++                      chatStore.setKey('showChat', !showChat);
++                    }
++                  }}
++                />
++                <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
++                <div className="ml-auto" />
++                {selectedView === 'code' && (
++                  <div className="flex overflow-y-auto">
++                    <PanelHeaderButton
++                      className="mr-1 text-sm"
++                      onClick={() => {
++                        workbenchStore.toggleTerminal(!workbenchStore.showTerminal.get());
++                      }}
++                    >
++                      <div className="i-ph:terminal" />
++                      Toggle Terminal
++                    </PanelHeaderButton>
++                    <DropdownMenu.Root>
++                      <DropdownMenu.Trigger className="text-sm flex items-center gap-1 text-bolt-elements-item-contentDefault bg-transparent enabled:hover:text-bolt-elements-item-contentActive rounded-md p-1 enabled:hover:bg-bolt-elements-item-backgroundActive disabled:cursor-not-allowed">
++                        <div className="i-ph:box-arrow-up" />
++                        Sync
++                      </DropdownMenu.Trigger>
++                      <DropdownMenu.Content
++                        className={classNames(
++                          'min-w-[240px] z-[250]',
++                          'bg-white dark:bg-[#141414]',
++                          'rounded-lg shadow-lg',
++                          'border border-gray-200/50 dark:border-gray-800/50',
++                          'animate-in fade-in-0 zoom-in-95',
++                          'py-1',
++                        )}
++                        sideOffset={5}
++                        align="end"
+                       >
+-                        <div className="i-ph:terminal" />
+-                        Toggle Terminal
+-                      </PanelHeaderButton>
+-                      <DropdownMenu.Root>
+-                        <DropdownMenu.Trigger className="text-sm flex items-center gap-1 text-bolt-elements-item-contentDefault bg-transparent enabled:hover:text-bolt-elements-item-contentActive rounded-md p-1 enabled:hover:bg-bolt-elements-item-backgroundActive disabled:cursor-not-allowed">
+-                          <div className="i-ph:box-arrow-up" />
+-                          Sync
+-                        </DropdownMenu.Trigger>
+-                        <DropdownMenu.Content
++                        <DropdownMenu.Item
+                           className={classNames(
+-                            'min-w-[240px] z-[250]',
+-                            'bg-white dark:bg-[#141414]',
+-                            'rounded-lg shadow-lg',
+-                            'border border-gray-200/50 dark:border-gray-800/50',
+-                            'animate-in fade-in-0 zoom-in-95',
+-                            'py-1',
++                            'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                           )}
+-                          sideOffset={5}
+-                          align="end"
++                          onClick={handleSyncFiles}
++                          disabled={isSyncing}
+                         >
+-                          <DropdownMenu.Item
+-                            className={classNames(
+-                              'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+-                            )}
+-                            onClick={handleSyncFiles}
+-                            disabled={isSyncing}
+-                          >
+-                            <div className="flex items-center gap-2">
+-                              {isSyncing ? <div className="i-ph:spinner" /> : <div className="i-ph:cloud-arrow-down" />}
+-                              <span>{isSyncing ? 'Syncing...' : 'Sync Files'}</span>
+-                            </div>
+-                          </DropdownMenu.Item>
+-                          <DropdownMenu.Item
+-                            className={classNames(
+-                              'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+-                            )}
+-                            onClick={() => setIsPushDialogOpen(true)}
+-                          >
+-                            <div className="flex items-center gap-2">
+-                              <div className="i-ph:git-branch" />
+-                              Push to GitHub
+-                            </div>
+-                          </DropdownMenu.Item>
+-                        </DropdownMenu.Content>
+-                      </DropdownMenu.Root>
+-                    </div>
+-                  )}
++                          <div className="flex items-center gap-2">
++                            {isSyncing ? <div className="i-ph:spinner" /> : <div className="i-ph:cloud-arrow-down" />}
++                            <span>{isSyncing ? 'Syncing...' : 'Sync Files'}</span>
++                          </div>
++                        </DropdownMenu.Item>
++                        {/* <DropdownMenu.Item
++                          className={classNames(
++                            'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
++                          )}
++                          onClick={() => setIsPushDialogOpen(true)}
++                        >
++                          <div className="flex items-center gap-2">
++                            <div className="i-ph:git-branch" />
++                            Push to GitHub
++                          </div>
++                        </DropdownMenu.Item> */}
++                      </DropdownMenu.Content>
++                    </DropdownMenu.Root>
++                  </div>
++                )}
+ 
+-                  {selectedView === 'diff' && (
+-                    <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleSelectFile} />
+-                  )}
+-                  <IconButton
+-                    icon="i-ph:x-circle"
+-                    className="-mr-1"
+-                    size="xl"
+-                    onClick={() => {
+-                      workbenchStore.showWorkbench.set(false);
+-                    }}
++                {selectedView === 'diff' && (
++                  <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleSelectFile} />
++                )}
++                <IconButton
++                  icon="i-ph:x-circle"
++                  className="-mr-1"
++                  size="xl"
++                  onClick={() => {
++                    workbenchStore.showWorkbench.set(false);
++                  }}
++                />
++              </div>
++              <div className="relative flex-1 overflow-hidden">
++                <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
++                  <EditorPanel
++                    editorDocument={currentDocument}
++                    isStreaming={isStreaming}
++                    selectedFile={selectedFile}
++                    files={files}
++                    unsavedFiles={unsavedFiles}
++                    fileHistory={fileHistory}
++                    onFileSelect={onFileSelect}
++                    onEditorScroll={onEditorScroll}
++                    onEditorChange={onEditorChange}
++                    onFileSave={onFileSave}
++                    onFileReset={onFileReset}
+                   />
+-                </div>
+-                <div className="relative flex-1 overflow-hidden">
+-                  <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
+-                    <EditorPanel
+-                      editorDocument={currentDocument}
+-                      isStreaming={isStreaming}
+-                      selectedFile={selectedFile}
+-                      files={files}
+-                      unsavedFiles={unsavedFiles}
+-                      fileHistory={fileHistory}
+-                      onFileSelect={onFileSelect}
+-                      onEditorScroll={onEditorScroll}
+-                      onEditorChange={onEditorChange}
+-                      onFileSave={onFileSave}
+-                      onFileReset={onFileReset}
+-                    />
+-                  </View>
+-                  <View
+-                    initial={{ x: '100%' }}
+-                    animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
+-                  >
+-                    <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
+-                  </View>
+-                  <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
++                </View>
++                <View
++                  initial={{ x: '100%' }}
++                  animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
++                >
++                  <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
++                </View>
++                {/* <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
+                     <Preview setSelectedElement={setSelectedElement} />
+-                  </View>
+-                </div>
++                  </View> */}
+               </div>
+             </div>
+           </div>
+-          <PushToGitHubDialog
+-            isOpen={isPushDialogOpen}
+-            onClose={() => setIsPushDialogOpen(false)}
+-            onPush={async (repoName, username, token, isPrivate) => {
+-              try {
+-                console.log('Dialog onPush called with isPrivate =', isPrivate);
+-
+-                const commitMessage = prompt('Please enter a commit message:', 'Initial commit') || 'Initial commit';
+-                const repoUrl = await workbenchStore.pushToGitHub(repoName, commitMessage, username, token, isPrivate);
+-
+-                if (updateChatMestaData && !metadata?.gitUrl) {
+-                  updateChatMestaData({
+-                    ...(metadata || {}),
+-                    gitUrl: repoUrl,
+-                  });
+-                }
+-
+-                return repoUrl;
+-              } catch (error) {
+-                console.error('Error pushing to GitHub:', error);
+-                toast.error('Failed to push to GitHub');
+-                throw error;
++        </div>
++        <PushToGitHubDialog
++          isOpen={isPushDialogOpen}
++          onClose={() => setIsPushDialogOpen(false)}
++          onPush={async (repoName, username, token, isPrivate) => {
++            try {
++              console.log('Dialog onPush called with isPrivate =', isPrivate);
++
++              const commitMessage = prompt('Please enter a commit message:', 'Initial commit') || 'Initial commit';
++              const repoUrl = await workbenchStore.pushToGitHub(repoName, commitMessage, username, token, isPrivate);
++
++              if (updateChatMestaData && !metadata?.gitUrl) {
++                updateChatMestaData({
++                  ...(metadata || {}),
++                  gitUrl: repoUrl,
++                });
+               }
+-            }}
+-          />
+-        </motion.div>
+-      )
+-    );
+-  },
+-);
++
++              return repoUrl;
++            } catch (error) {
++              console.error('Error pushing to GitHub:', error);
++              toast.error('Failed to push to GitHub');
++              throw error;
++            }
++          }}
++        />
++      </motion.div>
++    )
++  );
++});
+ 
+ // View component for rendering content with motion transitions
+ interface ViewProps extends HTMLMotionProps<'div'> {
+diff --git a/app/styles/diff-view.css b/app/styles/diff-view.css
+index de353ef..1227768 100644
+--- a/app/styles/diff-view.css
++++ b/app/styles/diff-view.css
+@@ -33,20 +33,20 @@
+ 
+ /* Estilos para as linhas de diff */
+ .diff-block-added {
+-  @apply bg-green-500/20 border-l-4 border-green-500;
++  @apply bg-bolt-elements-icon-success/20 border-l-4 border-bolt-elements-icon-success;
+ }
+ 
+ .diff-block-removed {
+-  @apply bg-red-500/20 border-l-4 border-red-500;
++  @apply bg-bolt-elements-icon-error/20 border-l-4 border-bolt-elements-icon-error;
+ }
+ 
+ /* Melhorar contraste para mudanças */
+ .diff-panel-content .group:hover .diff-block-added {
+-  @apply bg-green-500/30;
++  @apply bg-bolt-elements-icon-success/30;
+ }
+ 
+ .diff-panel-content .group:hover .diff-block-removed {
+-  @apply bg-red-500/30;
++  @apply bg-bolt-elements-icon-error/30;
+ }
+ 
+ /* Estilos unificados para ambas as visualizações */
+@@ -64,9 +64,9 @@
+ 
+ /* Cores específicas para adições/remoções */
+ .diff-added {
+-  @apply bg-green-500/20 border-l-4 border-green-500;
++  @apply bg-bolt-elements-icon-success/20 border-l-4 border-bolt-elements-icon-success;
+ }
+ 
+ .diff-removed {
+-  @apply bg-red-500/20 border-l-4 border-red-500;
++  @apply bg-bolt-elements-icon-error/20 border-l-4 border-bolt-elements-icon-error;
+ }
+diff --git a/app/styles/index.scss b/app/styles/index.scss
+index 60bff4f..c0b1b51 100644
+--- a/app/styles/index.scss
++++ b/app/styles/index.scss
+@@ -15,10 +15,10 @@ body {
+ }
+ 
+ :root {
+-  --gradient-opacity: 0.8;
+-  --primary-color: rgba(158, 117, 240, var(--gradient-opacity));
+-  --secondary-color: rgba(138, 43, 226, var(--gradient-opacity));
+-  --accent-color: rgba(128, 59, 239, var(--gradient-opacity));
++  --gradient-opacity: 0.85;
++  --primary-color: rgba(120, 180, 255, var(--gradient-opacity)); // Softer blue for dark
++  --secondary-color: rgba(30, 40, 60, var(--gradient-opacity)); // Deep blue-gray (not pure black)
++  --accent-color: rgba(80, 140, 255, var(--gradient-opacity)); // Vibrant blue accent
+   // --primary-color: rgba(147, 112, 219, var(--gradient-opacity));
+   // --secondary-color: rgba(138, 43, 226, var(--gradient-opacity));
+   // --accent-color: rgba(180, 170, 220, var(--gradient-opacity));
+diff --git a/uno.config.ts b/uno.config.ts
+index 29c3ce5..dce6cba 100644
+--- a/uno.config.ts
++++ b/uno.config.ts
+@@ -35,17 +35,17 @@ const BASE_COLORS = {
+     950: '#0A0A0A',
+   },
+   accent: {
+-    50: '#F8F5FF',
+-    100: '#F0EBFF',
+-    200: '#E1D6FF',
+-    300: '#CEBEFF',
+-    400: '#B69EFF',
+-    500: '#9C7DFF',
+-    600: '#8A5FFF',
+-    700: '#7645E8',
+-    800: '#6234BB',
+-    900: '#502D93',
+-    950: '#2D1959',
++    50: '#F0FCFA',
++    100: '#CFF7F2',
++    200: '#A6F0E7',
++    300: '#73E4DA',
++    400: '#3CD6CC',
++    500: '#15C5BC',
++    600: '#08AFA8',
++    700: '#068B86',
++    800: '#076B68',
++    900: '#065053',
++    950: '#033031',
+   },
+   green: {
+     50: '#F0FDF4',

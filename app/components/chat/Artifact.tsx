@@ -146,7 +146,7 @@ export const Artifact = memo(({ messageId }: ArtifactProps) => {
               <div className="bg-bolt-elements-artifacts-borderColor h-[1px]" />
 
               <div className="p-5 text-left bg-bolt-elements-actions-background">
-                <ActionList actions={actions} />
+                <ActionList actions={actions} messageId={messageId} artifact={artifact} />
               </div>
             </motion.div>
           )}
@@ -177,6 +177,8 @@ function ShellCodeBlock({ classsName, code }: ShellCodeBlockProps) {
 
 interface ActionListProps {
   actions: ActionState[];
+  messageId: string;
+  artifact: any; // Using 'any' for now, can be typed more specifically if needed
 }
 
 const actionVariants = {
@@ -192,7 +194,7 @@ export function openArtifactInWorkbench(filePath: any) {
   workbenchStore.setSelectedFile(`${WORK_DIR}/${filePath}`);
 }
 
-const ActionList = memo(({ actions }: ActionListProps) => {
+const ActionList = memo(({ actions, messageId, artifact }: ActionListProps) => {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
       <ul className="list-none space-y-2.5">
@@ -240,7 +242,19 @@ const ActionList = memo(({ actions }: ActionListProps) => {
                     </code>
                   </div>
                 ) : type === 'shell' ? (
-                  <div className="flex items-center w-full min-h-[28px]">
+                  <div
+                    className="flex items-center w-full min-h-[28px] cursor-pointer hover:text-bolt-elements-item-contentAccent"
+                    onClick={() => {
+                      // The actions are indexed by actionId in the workbenchStore, so we need to find it
+                      const actionEntries = Object.entries(artifact.runner.actions.get());
+                      const actionEntry = actionEntries.find(([_, a]) => a === action);
+
+                      if (actionEntry) {
+                        const [actionId] = actionEntry;
+                        workbenchStore.executeUserAction(messageId, actionId);
+                      }
+                    }}
+                  >
                     <span className="flex-1">Run command</span>
                   </div>
                 ) : type === 'start' ? (
