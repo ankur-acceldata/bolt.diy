@@ -9,6 +9,7 @@ import {
 import { Experimental_StdioMCPTransport } from 'ai/mcp-stdio';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { z } from 'zod';
+import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
 import type { ToolCallAnnotation } from '~/types/context';
 import {
   TOOL_EXECUTION_APPROVAL,
@@ -37,7 +38,15 @@ export type STDIOServerConfig = z.infer<typeof stdioServerConfigSchema>;
 export const sseServerConfigSchema = z
   .object({
     type: z.enum(['sse']).optional(),
-    url: z.string().url('URL must be a valid URL format'),
+    url: z.string().refine((val) => {
+      try {
+        // Validate URL format without normalizing
+        new URL(val);
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'URL must be a valid URL format'),
     headers: z.record(z.string()).optional(),
   })
   .transform((data) => ({
@@ -49,7 +58,15 @@ export type SSEServerConfig = z.infer<typeof sseServerConfigSchema>;
 export const streamableHTTPServerConfigSchema = z
   .object({
     type: z.enum(['streamable-http']).optional(),
-    url: z.string().url('URL must be a valid URL format'),
+    url: z.string().refine((val) => {
+      try {
+        // Validate URL format without normalizing
+        new URL(val);
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'URL must be a valid URL format'),
     headers: z.record(z.string()).optional(),
   })
   .transform((data) => ({
@@ -110,6 +127,7 @@ export class MCPService {
   private _config: MCPConfig = {
     mcpServers: {},
   };
+  private _initialized = false;
 
   static getInstance(): MCPService {
     if (!MCPService._instance) {
@@ -117,6 +135,37 @@ export class MCPService {
     }
 
     return MCPService._instance;
+  }
+
+  async _ensureInitialized() {
+    if (this._initialized) {
+      return;
+    }
+
+    this._initialized = true;
+
+    // Initialize with XDP config if in server context
+    if (typeof window === 'undefined') {
+      try {
+        const xdpConfig = createXDPMCPConfig({
+          accessKey: DEFAULT_XDP_CONFIG.accessKey,
+          secretKey: DEFAULT_XDP_CONFIG.secretKey,
+          baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
+          serverPath: DEFAULT_XDP_CONFIG.serverPath,
+        });
+
+        console.log('🔧 MCP SERVICE - Auto-initializing with XDP config');
+
+        try {
+          const serverTools = await this.updateConfig(xdpConfig);
+          console.log('✅ MCP SERVICE - Auto-initialization complete, server tools:', serverTools);
+        } catch (error) {
+          console.warn('❌ MCP SERVICE - Failed to auto-initialize:', error);
+        }
+      } catch (error) {
+        console.warn('Failed to load XDP config for auto-initialization:', error);
+      }
+    }
   }
 
   private _validateServerConfig(serverName: string, config: any): MCPServerConfig {
@@ -162,10 +211,24 @@ export class MCPService {
 
   async updateConfig(config: MCPConfig) {
     logger.debug('updating config', JSON.stringify(config));
+
+    // Debug: Log XDP server URL specifically
+    const xdpServer = config.mcpServers?.['xdp-server'];
+
+    if (xdpServer && 'url' in xdpServer) {
+      logger.debug('XDP SERVER URL BEING SET:', xdpServer.url);
+      console.log('🔍 MCP SERVICE - XDP URL being set:', xdpServer.url);
+    }
+
     this._config = config;
     await this._createClients();
 
     return this._mcpToolsPerServer;
+  }
+
+  getCurrentConfig(): MCPConfig {
+    console.log('🔍 MCP SERVICE - getCurrentConfig called, returning:', this._config);
+    return this._config;
   }
 
   private async _createStreamableHTTPClient(
@@ -325,6 +388,8 @@ export class MCPService {
     });
 
     await Promise.allSettled(checkPromises);
+
+    console.log('🔍 MCP SERVICE - checkServersAvailabilities returning:', this._mcpToolsPerServer);
 
     return this._mcpToolsPerServer;
   }

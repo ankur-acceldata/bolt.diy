@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { createDataStream, generateId } from 'ai';
 import { MAX_RESPONSE_SEGMENTS, MAX_TOKENS, type FileMap } from '~/lib/.server/llm/constants';
@@ -95,21 +96,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     const mcpService = MCPService.getInstance();
 
     /*
-     * Always ensure MCP has the correct XDP server configuration
-     * Force update to use HTTP transport for container deployment
+     * Skip XDP config override in chat API - let the store handle initialization
+     * This prevents overriding environment variables with hard-coded defaults
      */
-    try {
-      const xdpConfig = createXDPMCPConfig({
-        accessKey: DEFAULT_XDP_CONFIG.accessKey,
-        secretKey: DEFAULT_XDP_CONFIG.secretKey,
-        baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
-        serverPath: DEFAULT_XDP_CONFIG.serverPath,
-      });
-      logger.debug('Forcing XDP MCP config update with:', xdpConfig);
-      await mcpService.updateConfig(xdpConfig);
-    } catch (e) {
-      logger.warn('Failed to update XDP MCP config', e as any);
-    }
+    logger.debug('Skipping XDP config override in chat API - using store configuration');
 
     const totalMessageContent = messages.reduce((acc, message) => {
       const messageContent = message.content as string | any[];
@@ -151,43 +141,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         // Get current project context
         const currentProjectId = getProjectId();
 
-        // Inject a generalized tool-use policy so the LLM reliably calls MCP tools first
-        const toolPolicy = `
-          You have access to Model Context Protocol (MCP) tools. For any request that depends on external systems (data, services, metadata):
-          - Always use tools first to discover real values; do not invent parameters, env vars, or placeholders.
-          - Iteratively call tools to fill missing inputs (e.g., connection/dataplane, catalog, schema/namespace, resource name, columns/fields).
-          - Prefer "list", "describe", and safe "get"/"query" calls to validate assumptions before generating outputs.
-          - After you obtain concrete values from tools, produce the final answer or code using those values.
-          - If a value cannot be determined, call another relevant tool or ask a single, concise follow-up question; do not fabricate.
-          - Never ask the user to provide secrets or environment variables; infer/resolve via tools.
-
-          When Trino tools are available, a typical sequence is:
-          - trino_list_catalogs → trino_list_tables (with catalog, optional schema) → trino_describe_table → optional trino_execute_query to validate.
-
-          When XDP tools are available, use them to discover platforms/resources first (e.g., xdp_list_dataplanes, xdp_list_datastores) before Trino operations.
-
-          **Auto-Run Feature**: You have two execution tools available:
-          1. **'register_manual_execution'** - Use this when user reports manual execution results
-          2. **'execute_and_monitor'** - Use this ONLY for auto-retry after manual execution
-          
-          **CRITICAL**: ALWAYS prefer providing bolt actions (\`<boltAction type="workbench-action" action="run" />\`) instead of calling execution tools. Do NOT call 'register_manual_execution' or 'execute_and_monitor' when you provide bolt actions.
-                    
-          **Workflow**:
-          - **IMPORTANT**: Do NOT automatically call 'execute_and_monitor' after initial code generation
-          - **PREFER**: Always provide bolt actions (\`<boltAction type="workbench-action" action="run" />\`) for user to execute manually
-          - Do NOT trigger execution tools when providing bolt actions - let the user execute via the workbench
-          - ONLY use 'register_manual_execution' when user explicitly reports execution results
-          - ONLY use 'execute_and_monitor' for auto-retry after manual execution is registered
-          - Use sessionId: "${sessionId}" for execution tracking (max 3 auto-executions per session)
-          - Current projectId: "${currentProjectId}" (use this for code execution)
-          - For dataplaneId, use xdp_list_datastores to find appropriate dataplane or use "1" as default
-          - Include selectedTemplate information if provided: ${selectedTemplate ? JSON.stringify(selectedTemplate) : 'none'}
-          - The tool includes loop prevention - you'll be notified when the limit is reached
-
-          Finally, summarize tool findings, then generate the requested artifact (e.g., PySpark app) using the discovered, real parameters.
-          `;
-
-        processedMessages.unshift({ role: 'system', content: toolPolicy } as any);
+        /*
+         * The tool policy is now included in the system prompt via getSystemPrompt()
+         * which imports it from the centralized tool-policy.ts file
+         * No need to inject it separately here
+         */
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -379,7 +337,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               for await (const part of result.fullStream) {
                 if (part.type === 'error') {
                   const error: any = part.error;
-                  logger.error(`${error}`);
+                  logger.error(`${JSON.stringify(error, null, 2)}`);
 
                   return;
                 }

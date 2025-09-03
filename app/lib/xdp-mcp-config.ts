@@ -31,14 +31,30 @@ export function createXDPMCPConfig({
   baseUrl = DEFAULT_XDP_CONFIG.baseUrl,
   serverPath = DEFAULT_XDP_CONFIG.serverPath,
 }: XDPMCPConfig): MCPConfig {
-  console.log('createXDPMCPConfig', { accessKey, secretKey, baseUrl, serverPath });
+  const callId = Math.random().toString(36).substring(7);
+  const isBrowser = typeof window !== 'undefined';
+  const callerInfo = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
 
-  // Check environment variables for connection type
-  const mcpWebSocketUrl = process.env.MCP_SERVER_URL || DEFAULT_XDP_CONFIG.webSocketUrl;
-  const forceStdio = process.env.MCP_USE_STDIO === 'true';
+  console.log(`[${callId}] createXDPMCPConfig called from ${isBrowser ? 'BROWSER' : 'SERVER'}`, {
+    accessKey,
+    secretKey,
+    baseUrl,
+    serverPath,
+    caller: callerInfo,
+  });
 
-  console.log('Environment debug:', {
+  /*
+   * Check environment variables for connection type (server-side only)
+   * In browser, environment variables are not available, so we use defaults
+   */
+  const mcpWebSocketUrl = isBrowser
+    ? DEFAULT_XDP_CONFIG.webSocketUrl
+    : process.env.MCP_SERVER_URL || DEFAULT_XDP_CONFIG.webSocketUrl;
+  const forceStdio = isBrowser ? false : process.env.MCP_USE_STDIO === 'true';
+
+  console.log(`[${callId}] Environment debug:`, {
     MCP_SERVER_URL: process.env.MCP_SERVER_URL,
+    DEFAULT_webSocketUrl: DEFAULT_XDP_CONFIG.webSocketUrl,
     mcpWebSocketUrl,
     forceStdio,
     willUseHTTP: !forceStdio && mcpWebSocketUrl,
@@ -46,16 +62,24 @@ export function createXDPMCPConfig({
 
   if (!forceStdio && mcpWebSocketUrl) {
     // Convert WebSocket URL to HTTP for streamable-http transport
-    const httpUrl = mcpWebSocketUrl
-      .replace('ws://', 'http://')
-      .replace('wss://', 'https://')
-      .replace('/ws', '/api/mcp');
-    console.log('Using HTTP MCP connection:', httpUrl);
+    console.log(`[${callId}] URL conversion steps:`);
+    console.log(`[${callId}]   Original mcpWebSocketUrl:`, mcpWebSocketUrl);
 
-    return {
+    const step1 = mcpWebSocketUrl.replace('ws://', 'http://');
+    console.log(`[${callId}]   After ws->http replace:`, step1);
+
+    const step2 = step1.replace('wss://', 'https://');
+    console.log(`[${callId}]   After wss->https replace:`, step2);
+
+    const httpUrl = step2.replace('/ws', '/api/mcp');
+    console.log(`[${callId}]   Final httpUrl:`, httpUrl);
+
+    console.log(`[${callId}] Using HTTP MCP connection:`, httpUrl);
+
+    const config = {
       mcpServers: {
         'xdp-server': {
-          type: 'streamable-http',
+          type: 'streamable-http' as const,
           url: httpUrl,
           headers: {
             'Content-Type': 'application/json',
@@ -66,10 +90,14 @@ export function createXDPMCPConfig({
         },
       },
     };
+
+    console.log(`[${callId}] RETURNING CONFIG:`, JSON.stringify(config, null, 2));
+
+    return config;
   }
 
   // Fallback to STDIO connection
-  console.log('Using STDIO MCP connection:', serverPath);
+  console.log(`[${callId}] Using STDIO MCP connection:`, serverPath);
 
   return {
     mcpServers: {

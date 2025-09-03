@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { MCPConfig, MCPServerTools } from '~/lib/services/mcpService';
-import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
 
 const MCP_SETTINGS_KEY = 'mcp_settings';
 const isBrowser = typeof window !== 'undefined';
@@ -9,20 +8,6 @@ type MCPSettings = {
   mcpConfig: MCPConfig;
   maxLLMSteps: number;
 };
-
-// Create default MCP configuration with XDP server (lazy initialization)
-const getDefaultXDPConfig = () =>
-  createXDPMCPConfig({
-    accessKey: DEFAULT_XDP_CONFIG.accessKey,
-    secretKey: DEFAULT_XDP_CONFIG.secretKey,
-    baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
-    serverPath: DEFAULT_XDP_CONFIG.serverPath,
-  });
-
-const getDefaultSettings = (): MCPSettings => ({
-  maxLLMSteps: 5,
-  mcpConfig: getDefaultXDPConfig(),
-});
 
 type Store = {
   isInitialized: boolean;
@@ -40,14 +25,20 @@ type Actions = {
 
 export const useMCPStore = create<Store & Actions>((set, get) => ({
   isInitialized: false,
-  settings: getDefaultSettings(),
+  settings: {
+    maxLLMSteps: 5,
+    mcpConfig: { mcpServers: {} },
+  }, // Minimal initial state - will be populated during initialize()
   serverTools: {},
   error: null,
   isUpdatingConfig: false,
   initialize: async () => {
     if (get().isInitialized) {
+      console.log('🔍 MCP Store: Already initialized, skipping');
       return;
     }
+
+    console.log('🚀 MCP Store: Starting initialization...');
 
     if (isBrowser) {
       const savedConfig = localStorage.getItem(MCP_SETTINGS_KEY);
@@ -56,17 +47,33 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
         try {
           const settings = JSON.parse(savedConfig) as MCPSettings;
 
-          // Always override with fresh XDP config to pick up environment variables
-          const freshDefaultSettings = getDefaultSettings();
-          const updatedSettings = {
-            ...settings,
-            mcpConfig: freshDefaultSettings.mcpConfig,
-          };
+          /*
+           * Browser has saved config - use it but verify with server
+           * Get current server config to ensure we have the latest
+           */
+          console.log('MCP Store: Found saved config, verifying with server');
 
-          localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(updatedSettings));
+          try {
+            const serverData = await getServerConfig();
+            console.log('🔍 STORE - Got server config:', serverData.mcpConfig);
+            console.log('🔍 STORE - Got server tools:', serverData.serverTools);
 
-          const serverTools = await updateServerConfig(updatedSettings.mcpConfig);
-          set(() => ({ settings: updatedSettings, serverTools }));
+            // Use server config as the source of truth
+            const updatedSettings = {
+              ...settings,
+              mcpConfig: serverData.mcpConfig,
+            };
+
+            localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(updatedSettings));
+            set(() => ({ settings: updatedSettings, serverTools: serverData.serverTools }));
+            console.log('✅ MCP Store: Successfully set server config and tools');
+          } catch (error) {
+            console.warn('Failed to get server config, using saved config:', error);
+
+            // Fallback to saved config
+            const serverTools = await updateServerConfig(settings.mcpConfig);
+            set(() => ({ settings, serverTools }));
+          }
         } catch (error) {
           console.error('Error parsing saved mcp config:', error);
           set(() => ({
@@ -74,16 +81,44 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
           }));
         }
       } else {
-        // Initialize with default XDP configuration
-        const defaultSettings = getDefaultSettings();
-        localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(defaultSettings));
+        /*
+         * No saved config in browser - get current server config
+         */
+        console.log('MCP Store: No saved config, getting server configuration');
 
-        const serverTools = await updateServerConfig(defaultSettings.mcpConfig);
-        set(() => ({ settings: defaultSettings, serverTools }));
+        try {
+          const serverData = await getServerConfig();
+          console.log('🔍 STORE - Got initial server config:', serverData.mcpConfig);
+          console.log('🔍 STORE - Got initial server tools:', serverData.serverTools);
+
+          const settings: MCPSettings = {
+            maxLLMSteps: 5,
+            mcpConfig: serverData.mcpConfig,
+          };
+
+          localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(settings));
+          set(() => ({ settings, serverTools: serverData.serverTools }));
+          console.log('✅ MCP Store: Successfully initialized with server data');
+        } catch (error) {
+          console.warn('Failed to get server config, using minimal settings:', error);
+
+          // Fallback to minimal settings
+          const minimalSettings: MCPSettings = {
+            maxLLMSteps: 5,
+            mcpConfig: { mcpServers: {} },
+          };
+          localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(minimalSettings));
+          set(() => ({ settings: minimalSettings, serverTools: {} }));
+        }
       }
     }
 
     set(() => ({ isInitialized: true }));
+    console.log('🏁 MCP Store: Initialization complete, final state:', {
+      isInitialized: true,
+      serverTools: get().serverTools,
+      mcpConfig: get().settings.mcpConfig,
+    });
   },
   updateSettings: async (newSettings: MCPSettings) => {
     if (get().isUpdatingConfig) {
@@ -115,9 +150,12 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
       throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
     }
 
-    const serverTools = (await response.json()) as MCPServerTools;
+    const data = (await response.json()) as { serverTools: MCPServerTools; mcpConfig: MCPConfig };
 
-    set(() => ({ serverTools }));
+    console.log('🔍 STORE - checkServersAvailabilities got data:', data);
+    console.log('🔍 STORE - Setting serverTools:', data.serverTools);
+
+    set(() => ({ serverTools: data.serverTools }));
   },
 }));
 
@@ -135,4 +173,18 @@ async function updateServerConfig(config: MCPConfig) {
   const data = (await response.json()) as MCPServerTools;
 
   return data;
+}
+
+async function getServerConfig(): Promise<{ mcpConfig: MCPConfig; serverTools: MCPServerTools }> {
+  const response = await fetch('/api/mcp-check', {
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  return data as { mcpConfig: MCPConfig; serverTools: MCPServerTools };
 }

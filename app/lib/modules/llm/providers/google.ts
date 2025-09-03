@@ -73,6 +73,17 @@ export default class GoogleProvider extends BaseProvider {
       apiKey,
     });
 
+    /*
+     * IMPORTANT: Preview models like gemini-2.5-pro-preview-06-05 may have compatibility issues
+     * with the current AI SDK version. If you encounter "Type validation failed" errors,
+     * consider using stable models like gemini-1.5-pro or gemini-1.5-flash instead.
+     */
+    if (model.includes('preview')) {
+      console.warn(
+        `Warning: Using preview model ${model} which may have compatibility issues with AI SDK. Consider using gemini-1.5-pro or gemini-1.5-flash for better stability.`,
+      );
+    }
+
     return google(model);
   }
 }

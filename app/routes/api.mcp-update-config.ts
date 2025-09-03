@@ -13,6 +13,12 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const mcpService = MCPService.getInstance();
+
+    // Ensure the service is initialized first
+    await mcpService._ensureInitialized();
+
+    logger.debug('Updating MCP config:', JSON.stringify(mcpConfig));
+
     const serverTools = await mcpService.updateConfig(mcpConfig);
 
     return Response.json(serverTools);
