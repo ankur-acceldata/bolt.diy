@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { classNames } from '~/utils/classNames';
 import { Dialog, DialogRoot, DialogClose, DialogTitle, DialogButton } from '~/components/ui/Dialog';
 import { IconButton } from '~/components/ui/IconButton';
@@ -16,24 +16,35 @@ export function McpTools() {
   const [isCheckingServers, setIsCheckingServers] = useState(false);
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
 
+  const checkServerAvailability = useCallback(async () => {
+    console.log('🔍 MCPTools - Starting server availability check');
+    setIsCheckingServers(true);
+    setError(null);
+
+    try {
+      await checkServersAvailabilities();
+      console.log('🔍 MCPTools - Server availability check completed');
+    } catch (e) {
+      console.error('🔍 MCPTools - Server availability check failed:', e);
+      setError(`Failed to check server availability: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setIsCheckingServers(false);
+    }
+  }, [checkServersAvailabilities]);
+
   useEffect(() => {
     if (!isInitialized) {
       initialize();
     }
   }, [isInitialized]);
 
-  const checkServerAvailability = async () => {
-    setIsCheckingServers(true);
-    setError(null);
-
-    try {
-      await checkServersAvailabilities();
-    } catch (e) {
-      setError(`Failed to check server availability: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setIsCheckingServers(false);
+  // Auto-check server availability when dialog opens
+  useEffect(() => {
+    if (isDialogOpen && isInitialized && Object.keys(serverTools).length === 0) {
+      console.log('🔍 MCPTools - Dialog opened with no tools, auto-checking availability');
+      checkServerAvailability();
     }
-  };
+  }, [isDialogOpen, isInitialized, serverTools, checkServerAvailability]);
 
   const toggleServerExpanded = (serverName: string) => {
     setExpandedServer(expandedServer === serverName ? null : serverName);
@@ -43,7 +54,13 @@ export function McpTools() {
     setIsDialogOpen(open);
   };
 
-  const serverEntries = useMemo(() => Object.entries(serverTools), [serverTools]);
+  const serverEntries = useMemo(() => {
+    const entries = Object.entries(serverTools);
+    console.log('🔍 MCPTools - serverTools updated:', serverTools);
+    console.log('🔍 MCPTools - serverEntries:', entries);
+
+    return entries;
+  }, [serverTools]);
 
   return (
     <div className="relative">

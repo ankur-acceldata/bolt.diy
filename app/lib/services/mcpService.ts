@@ -151,7 +151,6 @@ export class MCPService {
           accessKey: DEFAULT_XDP_CONFIG.accessKey,
           secretKey: DEFAULT_XDP_CONFIG.secretKey,
           baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
-          serverPath: DEFAULT_XDP_CONFIG.serverPath,
         });
 
         console.log('🔧 MCP SERVICE - Auto-initializing with XDP config');

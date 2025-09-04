@@ -8,7 +8,6 @@ export interface XDPMCPConfig {
   accessKey: string;
   secretKey: string;
   baseUrl?: string;
-  serverPath?: string;
 }
 
 /**
@@ -16,7 +15,6 @@ export interface XDPMCPConfig {
  */
 export const DEFAULT_XDP_CONFIG = {
   baseUrl: 'https://demo.xdp-playground.acceldata.tech/xdp-cp-service/api',
-  serverPath: '/Users/ankuragarwal/src/xdp-mcp-server/dist/index.js',
   webSocketUrl: 'ws://localhost:9099/ws', // Default to container WebSocket
   accessKey: 'SGTN9GW70UOPFUM',
   secretKey: 'FUY80AFFBHR0EDHQWGLB67PW9S8JOJ',
@@ -29,7 +27,6 @@ export function createXDPMCPConfig({
   accessKey,
   secretKey,
   baseUrl = DEFAULT_XDP_CONFIG.baseUrl,
-  serverPath = DEFAULT_XDP_CONFIG.serverPath,
 }: XDPMCPConfig): MCPConfig {
   const callId = Math.random().toString(36).substring(7);
   const isBrowser = typeof window !== 'undefined';
@@ -39,80 +36,56 @@ export function createXDPMCPConfig({
     accessKey,
     secretKey,
     baseUrl,
-    serverPath,
     caller: callerInfo,
   });
 
   /*
-   * Check environment variables for connection type (server-side only)
-   * In browser, environment variables are not available, so we use defaults
+   * Use HTTP/WS connection only - no stdio mode
+   * Get WebSocket URL from environment or use default
    */
   const mcpWebSocketUrl = isBrowser
     ? DEFAULT_XDP_CONFIG.webSocketUrl
     : process.env.MCP_SERVER_URL || DEFAULT_XDP_CONFIG.webSocketUrl;
-  const forceStdio = isBrowser ? false : process.env.MCP_USE_STDIO === 'true';
 
   console.log(`[${callId}] Environment debug:`, {
     MCP_SERVER_URL: process.env.MCP_SERVER_URL,
     DEFAULT_webSocketUrl: DEFAULT_XDP_CONFIG.webSocketUrl,
     mcpWebSocketUrl,
-    forceStdio,
-    willUseHTTP: !forceStdio && mcpWebSocketUrl,
   });
 
-  if (!forceStdio && mcpWebSocketUrl) {
-    // Convert WebSocket URL to HTTP for streamable-http transport
-    console.log(`[${callId}] URL conversion steps:`);
-    console.log(`[${callId}]   Original mcpWebSocketUrl:`, mcpWebSocketUrl);
+  // Convert WebSocket URL to HTTP for streamable-http transport
+  console.log(`[${callId}] URL conversion steps:`);
+  console.log(`[${callId}]   Original mcpWebSocketUrl:`, mcpWebSocketUrl);
 
-    const step1 = mcpWebSocketUrl.replace('ws://', 'http://');
-    console.log(`[${callId}]   After ws->http replace:`, step1);
+  const step1 = mcpWebSocketUrl.replace('ws://', 'http://');
+  console.log(`[${callId}]   After ws->http replace:`, step1);
 
-    const step2 = step1.replace('wss://', 'https://');
-    console.log(`[${callId}]   After wss->https replace:`, step2);
+  const step2 = step1.replace('wss://', 'https://');
+  console.log(`[${callId}]   After wss->https replace:`, step2);
 
-    const httpUrl = step2.replace('/ws', '/api/mcp');
-    console.log(`[${callId}]   Final httpUrl:`, httpUrl);
+  const httpUrl = step2.replace('/ws', '/api/mcp');
+  console.log(`[${callId}]   Final httpUrl:`, httpUrl);
 
-    console.log(`[${callId}] Using HTTP MCP connection:`, httpUrl);
+  console.log(`[${callId}] Using HTTP MCP connection:`, httpUrl);
 
-    const config = {
-      mcpServers: {
-        'xdp-server': {
-          type: 'streamable-http' as const,
-          url: httpUrl,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-XDP-Access-Key': accessKey,
-            'X-XDP-Secret-Key': secretKey,
-            'X-XDP-Base-URL': baseUrl,
-          },
-        },
-      },
-    };
-
-    console.log(`[${callId}] RETURNING CONFIG:`, JSON.stringify(config, null, 2));
-
-    return config;
-  }
-
-  // Fallback to STDIO connection
-  console.log(`[${callId}] Using STDIO MCP connection:`, serverPath);
-
-  return {
+  const config = {
     mcpServers: {
       'xdp-server': {
-        type: 'stdio',
-        command: 'node',
-        args: [serverPath],
-        env: {
-          XDP_ACCESS_KEY: accessKey,
-          XDP_SECRET_KEY: secretKey,
-          XDP_BASE_URL: baseUrl,
+        type: 'streamable-http' as const,
+        url: httpUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-XDP-Access-Key': accessKey,
+          'X-XDP-Secret-Key': secretKey,
+          'X-XDP-Base-URL': baseUrl,
         },
       },
     },
   };
+
+  console.log(`[${callId}] RETURNING CONFIG:`, JSON.stringify(config, null, 2));
+
+  return config;
 }
 
 /**
@@ -165,10 +138,6 @@ export function validateXDPConfig(config: Partial<XDPMCPConfig>): string[] {
     errors.push('Invalid XDP Base URL format');
   }
 
-  if (config.serverPath && !config.serverPath.endsWith('.js')) {
-    errors.push('Server path must point to a JavaScript file');
-  }
-
   return errors;
 }
 
@@ -204,7 +173,6 @@ export function generateExampleConfig(xdpConfig?: Partial<XDPMCPConfig>): MCPCon
       accessKey: xdpConfig.accessKey,
       secretKey: xdpConfig.secretKey,
       baseUrl: xdpConfig.baseUrl,
-      serverPath: xdpConfig.serverPath,
     });
   }
 

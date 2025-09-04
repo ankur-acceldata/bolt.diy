@@ -13,14 +13,13 @@ export default function XdpConfigSection({ onConfigGenerated }: XdpConfigSection
   const [accessKey, setAccessKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [baseUrl, setBaseUrl] = useState(DEFAULT_XDP_CONFIG.baseUrl);
-  const [serverPath, setServerPath] = useState(DEFAULT_XDP_CONFIG.serverPath);
   const [environment, setEnvironment] = useState<'development' | 'staging' | 'production'>('development');
   const [isGenerating, setIsGenerating] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleValidate = () => {
-    const config: XDPMCPConfig = { accessKey, secretKey, baseUrl, serverPath };
+    const config: XDPMCPConfig = { accessKey, secretKey, baseUrl };
     const validationErrors = validateXDPConfig(config);
     setErrors(validationErrors);
 
@@ -35,7 +34,7 @@ export default function XdpConfigSection({ onConfigGenerated }: XdpConfigSection
     setIsGenerating(true);
 
     try {
-      const config: XDPMCPConfig = { accessKey, secretKey, baseUrl, serverPath };
+      const config: XDPMCPConfig = { accessKey, secretKey, baseUrl };
       const validationErrors = validateXDPConfig(config);
 
       if (validationErrors.length > 0) {
@@ -53,7 +52,6 @@ export default function XdpConfigSection({ onConfigGenerated }: XdpConfigSection
           accessKey,
           secretKey,
           baseUrl,
-          serverPath,
         }),
       });
 
@@ -192,19 +190,6 @@ export default function XdpConfigSection({ onConfigGenerated }: XdpConfigSection
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
                   placeholder="https://dev-api.xdp.acceldata.dev"
-                  className="w-full px-3 py-2 text-sm rounded border bg-bolt-elements-background-depth-1 border-bolt-elements-borderColor text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-focus"
-                />
-              </div>
-              <div>
-                <label htmlFor="xdp-server-path" className="block text-xs text-bolt-elements-textSecondary mb-1">
-                  Server Path
-                </label>
-                <input
-                  id="xdp-server-path"
-                  type="text"
-                  value={serverPath}
-                  onChange={(e) => setServerPath(e.target.value)}
-                  placeholder="/path/to/xdp-mcp-server/dist/index.js"
                   className="w-full px-3 py-2 text-sm rounded border bg-bolt-elements-background-depth-1 border-bolt-elements-borderColor text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-focus"
                 />
               </div>

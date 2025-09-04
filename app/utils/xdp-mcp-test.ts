@@ -8,7 +8,6 @@ export interface XDPTestConfig {
   accessKey?: string;
   secretKey?: string;
   baseUrl?: string;
-  serverPath?: string;
 }
 
 /**
@@ -32,7 +31,6 @@ export async function testXDPConnection(config: XDPTestConfig): Promise<{
       accessKey: config.accessKey,
       secretKey: config.secretKey,
       baseUrl: config.baseUrl,
-      serverPath: config.serverPath,
     });
 
     // Test the configuration by attempting to connect
@@ -127,10 +125,8 @@ export function validateXDPServerRequirements(): {
     suggestions.push('Ensure Node.js is properly installed');
   }
 
-  // Check server path existence (this would need to be done server-side)
-  const serverPath = '/Users/ankuragarwal/src/xdp-mcp-server/dist/index.js';
-  suggestions.push(`Verify XDP MCP server is built at: ${serverPath}`);
-  suggestions.push('Run "npm run build" in the xdp-mcp-server directory');
+  // Check for HTTP/WS connection requirements
+  suggestions.push('Ensure XDP MCP server is running and accessible via HTTP/WebSocket');
   suggestions.push('Ensure XDP credentials (ACCESS_KEY, SECRET_KEY) are valid');
   suggestions.push('Check network connectivity to XDP API endpoints');
 

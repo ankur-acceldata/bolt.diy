@@ -31,7 +31,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
 
       case 'generate': {
-        const { accessKey, secretKey, baseUrl, serverPath } = config as XDPMCPConfig;
+        const { accessKey, secretKey, baseUrl } = config as XDPMCPConfig;
 
         if (!accessKey || !secretKey) {
           return json({
@@ -44,7 +44,6 @@ export async function action({ request }: ActionFunctionArgs) {
           accessKey,
           secretKey,
           baseUrl,
-          serverPath,
         });
 
         return json({
@@ -62,8 +61,8 @@ export async function action({ request }: ActionFunctionArgs) {
           const envConfig = XDP_CONFIG_EXAMPLES[environment as keyof typeof XDP_CONFIG_EXAMPLES];
           const xdpServer = exampleConfig.mcpServers['xdp-server'];
 
-          if (xdpServer && xdpServer.type === 'stdio' && xdpServer.env) {
-            xdpServer.env.XDP_BASE_URL = envConfig.baseUrl;
+          if (xdpServer && xdpServer.type === 'streamable-http' && xdpServer.headers) {
+            xdpServer.headers['X-XDP-Base-URL'] = envConfig.baseUrl;
           }
         }
 

@@ -262,7 +262,6 @@ export default defineConfig((config) => {
         'LMSTUDIO_API_BASE_URL',
         'TOGETHER_API_BASE_URL',
         'MCP_SERVER_URL',
-        'MCP_USE_STDIO',
       ],
       css: {
         preprocessorOptions: {
@@ -417,7 +416,6 @@ export default defineConfig((config) => {
       'LMSTUDIO_API_BASE_URL',
       'TOGETHER_API_BASE_URL',
       'MCP_SERVER_URL',
-      'MCP_USE_STDIO',
     ],
     css: {
       preprocessorOptions: {
