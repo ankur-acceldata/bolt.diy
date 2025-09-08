@@ -80,8 +80,13 @@ function cleanEscapedTags(content: string) {
 }
 export class StreamingMessageParser {
   #messages = new Map<string, MessageState>();
+  #isStreaming = false;
 
   constructor(private _options: StreamingMessageParserOptions = {}) {}
+
+  setStreaming(isStreaming: boolean) {
+    this.#isStreaming = isStreaming;
+  }
 
   parse(messageId: string, input: string) {
     let state = this.#messages.get(messageId);
@@ -324,6 +329,7 @@ export class StreamingMessageParser {
 
   reset() {
     this.#messages.clear();
+    this.#isStreaming = false;
   }
 
   #parseActionTag(input: string, actionOpenIndex: number, actionEndIndex: number) {
@@ -405,9 +411,9 @@ export class StreamingMessageParser {
       (actionAttributes as WorkbenchAction).parameters = parameters;
       console.log('🎉 Workbench action parsed successfully:', { action, parameters });
 
-      // Trigger auto-execution for run actions
-      if (action === 'run') {
-        console.log('🚀 MESSAGE PARSER: Triggering auto-execution for run action!');
+      // Only trigger auto-execution for run actions during streaming (not on page load)
+      if (action === 'run' && this.#isStreaming) {
+        console.log('🚀 MESSAGE PARSER: Triggering auto-execution for run action during streaming!');
 
         // Dispatch a custom event that the Workbench component can listen to
         window.dispatchEvent(
@@ -419,6 +425,8 @@ export class StreamingMessageParser {
             },
           }),
         );
+      } else if (action === 'run' && !this.#isStreaming) {
+        console.log('📖 MESSAGE PARSER: Skipping auto-execution for run action (not streaming - likely page load)');
       }
     } else if (!['shell', 'start'].includes(actionType)) {
       logger.warn(`Unknown action type '${actionType}'`);

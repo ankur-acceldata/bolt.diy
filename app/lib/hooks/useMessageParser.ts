@@ -58,6 +58,9 @@ export function useMessageParser() {
       messageParser.reset();
     }
 
+    // Set streaming state in the parser
+    messageParser.setStreaming(isLoading);
+
     for (const [index, message] of messages.entries()) {
       if (message.role === 'assistant' || message.role === 'user') {
         const newParsedContent = messageParser.parse(message.id, extractTextContent(message));

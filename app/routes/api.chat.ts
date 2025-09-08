@@ -126,8 +126,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     let lastChunk: string | undefined = undefined;
 
+    logger.debug('Creating data stream for chat request');
+
     const dataStream = createDataStream({
       async execute(dataStream) {
+        logger.debug('Data stream execution started');
+
         const filePaths = getFilePaths(files || {});
         let filteredFiles: FileMap | undefined = undefined;
         let summary: string | undefined = undefined;
@@ -314,6 +318,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               content: `[Model: ${model}]\n\n[Provider: ${provider}]\n\n${CONTINUE_PROMPT}`,
             });
 
+            logger.debug(`Initiating continuation streamText (switch ${stream.switches + 1}/${MAX_RESPONSE_SEGMENTS})`);
+
             const result = await streamText({
               messages: [...processedMessages],
               env: context.cloudflare?.env,
@@ -330,18 +336,32 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               summary,
               messageSliceId,
             });
+            logger.debug('Continuation streamText initiated successfully');
 
             result.mergeIntoDataStream(dataStream);
 
             (async () => {
+              let continuationStreamChunkCount = 0;
+              logger.debug('Starting continuation stream processing');
+
               for await (const part of result.fullStream) {
+                continuationStreamChunkCount++;
+
                 if (part.type === 'error') {
                   const error: any = part.error;
-                  logger.error(`${JSON.stringify(error, null, 2)}`);
+                  logger.error(
+                    `Continuation stream error on chunk ${continuationStreamChunkCount}: ${JSON.stringify(error, null, 2)}`,
+                  );
 
                   return;
                 }
+
+                if (part.type === 'text-delta' && continuationStreamChunkCount % 10 === 0) {
+                  logger.debug(`Continuation stream in progress - processed ${continuationStreamChunkCount} chunks`);
+                }
               }
+
+              logger.debug(`Continuation stream completed - total chunks: ${continuationStreamChunkCount}`);
             })();
 
             return;
@@ -355,6 +375,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           order: progressCounter++,
           message: 'Generating Response',
         } satisfies ProgressAnnotation);
+
+        logger.debug('Initiating streamText for main response generation');
 
         const result = await streamText({
           messages: [...processedMessages],
@@ -372,22 +394,37 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           summary,
           messageSliceId,
         });
+        logger.debug('streamText initiated successfully');
 
         (async () => {
           let fullContent = '';
+          let streamChunkCount = 0;
+          logger.debug('Starting stream processing for fullStream');
 
           for await (const part of result.fullStream) {
+            streamChunkCount++;
+
             if (part.type === 'error') {
               const error: any = part.error;
-              logger.error(`${error}`);
+              logger.error(`Stream error on chunk ${streamChunkCount}: ${error}`);
 
               return;
             }
 
             if (part.type === 'text-delta') {
               fullContent += part.textDelta;
+
+              if (streamChunkCount % 10 === 0) {
+                logger.debug(
+                  `Stream in progress - processed ${streamChunkCount} chunks, content length: ${fullContent.length}`,
+                );
+              }
             }
           }
+
+          logger.debug(
+            `Stream completed - total chunks: ${streamChunkCount}, final content length: ${fullContent.length}`,
+          );
 
           // Log the full response to check for workbench-action elements
           console.log('🔍 FULL LLM RESPONSE LENGTH:', fullContent.length);
@@ -396,22 +433,40 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           console.log('🔍 Last 1000 chars of response:', fullContent.substring(Math.max(0, fullContent.length - 1000)));
         })();
         result.mergeIntoDataStream(dataStream);
+        logger.debug('Data stream execution completed');
       },
-      onError: (error: any) => `Custom error: ${error.message}`,
+      onError: (error: any) => {
+        logger.error(`Data stream error: ${error.message}`);
+        return `Custom error: ${error.message}`;
+      },
     }).pipeThrough(
       new TransformStream({
+        start: () => {
+          logger.debug('Transform stream started - beginning chunk transformation');
+        },
         transform: (chunk, controller) => {
+          // Add detailed logging for each chunk transformation
+          const chunkType = typeof chunk;
+          const chunkSize = chunk?.length || 0;
+          logger.debug(
+            `Transforming chunk: type=${chunkType}, size=${chunkSize}, preview=${String(chunk).substring(0, 100)}`,
+          );
+
           if (!lastChunk) {
             lastChunk = ' ';
           }
 
           if (typeof chunk === 'string') {
             if (chunk.startsWith('g') && !lastChunk.startsWith('g')) {
-              controller.enqueue(encoder.encode(`0: "<div class=\\"__boltThought__\\">"\n`));
+              const thoughtStart = `0: "<div class=\\"__boltThought__\\">"\n`;
+              logger.debug('Injecting thought start marker');
+              controller.enqueue(encoder.encode(thoughtStart));
             }
 
             if (lastChunk.startsWith('g') && !chunk.startsWith('g')) {
-              controller.enqueue(encoder.encode(`0: "</div>\\n"\n`));
+              const thoughtEnd = `0: "</div>\\n"\n`;
+              logger.debug('Injecting thought end marker');
+              controller.enqueue(encoder.encode(thoughtEnd));
             }
           }
 
@@ -427,22 +482,59 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             }
 
             transformedChunk = `0:${content}\n`;
+            logger.debug(`Transformed 'g' chunk: ${transformedChunk.substring(0, 100)}`);
           }
 
           // Convert the string stream to a byte stream
           const str = typeof transformedChunk === 'string' ? transformedChunk : JSON.stringify(transformedChunk);
-          controller.enqueue(encoder.encode(str));
+          const encodedBytes = encoder.encode(str);
+
+          logger.debug(`Enqueuing ${encodedBytes.length} bytes to controller`);
+          controller.enqueue(encodedBytes);
+        },
+        flush: () => {
+          logger.debug('Transform stream completed - all chunks transformed and flushed');
         },
       }),
     );
 
-    return new Response(dataStream, {
+    logger.debug('Returning streaming response to client');
+
+    /*
+     * The AI SDK createDataStream outputs its own format, not SSE format
+     * Add a test to verify streaming is working by adding timestamps
+     */
+    const timestampedStream = dataStream.pipeThrough(
+      new TransformStream({
+        start() {
+          logger.debug(`🚀 Stream started at: ${new Date().toISOString()}`);
+        },
+        transform(chunk, controller) {
+          const now = new Date().toISOString();
+          logger.debug(`📦 Chunk received at: ${now}, size: ${chunk?.length || 0}`);
+          controller.enqueue(chunk);
+        },
+        flush() {
+          logger.debug(`🏁 Stream completed at: ${new Date().toISOString()}`);
+        },
+      }),
+    );
+
+    /*
+     * AI SDK createDataStream outputs its own format, not SSE format
+     * The useChat hook expects AI SDK streaming format, NOT SSE format
+     * So we should use the AI SDK's expected content type
+     */
+    return new Response(timestampedStream, {
       status: 200,
       headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Content-Type': 'text/plain; charset=utf-8', // AI SDK streaming format
         Connection: 'keep-alive',
-        'Cache-Control': 'no-cache',
-        'Text-Encoding': 'chunked',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'X-Accel-Buffering': 'no', // Disable NGINX buffering
+        'Transfer-Encoding': 'chunked',
+        Pragma: 'no-cache',
+        Expires: '0',
       },
     });
   } catch (error: any) {

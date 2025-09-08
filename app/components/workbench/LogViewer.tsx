@@ -200,10 +200,10 @@ export function LogViewer({
                 <button
                   onClick={toggleAutoSend}
                   className={classNames(
-                    'text-xs px-2 py-1 rounded transition-colors border',
+                    'text-xs px-2 py-1 rounded transition-colors',
                     autoSendEnabled
-                      ? 'bg-green-500 hover:bg-green-600 text-white border-green-500'
-                      : 'bg-bolt-elements-background-depth-3 hover:bg-bolt-elements-background-depth-4 text-bolt-elements-textSecondary border-bolt-elements-borderColor',
+                      ? 'bg-bolt-elements-item-contentAccent hover:bg-bolt-elements-item-contentAccentSecondary text-bolt-elements-background-depth-1'
+                      : 'bg-bolt-elements-background-depth-3 hover:bg-bolt-elements-background-depth-4 text-bolt-elements-textSecondary',
                   )}
                   title={
                     autoSendEnabled
@@ -211,12 +211,17 @@ export function LogViewer({
                       : 'Enable auto-send logs to chat'
                   }
                 >
-                  {autoSendEnabled ? '🔄 Auto' : 'Auto'}
+                  {autoSendEnabled ? '⚡ Auto' : 'Auto'}
                 </button>
                 <button
                   onClick={() => sendLogsToChat(false)} // Force manual mode
                   disabled={logs.length === 0}
-                  className="text-xs px-2 py-1 bg-accent-500 hover:bg-accent-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={classNames(
+                    'text-xs px-2 py-1 rounded transition-colors',
+                    logs.length === 0
+                      ? 'bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary opacity-50 cursor-not-allowed'
+                      : 'bg-bolt-elements-background-depth-3 hover:bg-bolt-elements-background-depth-4 text-bolt-elements-item-contentAccent hover:text-bolt-elements-item-contentAccentSecondary',
+                  )}
                   title={logs.length === 0 ? 'No logs to send' : 'Add logs to chat input'}
                 >
                   Send to Chat
@@ -281,9 +286,9 @@ export function LogViewer({
               className="h-full overflow-y-auto p-2 font-mono text-xs bg-bolt-elements-background-depth-1"
             >
               {isInitializing ? (
-                <div className="text-center mt-8">
+                <div className="relative text-center mt-8 overflow-hidden">
                   {/* Main Loading Animation */}
-                  <div className="relative inline-block mb-6">
+                  <div className="relative inline-block mb-6 z-10">
                     {/* Outer rotating ring */}
                     <div className="w-16 h-16 border-4 border-blue-500/20 rounded-full animate-spin">
                       <div className="w-full h-full border-4 border-transparent border-t-blue-500 rounded-full animate-pulse"></div>
@@ -296,7 +301,7 @@ export function LogViewer({
                   </div>
 
                   {/* Animated Text */}
-                  <div className="space-y-3">
+                  <div className="space-y-3 relative z-10">
                     <div className="font-medium text-blue-400 text-lg animate-pulse">🏗️ Initializing Log Stream</div>
                     <div className="text-bolt-elements-textSecondary animate-pulse opacity-70">
                       Preparing backend connection...
@@ -310,8 +315,8 @@ export function LogViewer({
                     </div>
                   </div>
 
-                  {/* Background animated elements */}
-                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  {/* Background animated elements - contained within this div */}
+                  <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
                     <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-blue-500/5 rounded-full animate-pulse [animation-duration:3s]"></div>
                     <div className="absolute bottom-1/4 right-1/4 w-24 h-24 bg-blue-400/5 rounded-full animate-pulse [animation-duration:4s] [animation-delay:1s]"></div>
                   </div>

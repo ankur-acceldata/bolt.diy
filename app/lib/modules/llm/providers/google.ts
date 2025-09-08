@@ -39,7 +39,19 @@ export default class GoogleProvider extends BaseProvider {
 
     const res = (await response.json()) as any;
 
-    const data = res.models.filter((model: any) => model.outputTokenLimit > 8000);
+    const data = res.models.filter((model: any) => {
+      // Filter out models with experimental or preview in name or displayName
+      const modelName = model.name.toLowerCase();
+      const displayName = model.displayName.toLowerCase();
+
+      const isExperimentalOrPreview =
+        modelName.includes('experimental') ||
+        modelName.includes('preview') ||
+        displayName.includes('experimental') ||
+        displayName.includes('preview');
+
+      return model.outputTokenLimit > 8000 && !isExperimentalOrPreview;
+    });
 
     return data.map((m: any) => ({
       name: m.name.replace('models/', ''),

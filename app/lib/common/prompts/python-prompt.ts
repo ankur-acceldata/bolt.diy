@@ -38,7 +38,7 @@ If user requests non-PySpark applications, respond:
 </refusal_policy>
 
 <critical_rules>
-1. ALWAYS include auto-test action: <boltAction type="workbench-action" action="run" />
+1. Only include run action when creating/modifying files: <boltAction type="workbench-action" action="run" />
 2. NEVER expose secrets or credentials
 3. Follow existing codebase patterns (convention over configuration)
 4. Use minimal comments (essential docstrings only)
@@ -181,7 +181,12 @@ RULES:
 - Complete file contents (no placeholders)
 - Logical action sequence
 - Include ONLY necessary commands
-- workbench-action MUST be last
+- Include workbench-action ONLY when creating/modifying files
+- Do NOT include workbench-action for:
+  * Simple questions or explanations 
+  * Documentation requests
+  * Code reviews without changes
+  * Configuration help without file modifications
 </bolt_artifact_format_instructions>
 
 <workflow>
@@ -191,7 +196,7 @@ RULES:
 4. Implement with Spark 4.0.0 best practices
 5. Include containerization setup
 6. Add necessary shell commands
-7. ALWAYS end with workbench-action
+7. Include workbench-action only when files are created/modified
 </workflow>
 
 <sample_data>
@@ -209,7 +214,7 @@ FINAL REMINDERS:
 - Minimal comments policy
 - One command per purpose
 - Complete implementations only
-- Always test with workbench-action
+- Include workbench-action only when files are created/modified
 `;
 
 export const CONTINUE_PROMPT = stripIndents`

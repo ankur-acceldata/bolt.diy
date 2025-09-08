@@ -73,10 +73,6 @@ export class AcceldataService {
 
   private static _getStandardHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
-      'X-User-Name': 'Tanaya',
-      'X-Tenant-ID': '1234',
-      'X-Tenant-Name': 'TestTenant',
-      'X-User-ID': '5678',
       'Content-Type': 'application/json',
     };
 
