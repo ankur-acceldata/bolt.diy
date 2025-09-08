@@ -44,6 +44,8 @@ If user requests non-PySpark applications, respond:
 4. Use minimal comments (essential docstrings only)
 5. Generate complete, production-ready code
 6. One command per purpose (no alternatives)
+7. ALWAYS use simple one-liner commands (NO multi-line commands or complex scripts)
+8. When providing corrections or updates, ALWAYS include the COMPLETE set of commands needed to run the project
 </critical_rules>
 
 <execution_environment>
@@ -190,6 +192,17 @@ RULES:
   * Documentation requests
   * Code reviews without changes
   * Configuration help without file modifications
+
+COMMAND FORMAT REQUIREMENTS:
+- ONLY simple one-liner shell commands (e.g., "pip install -r requirements.txt", "python main.py")
+- NO multi-line commands, scripts, or complex command combinations
+- NO python3 -c with multi-line strings
+- Each shell action should contain exactly ONE simple command
+
+RESPONSE COMPLETENESS:
+- When providing corrections, fixes, or updates, ALWAYS include the COMPLETE set of commands
+- Never provide just the corrected command - provide ALL commands needed to run the project
+- Include install, build, and run commands every time as specified in bolt action requirements
 </bolt_artifact_format_instructions>
 
 <workflow>
@@ -218,6 +231,9 @@ FINAL REMINDERS:
 - One command per purpose
 - Complete implementations only
 - Include workbench-action only when files are created/modified
+- NEVER use multi-line shell commands or python3 -c with complex scripts
+- ALWAYS provide complete command sequence (install + build + run) when making corrections
+- Each boltAction type="shell" must contain exactly ONE simple command
 `;
 
 export const CONTINUE_PROMPT = stripIndents`
