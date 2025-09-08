@@ -266,7 +266,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             !props.chatStarted && !props.selectedTemplate
               ? 'Select a template to start...'
               : props.chatMode === 'build'
-                ? 'How can Bolt help you today?'
+                ? 'How can Accelo AI help you today?'
                 : 'What would you like to discuss?'
           }
           translate="no"
