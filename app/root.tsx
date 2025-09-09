@@ -10,6 +10,7 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ClientOnly } from 'remix-utils/client-only';
 import { useCommunicationBusChild } from './lib/hooks/useCommunicationBus';
+import { useJobPromotion } from './lib/hooks/useJobPromotion';
 
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
@@ -74,6 +75,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     logLevel: 'error',
     targetOrigin: '*',
   });
+
+  // Initialize job promotion functionality
+  useJobPromotion();
 
   useEffect(() => {
     const html = document.querySelector('html');
