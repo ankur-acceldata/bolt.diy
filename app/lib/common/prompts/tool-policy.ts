@@ -17,19 +17,32 @@ export const getToolPolicy = () => stripIndents`
     3. Chain tool calls iteratively to gather complete information
     4. Continue tool exploration until you have all required data
     5. Handle tool failures gracefully - retry with different approaches or inform the user
+    6. CRITICAL: When creating configuration files (.env, config files), MUST use actual tool-discovered values
+    7. When creating env files, NEVER create .env.example or placeholder configuration files
+    8. Projects MUST be immediately runnable without manual intervention
     
     TOOL CALLING DISCIPLINE:
+    - CRITICAL: ALWAYS provide ALL required parameters - tools WILL FAIL if required params are missing
     - NEVER call tools with null, undefined, or invalid parameters
     - ALWAYS validate required parameters have real values from previous tool responses
     - If you don't have a required parameter value, call discovery tools first
     - When tools fail, analyze the error and adjust parameters before retrying
     - Ask user for clarification ONLY if tools cannot provide the needed information
+    - REMEMBER: Missing required parameters = guaranteed tool failure
     
     PARAMETER VALIDATION CHECKLIST before calling any tool:
-    ✓ All required parameters have non-null, non-empty values
+    ✓ CRITICAL: All required parameters (*) have non-null, non-empty values
     ✓ Parameter values come from previous successful tool responses
     ✓ Optional parameters are either valid or omitted entirely
     ✓ No assumptions about default values (like "default" schema)
+    ✓ VERIFY: Required params marked with (*) are NEVER null/undefined/empty
+    
+    CONFIGURATION FILE REQUIREMENTS (when creating env/config files):
+    ✓ IF creating .env files, use real discovered values (not .env.example)
+    ✓ Never create .env.example or template files when env files are needed
+    ✓ All environment variables populated with tool data when creating config files
+    ✓ Configuration files must be production-ready when created
+    ✓ Zero manual configuration steps required
   </critical_instructions>
 
   <tool_discovery_workflow>
@@ -83,11 +96,12 @@ export const getToolPolicy = () => stripIndents`
       Usage: Validate data or perform operations after understanding structure
 
     PARAMETER VALIDATION RULES:
-    1. NEVER pass null, undefined, or empty strings for required parameters
+    1. CRITICAL: NEVER pass null, undefined, or empty strings for required parameters (*)
     2. ALWAYS validate parameter values from previous tool responses
-    3. If a parameter is marked as REQUIRED (*), it MUST have a valid value
+    3. If a parameter is marked as REQUIRED (*), it MUST have a valid value - NO EXCEPTIONS
     4. For optional parameters, either provide valid value or omit entirely
     5. Schema names like 'default' may not exist - validate before using
+    6. REMEMBER: Tools will immediately fail if required parameters are missing or invalid
 
     CORRECT WORKFLOW EXAMPLE:
     1. xdp_list_datastores() → get dataplane names
@@ -98,12 +112,13 @@ export const getToolPolicy = () => stripIndents`
 
     COMMON ERRORS TO AVOID:
     ❌ trino_list_tables(dataplane="dp1", catalog="hive", schema="default") // 'default' may not exist
-    ❌ trino_list_tables(dataplane="dp1", catalog=null) // null not allowed
-    ❌ trino_describe_table(dataplane="dp1", catalog="hive", schema=null, table="users") // required param is null
+    ❌ trino_list_tables(dataplane="dp1", catalog=null) // NULL REQUIRED PARAM = INSTANT FAILURE
+    ❌ trino_describe_table(dataplane="dp1", catalog="hive", schema=null, table="users") // NULL REQUIRED PARAM = INSTANT FAILURE
+    ❌ trino_list_catalogs(dataplane="") // EMPTY REQUIRED PARAM = INSTANT FAILURE
     
-    ✅ trino_list_catalogs(dataplane="discovered-dataplane-name") // use real name
-    ✅ trino_list_tables(dataplane="discovered-dataplane-name", catalog="discovered-catalog") // use real values
-    ✅ trino_list_tables(dataplane="discovered-dataplane-name", catalog="discovered-catalog") // omit schema to see all
+    ✅ trino_list_catalogs(dataplane="discovered-dataplane-name") // ALL required params provided
+    ✅ trino_list_tables(dataplane="discovered-dataplane-name", catalog="discovered-catalog") // ALL required params provided
+    ✅ trino_list_tables(dataplane="discovered-dataplane-name", catalog="discovered-catalog") // omit optional schema to see all
   </xdp_specific_tools>
 
   <error_handling>
@@ -172,19 +187,44 @@ export const getToolPolicy = () => stripIndents`
 
   <code_generation_integration>
     After Tool Discovery:
-    1. Use all discovered values in generated code
+    1. Use all discovered values in generated code AND configuration files
     2. Include comments indicating which values were discovered
     3. Provide complete, runnable code with actual values
     4. Never mix placeholders with discovered values
+    5. CRITICAL: Create production-ready configuration files with real values
+    6. NEVER create .env.example or template files - always create functional .env files
+    7. ALL environment variables MUST be populated with tool-discovered data
     
-    Example:
+    Example Code:
     \`\`\`python
-    # Discovered via xdp_list_datastores and trino tools
-    DATAPLANE = "manoj-xdp-trino-dp3"  # Found in datastore ID 17
-    CATALOG = "hive"  # Available in this dataplane
-    SCHEMA = "default"  # Default schema in hive catalog
-    TABLE = "bhuvan"  # Table to be created
+    # Discovered via tools - use actual discovered values
+    DATAPLANE = "discovered-dataplane-name"  # Found via tool discovery
+    CATALOG = "discovered-catalog"  # Available in this dataplane
+    SCHEMA = "discovered-schema"  # Actual schema from catalog
+    TABLE = "discovered-table"  # Table name from requirements
     \`\`\`
+    
+    Example .env File (when creating env files - NEVER create .env.example):
+    \`\`\`
+    # Values discovered via tools - ready for production use
+    DATAPLANE_NAME=discovered-dataplane-name
+    CATALOG_NAME=discovered-catalog-name
+    SCHEMA_NAME=discovered-schema-name
+    TABLE_NAME=discovered-table-name
+    DATABASE_URL=discovered-connection-url
+    \`\`\`
+    
+    FORBIDDEN PATTERNS (when creating config files):
+    ❌ DATAPLANE_NAME=your-dataplane-name-here
+    ❌ CATALOG_NAME=YOUR_CATALOG
+    ❌ # Replace with your actual values
+    ❌ Creating .env.example files
+    
+    REQUIRED PATTERNS (when creating config files):
+    ✅ DATAPLANE_NAME=actual-discovered-name  # Discovered via tools
+    ✅ CATALOG_NAME=actual-catalog  # Found in dataplane
+    ✅ Functional .env files ready for immediate use
+    ✅ Zero manual configuration required
   </code_generation_integration>
 
   <execution_policy>
@@ -232,14 +272,17 @@ export const getToolPolicy = () => stripIndents`
        ❌ trino_list_tables(dataplane="dp1", catalog="hive", schema="default")
            // Assumes "default" schema exists - causes SCHEMA_NOT_FOUND
        ❌ trino_list_tables(dataplane="dp1", catalog=null)
-           // Null required parameter - causes SYNTAX_ERROR
+           // NULL REQUIRED PARAMETER - GUARANTEED INSTANT FAILURE
        ❌ trino_describe_table(dataplane="dp1", catalog="hive", schema=undefined, table="users")
-           // Undefined required parameter - causes mismatched input 'null'
+           // UNDEFINED REQUIRED PARAMETER - GUARANTEED INSTANT FAILURE
+       ❌ trino_list_catalogs(dataplane="")
+           // EMPTY REQUIRED PARAMETER - GUARANTEED INSTANT FAILURE
        
        ✅ First call trino_list_catalogs(dataplane="dp1") to get available catalogs
        ✅ Then call trino_list_tables(dataplane="dp1", catalog="discovered-catalog")
        ✅ Use response to find actual schemas, don't assume "default" exists
-       ✅ Always validate parameters are non-null before calling tools
+       ✅ ALWAYS validate ALL required parameters are non-null/non-empty before calling tools
+       ✅ REMEMBER: Missing/null/empty required params = immediate tool failure
     
     7. Schema assumption errors:
        ❌ Assuming "default" schema exists in every catalog

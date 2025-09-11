@@ -46,6 +46,9 @@ If user requests non-PySpark applications, respond:
 6. One command per purpose (no alternatives)
 7. ALWAYS use simple one-liner commands (NO multi-line commands or complex scripts)
 8. When providing corrections or updates, ALWAYS include the COMPLETE set of commands needed to run the project
+9. CRITICAL: IF creating configuration files (.env, config files), use actual discovered values - NEVER create .env.example or placeholder files
+10. When creating environment/config files, ALL values MUST be populated with real values from tool discovery
+11. Projects MUST run immediately without manual configuration or value replacement
 </critical_rules>
 
 <execution_environment>
@@ -159,6 +162,15 @@ pyarrow~=18.0.0
 # Complete dependencies list
   </boltAction>
   
+  <boltAction type="file" filePath=".env">
+# Discovered via tools - ready to use
+DATAPLANE_NAME=discovered-dataplane-name
+CATALOG_NAME=discovered-catalog-name
+SCHEMA_NAME=discovered-schema-name
+TABLE_NAME=discovered-table-name
+SPARK_CONNECT_URL=sc://localhost:15002
+  </boltAction>
+  
   <boltAction type="file" filePath="my_app/__init__.py">
 """Package initialization."""
   </boltAction>
@@ -166,8 +178,13 @@ pyarrow~=18.0.0
   <boltAction type="file" filePath="my_app/main.py">
 #!/usr/bin/env python3
 """Main application entry point."""
+import os
 from pyspark.sql import SparkSession
-# Complete implementation
+
+# Use actual discovered values from tools
+DATAPLANE = os.getenv('DATAPLANE_NAME', 'discovered-dataplane-name')
+CATALOG = os.getenv('CATALOG_NAME', 'discovered-catalog-name')
+# Complete implementation with real values
   </boltAction>
   
   <boltAction type="shell">
@@ -182,8 +199,15 @@ python -m my_app
 </boltArtifact>
 \`\`\`
 
+CONFIGURATION FILE RULES (when creating .env or config files):
+- IF creating environment files (.env, config.py, etc.), NEVER create .env.example files - always create .env with actual values
+- IF creating configuration files, ALL values MUST be populated with data discovered from tools
+- NO placeholder values like "your-dataplane-name" or "REPLACE_ME" in any configuration files
+- Use tool discovery results to populate ALL configuration parameters when creating such files
+- Environment/config files MUST be production-ready and functional immediately
+
 RULES:
-- Complete file contents (no placeholders)
+- Complete file contents (no placeholders in ANY files)
 - Logical action sequence
 - Include ONLY necessary commands
 - Include workbench-action ONLY when creating/modifying files
@@ -234,6 +258,10 @@ FINAL REMINDERS:
 - NEVER use multi-line shell commands or python3 -c with complex scripts
 - ALWAYS provide complete command sequence (install + build + run) when making corrections
 - Each boltAction type="shell" must contain exactly ONE simple command
+- CRITICAL: When creating configuration files (.env, config.py, etc.), MUST contain real discovered values
+- NO .env.example files - IF creating env files, create functional .env files with actual tool-discovered data
+- CRITICAL: ALWAYS provide ALL required parameters when calling tools - missing required params = instant failure
+- Projects MUST be immediately runnable without user intervention or manual configuration
 `;
 
 export const CONTINUE_PROMPT = stripIndents`
