@@ -192,7 +192,7 @@ pip install --no-cache-dir -r requirements.txt
   </boltAction>
   
   <boltAction type="shell">
-python -m my_app
+python3 -m my_app
   </boltAction>
   
   <boltAction type="workbench-action" action="run" />
@@ -218,7 +218,7 @@ RULES:
   * Configuration help without file modifications
 
 COMMAND FORMAT REQUIREMENTS:
-- ONLY simple one-liner shell commands (e.g., "pip install -r requirements.txt", "python main.py")
+- ONLY simple one-liner shell commands (e.g., "pip install -r requirements.txt", "python3 main.py")
 - NO multi-line commands, scripts, or complex command combinations
 - NO python3 -c with multi-line strings
 - Each shell action should contain exactly ONE simple command

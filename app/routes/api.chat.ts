@@ -294,7 +294,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               cumulativeUsage.totalTokens += usage.totalTokens || 0;
             }
 
-            if (finishReason !== 'length') {
+            /*
+             * Only treat 'stop' and 'length' as true completion
+             * 'tool-calls' means the model paused for tool execution but should continue
+             */
+            if (finishReason === 'stop' || finishReason === 'length') {
               dataStream.writeMessageAnnotation({
                 type: 'usage',
                 value: {
@@ -313,6 +317,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               await new Promise((resolve) => setTimeout(resolve, 0));
 
               // stream.close();
+              return;
+            }
+
+            // For tool-calls finish reason, log but don't end the response
+            if (finishReason === 'tool-calls') {
+              logger.debug('Model paused for tool execution, will continue after tools complete');
               return;
             }
 
