@@ -26,6 +26,10 @@ export enum MessageType {
   // Response status messages
   RESPONSE_IN_PROGRESS = 'ResponseInProgress',
   RESPONSE_GENERATED = 'ResponseGenerated',
+
+  // Job promotion messages
+  PROMOTE_TO_JOB = 'PROMOTE_TO_JOB',
+  PROMOTE_TO_JOB_RESPONSE = 'PROMOTE_TO_JOB_RESPONSE',
 }
 
 export interface BusMessage<T = any> {
