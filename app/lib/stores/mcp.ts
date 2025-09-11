@@ -26,7 +26,7 @@ type Actions = {
 export const useMCPStore = create<Store & Actions>((set, get) => ({
   isInitialized: false,
   settings: {
-    maxLLMSteps: 5,
+    maxLLMSteps: 10,
     mcpConfig: { mcpServers: {} },
   }, // Minimal initial state - will be populated during initialize()
   serverTools: {},
@@ -92,7 +92,7 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
           console.log('🔍 STORE - Got initial server tools:', serverData.serverTools);
 
           const settings: MCPSettings = {
-            maxLLMSteps: 5,
+            maxLLMSteps: 10,
             mcpConfig: serverData.mcpConfig,
           };
 
@@ -104,7 +104,7 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
 
           // Fallback to minimal settings
           const minimalSettings: MCPSettings = {
-            maxLLMSteps: 5,
+            maxLLMSteps: 10,
             mcpConfig: { mcpServers: {} },
           };
           localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(minimalSettings));
