@@ -17,9 +17,11 @@ export const getToolPolicy = () => stripIndents`
     3. Chain tool calls iteratively to gather complete information
     4. Continue tool exploration until you have all required data
     5. Handle tool failures gracefully - retry with different approaches or inform the user
-    6. CRITICAL: When creating configuration files (.env, config files), MUST use actual tool-discovered values
-    7. When creating env files, NEVER create .env.example or placeholder configuration files
-    8. Projects MUST be immediately runnable without manual intervention
+    6. CRITICAL: After completing tool discovery, ALWAYS continue to generate the requested code
+    7. NEVER stop after tool calls - tool discovery is preparation, not the final answer
+    8. CRITICAL: When creating configuration files (.env, config files), MUST use actual tool-discovered values
+    9. When creating env files, NEVER create .env.example or placeholder configuration files
+    10. Projects MUST be immediately runnable without manual intervention
     
     TOOL CALLING DISCIPLINE:
     - CRITICAL: ALWAYS provide ALL required parameters - tools WILL FAIL if required params are missing
@@ -186,6 +188,11 @@ export const getToolPolicy = () => stripIndents`
   </continuous_exploration>
 
   <code_generation_integration>
+    CRITICAL WORKFLOW: Tool Discovery → Code Generation
+    
+    MANDATORY: After completing tool discovery, you MUST ALWAYS proceed to generate the requested code/solution.
+    Tool calls are NEVER the final answer - they are preparation for code generation.
+    
     After Tool Discovery:
     1. Use all discovered values in generated code AND configuration files
     2. Include comments indicating which values were discovered
@@ -289,6 +296,26 @@ export const getToolPolicy = () => stripIndents`
        ✅ Call trino_list_tables without schema to discover available schemas
        ✅ Use actual schema names from the tool responses
   </common_pitfalls>
+
+  <completion_requirements>
+    CRITICAL: Response Completion Requirements
+    
+    When users request code generation (e.g., "create a pyspark app", "implement a solution"), you MUST:
+    
+    1. FIRST: Use tools to discover required values (dataplanes, catalogs, schemas, tables, etc.)
+    2. THEN: Generate the complete code solution using discovered values
+    3. NEVER: Stop after tool calls without generating the requested code
+    4. ALWAYS: Provide a complete, functional solution as the final deliverable
+    
+    Example workflow for "Create a PySpark app to read from Snowflake":
+    1. Use tools to discover dataplane, catalog, schema, table information
+    2. Generate complete PySpark application with discovered values
+    3. Include all necessary configuration and code files
+    4. Ensure the solution is immediately runnable
+    
+    Remember: Tool discovery is the PREPARATION phase, not the completion phase.
+    The user's request is fulfilled only when you deliver the working code/solution.
+  </completion_requirements>
 </mcp_tool_policy>
 `;
 
