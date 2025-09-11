@@ -137,7 +137,16 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let summary: string | undefined = undefined;
         let messageSliceId = 0;
 
-        const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+        let processedMessages;
+
+        try {
+          processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+        } catch (error) {
+          logger.error('Error in processToolInvocations, continuing with original messages:', error);
+
+          // If tool invocations fail, continue with original messages rather than failing completely
+          processedMessages = messages;
+        }
 
         // Generate a session ID for execution tracking if not provided
         const sessionId = chatId || generateId();
@@ -266,9 +275,15 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           maxSteps: maxLLMSteps,
           onStepFinish: ({ toolCalls }) => {
             // add tool call annotations for frontend processing
-            toolCalls.forEach((toolCall) => {
-              mcpService.processToolCall(toolCall, dataStream);
-            });
+            try {
+              toolCalls.forEach((toolCall) => {
+                mcpService.processToolCall(toolCall, dataStream);
+              });
+            } catch (error) {
+              logger.error('Error in onStepFinish toolCall processing, continuing stream:', error);
+
+              // Continue processing even if tool call annotations fail
+            }
           },
           onFinish: async ({ text: content, finishReason, usage }) => {
             logger.debug('usage', JSON.stringify(usage));
@@ -353,6 +368,14 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                     `Continuation stream error on chunk ${continuationStreamChunkCount}: ${JSON.stringify(error, null, 2)}`,
                   );
 
+                  // Check if it's a tool execution error that we can recover from
+                  if (error?.message?.includes('Error executing tool') || error?.name === 'AI_ToolExecutionError') {
+                    logger.warn('Tool execution error in continuation stream detected, attempting to continue...');
+
+                    // Don't return immediately - try to continue processing
+                    continue;
+                  }
+
                   return;
                 }
 
@@ -407,6 +430,14 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             if (part.type === 'error') {
               const error: any = part.error;
               logger.error(`Stream error on chunk ${streamChunkCount}: ${error}`);
+
+              // Check if it's a tool execution error that we can recover from
+              if (error?.message?.includes('Error executing tool') || error?.name === 'AI_ToolExecutionError') {
+                logger.warn('Tool execution error detected, attempting to continue stream processing...');
+
+                // Don't return immediately - try to continue processing
+                continue;
+              }
 
               return;
             }

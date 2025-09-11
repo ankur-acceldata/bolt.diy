@@ -11,12 +11,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { z } from 'zod';
 import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
 import type { ToolCallAnnotation } from '~/types/context';
-import {
-  TOOL_EXECUTION_APPROVAL,
-  TOOL_EXECUTION_DENIED,
-  TOOL_EXECUTION_ERROR,
-  TOOL_NO_EXECUTE_FUNCTION,
-} from '~/utils/constants';
+import { TOOL_EXECUTION_APPROVAL, TOOL_EXECUTION_DENIED, TOOL_NO_EXECUTE_FUNCTION } from '~/utils/constants';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('mcp-service');
@@ -128,6 +123,10 @@ export class MCPService {
     mcpServers: {},
   };
   private _initialized = false;
+
+  // Configuration for error handling and retries
+  private _maxRetries = 2;
+  private _enableRetries = true;
 
   static getInstance(): MCPService {
     if (!MCPService._instance) {
@@ -438,6 +437,66 @@ export class MCPService {
     }
   }
 
+  // Add method to configure retry behavior
+  configureErrorHandling(options: { maxRetries?: number; enableRetries?: boolean }) {
+    if (options.maxRetries !== undefined) {
+      this._maxRetries = Math.max(0, Math.min(options.maxRetries, 5)); // Limit to 0-5 retries
+    }
+
+    if (options.enableRetries !== undefined) {
+      this._enableRetries = options.enableRetries;
+    }
+
+    logger.debug(`Error handling configured: maxRetries=${this._maxRetries}, enableRetries=${this._enableRetries}`);
+  }
+
+  private async _executeToolWithRetry(
+    toolInstance: any,
+    toolName: string,
+    args: any,
+    context: any,
+    maxRetries?: number,
+  ): Promise<string> {
+    const effectiveMaxRetries = this._enableRetries ? (maxRetries ?? this._maxRetries) : 1;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= effectiveMaxRetries; attempt++) {
+      try {
+        logger.debug(
+          `calling tool "${toolName}" (attempt ${attempt}/${effectiveMaxRetries}) with args: ${JSON.stringify(args)}`,
+        );
+
+        const result = await toolInstance.execute(args, context);
+
+        if (attempt > 1) {
+          logger.info(`tool "${toolName}" succeeded on retry attempt ${attempt}`);
+        }
+
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+        logger.warn(`tool "${toolName}" failed on attempt ${attempt}/${effectiveMaxRetries}:`, error);
+
+        // If it's the last attempt, we'll fall through to error handling
+        if (attempt === effectiveMaxRetries) {
+          break;
+        }
+
+        // Add exponential backoff for retries
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        logger.debug(`retrying tool "${toolName}" in ${backoffMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+
+    // All retries failed, return a graceful error message
+    const errorMessage = lastError?.message || 'Unknown error';
+    logger.error(`tool "${toolName}" failed after ${effectiveMaxRetries} attempts. Last error: ${errorMessage}`);
+
+    // Return a user-friendly error message instead of throwing
+    return `Tool "${toolName}" is currently unavailable due to: ${errorMessage}. Please try a different approach or try again later.`;
+  }
+
   async processToolInvocations(messages: Message[], dataStream: DataStreamWriter): Promise<Message[]> {
     const lastMessage = messages[messages.length - 1];
     const parts = lastMessage.parts;
@@ -467,16 +526,17 @@ export class MCPService {
           const toolInstance = this._tools[toolName];
 
           if (toolInstance && typeof toolInstance.execute === 'function') {
-            logger.debug(`calling tool "${toolName}" with args: ${JSON.stringify(toolInvocation.args)}`);
-
             try {
-              result = await toolInstance.execute(toolInvocation.args, {
+              // Use retry logic instead of failing immediately
+              result = await this._executeToolWithRetry(toolInstance, toolName, toolInvocation.args, {
                 messages: convertToCoreMessages(messages),
                 toolCallId,
               });
             } catch (error) {
-              logger.error(`error while calling tool "${toolName}":`, error);
-              result = TOOL_EXECUTION_ERROR;
+              logger.error(`tool "${toolName}" failed completely:`, error);
+
+              // Graceful fallback - continue with an error message instead of terminating
+              result = `Tool "${toolName}" encountered an error and is temporarily unavailable. Error details: ${error instanceof Error ? error.message : 'Unknown error'}. Please try a different approach.`;
             }
           } else {
             result = TOOL_NO_EXECUTE_FUNCTION;
