@@ -37,6 +37,27 @@ export class PostMessageService {
     };
 
     this._setupMessageListener();
+
+    /*
+     * Auto-initialize as ready if not in an iframe
+     * or if parent is same as current window
+     */
+    if (!this._isInIframe()) {
+      this._log('info', 'Not in iframe, marking as ready immediately');
+      this._isReady = true;
+      this._isConnected = true;
+      this._status.isReady = true;
+      this._status.isConnected = true;
+    }
+  }
+
+  private _isInIframe(): boolean {
+    try {
+      return window.self !== window.top || window.parent !== window;
+    } catch {
+      // If we can't access window.top due to cross-origin, we're in an iframe
+      return true;
+    }
   }
 
   private _log(level: 'error' | 'warn' | 'info', ...args: any[]) {
@@ -183,7 +204,7 @@ export class PostMessageService {
   }
 
   private _generateMessageId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   // Public API

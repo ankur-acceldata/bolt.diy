@@ -42,6 +42,8 @@ export function usePipelineConfigHandler({ currentProjectId }: UsePipelineConfig
 
         const pipelineConfig = {
           name: projectName,
+          description: description.get() || '',
+          projectId: projectIdRef.current || 'default-project',
           sourceUrl: codeSourceUrl,
           stages,
           imageFromUrl: jobConfig.baseImage || '',
