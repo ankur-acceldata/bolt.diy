@@ -56,6 +56,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
             logger.info(`Backend response status: ${response.status} ${response.statusText}`);
             logger.info(`Backend response headers:`, Object.fromEntries(response.headers.entries()));
+            logger.info(`Response body available: ${!!response.body}`);
+            logger.info(`Response body locked: ${response.body?.locked}`);
+
+            // Log if this is a streaming response
+            const contentType = response.headers.get('content-type');
+            logger.info(`Content-Type: ${contentType}`);
+
+            if (contentType?.includes('text/event-stream')) {
+              logger.info('✅ Backend confirmed SSE stream response');
+            } else {
+              logger.warn('⚠️ Backend response is not SSE format');
+            }
 
             if (!response.ok) {
               const errorText = await response.text().catch(() => 'No error text available');
@@ -128,6 +140,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           const decoder = new TextDecoder();
 
           logger.info('Successfully connected to backend, starting to read stream...');
+          logger.info('Reader created, starting immediate consumption...');
 
           // Send initial connection message
           const connectMsg = `data: ${JSON.stringify({
@@ -135,6 +148,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
             timestamp: new Date().toISOString(),
           })}\n\n`;
           controller.enqueue(new TextEncoder().encode(connectMsg));
+
+          // Force immediate delivery by enqueuing empty chunk (flush)
+          try {
+            controller.enqueue(new Uint8Array(0));
+          } catch {
+            // Ignore flush errors
+          }
 
           let buffer = '';
           let lastDataReceived = Date.now();
@@ -151,6 +171,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
                 keepAlive: true,
               })}\n\n`;
               controller.enqueue(new TextEncoder().encode(keepAliveMsg));
+
+              // Force immediate delivery
+              try {
+                controller.enqueue(new Uint8Array(0));
+              } catch {
+                // Ignore flush errors
+              }
+
               lastDataReceived = now;
             }
           };
@@ -159,15 +187,28 @@ export async function loader({ request }: LoaderFunctionArgs) {
           timeoutId = setInterval(sendKeepAlive, 30000);
 
           try {
+            let chunkCount = 0;
+            const startTime = Date.now();
+
             while (true) {
+              const readStart = Date.now();
               const { done, value } = await reader.read();
+              const readTime = Date.now() - readStart;
+
+              chunkCount++;
+              logger.debug(`Chunk ${chunkCount}: Read took ${readTime}ms`);
 
               if (done) {
-                logger.info('Stream ended normally');
+                logger.info(`Stream ended normally after ${chunkCount} chunks in ${Date.now() - startTime}ms`);
                 break;
               }
 
               lastDataReceived = Date.now();
+
+              // Immediate processing - no delays
+              if (value && value.length > 0) {
+                logger.debug(`Processing chunk ${chunkCount} with ${value.length} bytes`);
+              }
 
               const chunk = decoder.decode(value, { stream: true });
               logger.debug(`Received chunk: ${chunk.substring(0, 200)}${chunk.length > 200 ? '...' : ''}`);
@@ -206,9 +247,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
                     // Forward the data in SSE format expected by frontend
                     const formattedChunk = `data: ${JSON.stringify(logData)}\n\n`;
-                    controller.enqueue(new TextEncoder().encode(formattedChunk));
+                    const chunkBytes = new TextEncoder().encode(formattedChunk);
 
-                    logger.debug('Forwarded log data:', logData);
+                    logger.debug(`Forwarding log chunk ${chunkCount} immediately: ${logContent.substring(0, 100)}`);
+                    controller.enqueue(chunkBytes);
+
+                    // Force immediate delivery for each log line
+                    try {
+                      controller.enqueue(new Uint8Array(0));
+                    } catch {
+                      // Ignore flush errors
+                    }
+
+                    logger.debug(`✅ Chunk ${chunkCount} forwarded successfully`);
                   } catch (parseError) {
                     logger.error('Error processing SSE data:', parseError);
 
@@ -220,6 +271,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
                     const errorChunk = `data: ${JSON.stringify(errorData)}\n\n`;
                     controller.enqueue(new TextEncoder().encode(errorChunk));
+
+                    // Force immediate delivery
+                    try {
+                      controller.enqueue(new Uint8Array(0));
+                    } catch {
+                      // Ignore flush errors
+                    }
                   }
                 }
 
@@ -234,6 +292,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
               timestamp: new Date().toISOString(),
             })}\n\n`;
             controller.enqueue(new TextEncoder().encode(errorData));
+
+            // Force immediate delivery
+            try {
+              controller.enqueue(new Uint8Array(0));
+            } catch {
+              // Ignore flush errors
+            }
           }
         } catch (error) {
           logger.error('Error connecting to log stream:', error);
@@ -243,6 +308,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
             timestamp: new Date().toISOString(),
           })}\n\n`;
           controller.enqueue(new TextEncoder().encode(errorData));
+
+          // Force immediate delivery
+          try {
+            controller.enqueue(new Uint8Array(0));
+          } catch {
+            // Ignore flush errors
+          }
         } finally {
           if (timeoutId) {
             clearInterval(timeoutId);
@@ -265,9 +337,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
+        'Cache-Control': 'no-cache, no-store, must-revalidate, no-transform',
         Connection: 'keep-alive',
+        'Transfer-Encoding': 'chunked',
         'X-Accel-Buffering': 'no', // Disable buffering in Nginx/Kong
+        'X-Content-Type-Options': 'nosniff',
+        'CF-Cache-Status': 'BYPASS', // Cloudflare: bypass cache
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',

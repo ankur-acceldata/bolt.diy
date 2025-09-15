@@ -366,6 +366,15 @@ export class AcceldataService {
       method,
       headers,
       signal: request?.signal, // Pass through abort signal for SSE
+
+      // Enable streaming mode - prevents buffering
+      cache: 'no-store',
+
+      // @ts-ignore - Cloudflare Workers specific option
+      cf: {
+        cacheTtl: 0,
+        cacheEverything: false,
+      },
     };
 
     if (body && (method === 'POST' || method === 'PUT')) {
