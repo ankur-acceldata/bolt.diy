@@ -62,9 +62,18 @@ export const getToolPolicy = () => stripIndents`
   <xdp_specific_tools>
     XDP Platform Tools with MANDATORY parameter validation:
     
+    DATASOURCE DISCOVERY PATTERN:
+    Different datasources (Snowflake, MySQL, PostgreSQL, S3, etc.) are accessed through Trino catalogs.
+    The discovery flow is the same regardless of datasource type:
+    1. List datastores to find dataplanes
+    2. List catalogs in the dataplane (each catalog represents a datasource)
+    3. List tables/schemas in the catalog
+    4. Describe table structure
+    5. Execute queries through Trino SQL
+    
     - xdp_list_datastores: Lists all data stores with pagination support
       Parameters: page (number), size (number), sortBy (string) - all optional
-      Usage: Start here to discover available data stores
+      Usage: Start here to discover available data stores and dataplanes
       
     - trino_list_catalogs: Lists available Trino catalogs for a dataplane
       Parameters: dataplane* (string, REQUIRED) - must be valid dataplane name
@@ -95,7 +104,13 @@ export const getToolPolicy = () => stripIndents`
       Parameters:
         - dataplane* (string, REQUIRED) - valid dataplane name
         - query* (string, REQUIRED) - valid SQL query
-      Usage: Validate data or perform operations after understanding structure
+      Usage: Access ANY datasource (Snowflake, MySQL, PostgreSQL, etc.) via Trino SQL
+      
+    DATASOURCE ACCESS NOTES:
+    - Snowflake tables: Access via catalog like 'snowflake_catalog.schema.table'
+    - MySQL/PostgreSQL: Access via respective catalog names
+    - S3/MinIO files: Can be accessed directly via Spark or through Trino external tables
+    - ALL external datasources: Accessed through their Trino catalog representation
 
     PARAMETER VALIDATION RULES:
     1. CRITICAL: NEVER pass null, undefined, or empty strings for required parameters (*)
@@ -105,12 +120,20 @@ export const getToolPolicy = () => stripIndents`
     5. Schema names like 'default' may not exist - validate before using
     6. REMEMBER: Tools will immediately fail if required parameters are missing or invalid
 
-    CORRECT WORKFLOW EXAMPLE:
-    1. xdp_list_datastores() → get dataplane names
+    CORRECT WORKFLOW EXAMPLE (works for ALL datasource types):
+    1. xdp_list_datastores() → get dataplane names and IDs
     2. trino_list_catalogs(dataplane="actual-dataplane-name") → get catalog names
+       - Each catalog represents a datasource (e.g., 'snowflake_prod', 'mysql_analytics', 'hive')
     3. trino_list_tables(dataplane="actual-dataplane-name", catalog="actual-catalog") → get tables
-    4. trino_describe_table(dataplane="...", catalog="...", schema="...", table="...") → get schema
-    5. Generate code with all discovered real values
+       - Returns all schemas and tables in that datasource
+    4. trino_describe_table(dataplane="...", catalog="...", schema="...", table="...") → get columns
+       - CRITICAL: Store column names and types for type-safe operations
+       - Use this info to handle data type conversions properly
+    5. trino_execute_query(dataplane="...", query="SELECT * FROM catalog.schema.table LIMIT 10") → validate
+    6. Generate code with:
+       - All discovered values (no placeholders)
+       - Proper type handling based on discovered schema
+       - DataFrame operations for type safety when possible
 
     COMMON ERRORS TO AVOID:
     ❌ trino_list_tables(dataplane="dp1", catalog="hive", schema="default") // 'default' may not exist
@@ -159,13 +182,22 @@ export const getToolPolicy = () => stripIndents`
     - "dataplane": "your-dataplane-name"
     - catalog = "your_catalog"
     - DATAPLANE_ID = "PLACEHOLDER"
+    - SNOWFLAKE_URL = "your-snowflake-url"
     
     ✅ CORRECT:
     - First use tools to discover actual values
     - Then use discovered values in code:
-      - "dataplane": "manoj-xdp-trino-dp3"  // discovered via tool
-      - catalog = "hive"  // discovered via trino_list_catalogs
+      - "dataplane": "manoj-xdp-trino-dp3"  // discovered via xdp_list_datastores
+      - catalog = "snowflake_prod"  // discovered via trino_list_catalogs (Snowflake datasource)
+      - catalog = "mysql_analytics"  // discovered via trino_list_catalogs (MySQL datasource)
+      - catalog = "hive"  // discovered via trino_list_catalogs (Hive/HDFS datasource)
       - DATAPLANE_ID = "17"  // discovered via xdp_list_datastores
+    
+    DATASOURCE-SPECIFIC PATTERNS:
+    - Snowflake: Access via Trino catalog (e.g., 'snowflake_prod.public.customers')
+    - MySQL/PostgreSQL: Access via Trino catalog (e.g., 'mysql_db.schema.table')
+    - S3/MinIO: Direct Spark access or via Trino external tables
+    - Any other source: Discover the Trino catalog name and use it
   </value_resolution>
 
   <continuous_exploration>
@@ -205,20 +237,48 @@ export const getToolPolicy = () => stripIndents`
     Example Code:
     \`\`\`python
     # Discovered via tools - use actual discovered values
-    DATAPLANE = "discovered-dataplane-name"  # Found via tool discovery
-    CATALOG = "discovered-catalog"  # Available in this dataplane
-    SCHEMA = "discovered-schema"  # Actual schema from catalog
-    TABLE = "discovered-table"  # Table name from requirements
+    DATAPLANE = "discovered-dataplane-name"  # Found via xdp_list_datastores
+    CATALOG = "discovered-catalog"  # Found via trino_list_catalogs
+    SCHEMA = "discovered-schema"  # Found via trino_list_tables
+    TABLE = "discovered-table"  # From user request or discovery
+    
+    # For Spark session creation - adapt to user preference
+    from pyspark.sql import SparkSession
+    
+    # Default (Spark Connect):
+    spark = SparkSession.builder \
+        .remote("sc://localhost:15002") \
+        .appName("DataProcessing") \
+        .getOrCreate()
+    
+    # If user requests "simple" session:
+    # spark = SparkSession.builder \
+    #     .appName("DataProcessing") \
+    #     .getOrCreate()
+    
+    # Access any datasource via Trino catalog
+    df = spark.sql(f"SELECT * FROM {CATALOG}.{SCHEMA}.{TABLE}")
     \`\`\`
     
     Example .env File (when creating env files - NEVER create .env.example):
     \`\`\`
     # Values discovered via tools - ready for production use
     DATAPLANE_NAME=discovered-dataplane-name
-    CATALOG_NAME=discovered-catalog-name
+    DATAPLANE_ID=17  # From xdp_list_datastores
+    CATALOG_NAME=snowflake_prod  # Or mysql_db, postgresql_db, hive, etc.
     SCHEMA_NAME=discovered-schema-name
     TABLE_NAME=discovered-table-name
-    DATABASE_URL=discovered-connection-url
+    SPARK_CONNECT_URL=sc://localhost:15002
+    \`\`\`
+    
+    When User Requests No .env:
+    \`\`\`python
+    # Hardcode discovered values directly
+    DATAPLANE = "manoj-xdp-trino-dp3"  # Actual value from tools
+    DATAPLANE_ID = 17  # Actual ID from tools
+    CATALOG = "snowflake_prod"  # Actual catalog name
+    SCHEMA = "PUBLIC"  # Actual schema
+    TABLE = "CUSTOMERS"  # Actual table
     \`\`\`
     
     FORBIDDEN PATTERNS (when creating config files):
@@ -291,6 +351,14 @@ export const getToolPolicy = () => stripIndents`
        ✅ ALWAYS validate ALL required parameters are non-null/non-empty before calling tools
        ✅ REMEMBER: Missing/null/empty required params = immediate tool failure
     
+    7. Python execution errors:
+       ❌ python -m module_name  // 'python' command not available
+       ❌ python -m snowflake_dedup_app  // Will fail with "Command not found"
+       
+       ✅ python3 module_name/main.py  // Direct file execution
+       ✅ python3 -m module_name.main  // Module execution with python3
+       ✅ cd module_name && python3 main.py  // Change directory first
+    
     7. Schema assumption errors:
        ❌ Assuming "default" schema exists in every catalog
        ✅ Call trino_list_tables without schema to discover available schemas
@@ -307,11 +375,17 @@ export const getToolPolicy = () => stripIndents`
     3. NEVER: Stop after tool calls without generating the requested code
     4. ALWAYS: Provide a complete, functional solution as the final deliverable
     
-    Example workflow for "Create a PySpark app to read from Snowflake":
-    1. Use tools to discover dataplane, catalog, schema, table information
-    2. Generate complete PySpark application with discovered values
-    3. Include all necessary configuration and code files
-    4. Ensure the solution is immediately runnable
+    Example workflow for "Create a PySpark app to read from [ANY DATASOURCE]":
+    1. Use xdp_list_datastores to find available dataplanes
+    2. Use trino_list_catalogs to discover datasource catalogs (Snowflake, MySQL, etc.)
+    3. Use trino_list_tables to find schemas and tables in the datasource
+    4. Use trino_describe_table to understand table structure
+    5. Generate complete PySpark application with:
+       - Spark Connect session creation
+       - Discovered catalog.schema.table references
+       - Proper python3 execution commands
+       - All real values hardcoded or in .env as requested
+    6. Ensure the solution is immediately runnable with python3
     
     Remember: Tool discovery is the PREPARATION phase, not the completion phase.
     The user's request is fulfilled only when you deliver the working code/solution.
