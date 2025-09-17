@@ -7,6 +7,7 @@ export interface IChatMetadata {
   gitUrl: string;
   gitBranch?: string;
   netlifySiteId?: string;
+  projectId?: string;
 }
 
 const logger = createScopedLogger('ChatHistory');
@@ -19,7 +20,7 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
   }
 
   return new Promise((resolve) => {
-    const request = indexedDB.open('boltHistory', 3);
+    const request = indexedDB.open('boltHistory', 4);
 
     request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
       const db = (event.target as IDBOpenDBRequest).result;
@@ -29,7 +30,7 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
         if (!db.objectStoreNames.contains('chats')) {
           const store = db.createObjectStore('chats', { keyPath: 'id' });
           store.createIndex('id', 'id', { unique: true });
-          store.createIndex('urlId', 'urlId', { unique: true });
+          store.createIndex('urlId', 'urlId', { unique: false }); // Remove unique constraint to allow unified IDs
         }
       }
 
@@ -51,6 +52,22 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
         // Add snapshot version index object store
         if (!db.objectStoreNames.contains('snapshot_versions')) {
           db.createObjectStore('snapshot_versions', { keyPath: 'chatId' });
+        }
+      }
+
+      if (oldVersion < 4) {
+        // Fix urlId index to support unified ID system (remove unique constraint)
+        if (db.objectStoreNames.contains('chats')) {
+          const transaction = (event.target as IDBOpenDBRequest).transaction!;
+          const store = transaction.objectStore('chats');
+
+          // Delete old unique urlId index if it exists
+          if (store.indexNames.contains('urlId')) {
+            store.deleteIndex('urlId');
+          }
+
+          // Create new non-unique urlId index
+          store.createIndex('urlId', 'urlId', { unique: false });
         }
       }
     };
@@ -95,33 +112,98 @@ export async function setMessages(
       return;
     }
 
-    const request = store.put({
+    // In unified ID system, urlId should be the same as id
+    const finalUrlId = urlId || id;
+
+    logger.debug(`Storing chat - id: ${id}, urlId: ${finalUrlId}`);
+
+    const chatData = {
       id,
       messages,
-      urlId,
+      urlId: finalUrlId,
       description,
       timestamp: timestamp ?? new Date().toISOString(),
       metadata,
-    });
+    };
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    const request = store.put(chatData);
+
+    request.onsuccess = () => {
+      logger.debug(`Successfully stored chat with id: ${id}`);
+      resolve();
+    };
+
+    request.onerror = () => {
+      logger.error(`Failed to store chat with id: ${id}`, request.error);
+      reject(request.error);
+    };
   });
 }
 
 export async function getMessages(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
-  return (await getMessagesById(db, id)) || (await getMessagesByUrlId(db, id));
+  logger.debug(`🔍 getMessages called with id: ${id}`);
+
+  const byId = await getMessagesById(db, id);
+  logger.debug(`🔍 getMessagesById result:`, byId ? 'FOUND' : 'NOT FOUND');
+
+  if (byId) {
+    logger.debug(`🔍 Returning chat found by ID`);
+    return byId;
+  }
+
+  const byUrlId = await getMessagesByUrlId(db, id);
+  logger.debug(`🔍 getMessagesByUrlId result:`, byUrlId ? 'FOUND' : 'NOT FOUND');
+
+  if (!byId && !byUrlId) {
+    logger.error(`❌ BOTH LOOKUPS FAILED for id: ${id}`);
+  }
+
+  return byUrlId;
 }
 
 export async function getMessagesByUrlId(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readonly');
     const store = transaction.objectStore('chats');
-    const index = store.index('urlId');
-    const request = index.get(id);
 
-    request.onsuccess = () => resolve(request.result as ChatHistoryItem);
-    request.onerror = () => reject(request.error);
+    // Check if urlId index exists
+    if (!store.indexNames.contains('urlId')) {
+      logger.error(`❌ urlId index does not exist! Available indexes:`, Array.from(store.indexNames));
+      resolve(null as any);
+
+      return;
+    }
+
+    const index = store.index('urlId');
+
+    // First try string version
+    const stringRequest = index.get(id);
+
+    stringRequest.onsuccess = () => {
+      if (stringRequest.result) {
+        logger.debug(`🔍 Found chat by string urlId: ${id}`);
+        resolve(stringRequest.result as ChatHistoryItem);
+
+        return;
+      }
+
+      // If string lookup failed, try number version
+      const numberRequest = index.get(Number(id));
+
+      numberRequest.onsuccess = () => {
+        if (numberRequest.result) {
+          logger.debug(`🔍 Found chat by number urlId: ${Number(id)}`);
+        } else {
+          logger.debug(`🔍 Chat not found by either string (${id}) or number (${Number(id)}) urlId`);
+        }
+
+        resolve(numberRequest.result as ChatHistoryItem);
+      };
+
+      numberRequest.onerror = () => reject(numberRequest.error);
+    };
+
+    stringRequest.onerror = () => reject(stringRequest.error);
   });
 }
 
@@ -129,10 +211,35 @@ export async function getMessagesById(db: IDBDatabase, id: string): Promise<Chat
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readonly');
     const store = transaction.objectStore('chats');
-    const request = store.get(id);
 
-    request.onsuccess = () => resolve(request.result as ChatHistoryItem);
-    request.onerror = () => reject(request.error);
+    // First try string version
+    const stringRequest = store.get(id);
+
+    stringRequest.onsuccess = () => {
+      if (stringRequest.result) {
+        logger.debug(`🔍 Found chat by string ID: ${id}`);
+        resolve(stringRequest.result as ChatHistoryItem);
+
+        return;
+      }
+
+      // If string lookup failed, try number version
+      const numberRequest = store.get(Number(id));
+
+      numberRequest.onsuccess = () => {
+        if (numberRequest.result) {
+          logger.debug(`🔍 Found chat by number ID: ${Number(id)}`);
+        } else {
+          logger.debug(`🔍 Chat not found by either string (${id}) or number (${Number(id)}) ID`);
+        }
+
+        resolve(numberRequest.result as ChatHistoryItem);
+      };
+
+      numberRequest.onerror = () => reject(numberRequest.error);
+    };
+
+    stringRequest.onerror = () => reject(stringRequest.error);
   });
 }
 
@@ -269,6 +376,28 @@ export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
   });
 }
 
+/**
+ * Create a project via backend API and return the projectId
+ * This replaces the old local ID generation
+ */
+export async function createProjectAndGetId(projectData?: any): Promise<string> {
+  try {
+    // Import dynamically to avoid circular dependencies
+    const { ProjectService: projectService } = await import('~/lib/services/projectService');
+
+    const projectId = await projectService.createProject(projectData || { name: 'New Chat Project' });
+
+    logger.debug('Created backend project with ID:', projectId);
+
+    return projectId;
+  } catch (error) {
+    logger.error('Failed to create backend project:', error);
+    throw error;
+  }
+}
+
+// Keep the old function for any legacy usage but mark as deprecated
+/** @deprecated Use createProjectAndGetId instead */
 export async function getNextId(db: IDBDatabase): Promise<string> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readonly');
@@ -284,46 +413,16 @@ export async function getNextId(db: IDBDatabase): Promise<string> {
   });
 }
 
+/**
+ * Since we're using backend projectId for everything, just return the same ID
+ * No need for complex URL ID generation anymore
+ */
 export async function getUrlId(db: IDBDatabase, id: string): Promise<string> {
-  const idList = await getUrlIds(db);
-
-  if (!idList.includes(id)) {
-    return id;
-  } else {
-    let i = 2;
-
-    while (idList.includes(`${id}-${i}`)) {
-      i++;
-    }
-
-    return `${id}-${i}`;
-  }
+  // With unified projectId approach, urlId and chatId are the same
+  return id;
 }
 
-async function getUrlIds(db: IDBDatabase): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('chats', 'readonly');
-    const store = transaction.objectStore('chats');
-    const idList: string[] = [];
-
-    const request = store.openCursor();
-
-    request.onsuccess = (event: Event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
-
-      if (cursor) {
-        idList.push(cursor.value.urlId);
-        cursor.continue();
-      } else {
-        resolve(idList);
-      }
-    };
-
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
-}
+// Removed getUrlIds function as it's no longer needed with unified ID system
 
 export async function forkChat(db: IDBDatabase, chatId: string, messageId: string): Promise<string> {
   const chat = await getMessages(db, chatId);
@@ -361,20 +460,29 @@ export async function createChatFromMessages(
   messages: Message[],
   metadata?: IChatMetadata,
 ): Promise<string> {
-  const newId = await getNextId(db);
-  const newUrlId = await getUrlId(db, newId); // Get a new urlId for the duplicated chat
+  const projectData = {
+    name: description || 'Imported Chat Project',
+    description: description || 'Imported chat messages',
+  };
+
+  const newId = await createProjectAndGetId(projectData);
+  const newUrlId = await getUrlId(db, newId); // This will return the same ID in unified system
 
   await setMessages(
     db,
     newId,
     messages,
-    newUrlId, // Use the new urlId
+    newUrlId,
     description,
     undefined, // Use the current timestamp
-    metadata,
+    {
+      gitUrl: '',
+      ...metadata,
+      projectId: newId, // Store the projectId in metadata
+    },
   );
 
-  return newUrlId; // Return the urlId instead of id for navigation
+  return newUrlId; // Return the projectId for navigation
 }
 
 export async function updateChatDescription(db: IDBDatabase, id: string, description: string): Promise<void> {

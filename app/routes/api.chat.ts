@@ -148,8 +148,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           processedMessages = messages;
         }
 
-        // Generate a session ID for execution tracking if not provided
-        const sessionId = chatId || generateId();
+        // Ensure we have a valid chat ID - no fallback to random generation
+        if (!chatId) {
+          throw new Error('Chat ID is required. Frontend should create a backend project first.');
+        }
+
+        const sessionId = chatId;
 
         // Get current project context
         const currentProjectId = getProjectId();

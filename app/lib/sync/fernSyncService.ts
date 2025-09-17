@@ -353,6 +353,26 @@ export class FernSyncService {
     }
     this._autoSaveTimeouts.clear();
   }
+
+  /**
+   * Update the chat ID for the sync service
+   * This is useful when sync is initialized before a chat is created
+   */
+  async updateChatId(newChatId: string): Promise<void> {
+    if (!newChatId || newChatId === this._options.chatId) {
+      return;
+    }
+
+    logStore.logSystem(`Updating FernSyncService chatId from ${this._options.chatId} to ${newChatId}`);
+
+    // Update the options
+    this._options.chatId = newChatId;
+
+    // Update the API service
+    fernApiService.setProjectId(newChatId);
+
+    logStore.logSystem(`FernSyncService chatId updated to: ${newChatId}`);
+  }
 }
 
 // Global service instance
