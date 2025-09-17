@@ -75,6 +75,74 @@ Think through each step explicitly before writing any code. This ensures robust,
 - Include <boltAction type="workbench-action" action="run" /> only when creating/modifying files
 </core_requirements>
 
+<python_import_patterns>
+**CRITICAL: Python Import and Execution Patterns**
+
+**THE PROBLEM**: Relative imports fail when Python files are executed directly as scripts.
+- ERROR: "from .module import Class" → "ImportError: attempted relative import with no known parent package"
+- CAUSE: Direct execution (python3 main.py) treats file as script, not package member
+
+**SOLUTION: Use absolute imports aligned with execution patterns**
+
+**CORRECT PATTERNS:**
+
+1. **File Structure with Absolute Imports:**
+   Example main.py content:
+   - from my_spark_app.config import get_config
+   - from my_spark_app.jobs.etl_job import ETLJob  
+   - from my_spark_app.utils.spark_session import create_spark_session
+
+   NEVER USE: from .config import get_config (FAILS)
+   NEVER USE: from .jobs.etl_job import ETLJob (FAILS)
+
+2. **Execution Commands (choose ONE pattern consistently):**
+
+   Pattern A: Direct Script Execution (Recommended)
+   - File: my_spark_app/main.py uses absolute imports
+   - Command: python3 my_spark_app/main.py
+
+   Pattern B: Module Execution  
+   - File: my_spark_app/__main__.py or my_spark_app/main.py
+   - Command: python3 -m my_spark_app
+
+3. **Package Structure for Absolute Imports:**
+   my_spark_app/
+   ├── __init__.py          (Empty or package info)
+   ├── main.py              (Entry point with absolute imports)
+   ├── config.py            (Configuration module)
+   ├── jobs/
+   │   ├── __init__.py      (Empty)
+   │   └── etl_job.py       (Job implementations)
+   └── utils/
+       ├── __init__.py      (Empty)
+       └── helpers.py       (Utility functions)
+
+**IMPORT RULES FOR GENERATED CODE:**
+
+✅ ALWAYS USE ABSOLUTE IMPORTS:
+- from my_spark_app.config import DATABASE_CONFIG
+- from my_spark_app.transformations.cleaner import DataCleaner
+- from my_spark_app.utils.logger import setup_logging
+
+❌ NEVER USE RELATIVE IMPORTS:
+- from .config import DATABASE_CONFIG (FAILS with direct execution)
+- from ..utils.logger import setup_logging (FAILS with direct execution)  
+- from .transformations.cleaner import DataCleaner (FAILS with direct execution)
+
+**EXECUTION COMMAND ALIGNMENT:**
+- When using absolute imports → Use python3 package_name/main.py
+- Application names should be valid Python package names (snake_case, no hyphens)
+- Ensure all __init__.py files exist for proper package recognition
+
+**VERIFICATION CHECKLIST:**
+□ All imports are absolute (package_name.module)
+□ No relative imports (starting with . or ..)
+□ Package name is valid Python identifier (snake_case)
+□ All directories have __init__.py files
+□ Execution command matches import pattern
+□ Application runs without ImportError
+</python_import_patterns>
+
 <success_criteria>
 A successful PySpark application MUST:
 ✅ Run immediately using provided commands without errors
@@ -453,14 +521,15 @@ numpy>=1.22
   <boltAction type="file" filePath="my_app/main.py">
 #!/usr/bin/env python3
 """Main application entry point."""
-import os
-from pyspark.sql import SparkSession
-
-#!/usr/bin/env python3
-"""Main application entry point."""
 import logging
 import structlog
 from pyspark.sql import SparkSession
+
+# CRITICAL: Use absolute imports only (never relative imports like .config)
+# Example absolute imports for multi-module applications:
+# from my_app.config import get_spark_config
+# from my_app.transformations.data_cleaner import DataCleaner
+# from my_app.utils.helpers import validate_data
 
 # Configure structured logging
 structlog.configure(
@@ -639,6 +708,12 @@ Datasource Access Patterns:
 
 <critical_checklist>
 Before delivering ANY PySpark application, verify:
+
+**IMPORT PATTERN VERIFICATION (CRITICAL)**
+□ ALL imports are absolute (package_name.module) - NEVER relative (.module)
+□ Package names are valid Python identifiers (snake_case, no hyphens)
+□ All directories have __init__.py files for proper package structure
+□ Execution command aligns with import pattern (python3 package_name/main.py)
 
 **PACKAGE VERIFICATION**
 □ Every import has corresponding package in requirements.txt
