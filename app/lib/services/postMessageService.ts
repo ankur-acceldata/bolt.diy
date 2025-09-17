@@ -175,10 +175,20 @@ export class PostMessageService {
   private _sendMessageInternal(message: BusMessage) {
     this._status.messagesSent++;
 
+    const isPublicBroadcast = message.visibility === 'public';
+
+    if (isPublicBroadcast) {
+      try {
+        window.postMessage(message, this._config.targetOrigin);
+      } catch (error) {
+        this._log('warn', 'Failed to broadcast public message', error);
+      }
+    }
+
     if (window.parent && window.parent !== window) {
       // Send from iframe to parent
       window.parent.postMessage(message, this._config.targetOrigin);
-    } else {
+    } else if (!isPublicBroadcast) {
       this._log('warn', 'No parent window available');
     }
   }
@@ -346,7 +356,7 @@ export class PostMessageService {
         visibility: 'public',
       };
 
-      window.postMessage(publicMessage, this._config.targetOrigin);
+      this._sendMessageInternal(publicMessage);
       this._hasBroadcastReady = true;
     } catch (error) {
       this._log('warn', 'Failed to broadcast READY message publicly', error);

@@ -118,6 +118,11 @@ interface BusMessage<T = any> {
 enum MessageType {
   READY = 'READY',         // System ready signal
   ERROR = 'ERROR',         // Error notifications
+  RESPONSE_IN_PROGRESS = 'ResponseInProgress',
+  RESPONSE_GENERATED = 'ResponseGenerated',
+  RESPONSE_RESET = 'ResponseReset',
+  GET_RESPONSE_STATUS = 'GetResponseStatus', // Parent request for current generation state
+  RESPONSE_STATUS = 'ResponseStatus',       // Child response with current state snapshot
 }
 ```
 

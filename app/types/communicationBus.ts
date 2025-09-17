@@ -25,6 +25,9 @@ export enum MessageType {
   // Response status messages
   RESPONSE_IN_PROGRESS = 'ResponseInProgress',
   RESPONSE_GENERATED = 'ResponseGenerated',
+  RESPONSE_RESET = 'ResponseReset',
+  GET_RESPONSE_STATUS = 'GetResponseStatus',
+  RESPONSE_STATUS = 'ResponseStatus',
 
   // Job promotion messages
   PROMOTE_TO_JOB = 'PROMOTE_TO_JOB',
@@ -39,6 +42,7 @@ export interface BusMessage<T = any> {
   timestamp?: number;
   source?: string;
   visibility?: 'private' | 'public';
+  reason?: string;
 }
 
 export type MessageHandler<T = any> = (payload: T, message: BusMessage<T>) => void;
