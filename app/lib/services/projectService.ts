@@ -6,11 +6,13 @@ import type { JobConfig } from '~/types/jobConfig';
 const logger = createScopedLogger('ProjectService');
 
 export interface ProjectCreationData {
+  id?: number;
   name?: string;
   description?: string;
   url?: string;
   dataplaneId?: number;
   userSession?: {
+    projectId?: number;
     session?: string;
     dataplaneId?: number;
   };
@@ -223,11 +225,13 @@ export class ProjectService {
 
       // Create the update payload with the same structure as creation
       const updateData: ProjectCreationData = {
+        id: Number(projectId),
         name: data.name || data.description || 'Updated Project', // Use description as name if name not provided
         description: data.description || data.name || 'Updated Project Description',
         url: projectUrl, // Use the adhoc-run URL pattern
         dataplaneId: finalDataplaneId,
         userSession: {
+          projectId: Number(projectId),
           session: data.userSession?.session || '', // Empty as requested
           dataplaneId: data.userSession?.dataplaneId || finalDataplaneId,
         },

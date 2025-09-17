@@ -205,7 +205,7 @@ export class AcceldataService {
         data: responseData as T,
       };
     } catch (error) {
-      logger.error('API call error:', error);
+      logger.error('API call error:', JSON.stringify(error, null, 2));
 
       return {
         success: false,
@@ -463,7 +463,7 @@ export class AcceldataService {
     projectData: any,
     request?: Request,
   ): Promise<AcceldataApiResponse> {
-    logger.info(`Updating project ${projectId}:`, projectData);
+    logger.info(`Updating project ${projectId}:`, JSON.stringify(projectData, null, 2));
 
     const result = await this.call(`/api/projects/${projectId}`, {
       method: 'PUT',

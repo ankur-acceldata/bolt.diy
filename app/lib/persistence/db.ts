@@ -385,7 +385,7 @@ export async function createProjectAndGetId(projectData?: any): Promise<string> 
     // Import dynamically to avoid circular dependencies
     const { ProjectService: projectService } = await import('~/lib/services/projectService');
 
-    const projectId = await projectService.createProject(projectData || { name: 'New Chat Project' });
+    const projectId = await projectService.createProject(projectData || { name: '' });
 
     logger.debug('Created backend project with ID:', projectId);
 

@@ -253,6 +253,9 @@ ${value.content}
             description.set(storedMessages.description);
             chatId.set(storedMessages.id);
             chatMetadata.set(storedMessages.metadata);
+
+            // Sync backend project with IndexedDB data on navigation/reload
+            syncBackendProjectWithIndexedDB(storedMessages.id, storedMessages.description);
           }
 
           setReady(true);
@@ -331,6 +334,60 @@ ${value.content}
     } catch (error) {
       logger.error('Failed to create backend project for new chat:', error);
       throw error;
+    }
+  };
+
+  const syncBackendProjectWithIndexedDB = async (projectId: string, indexedDBDescription?: string) => {
+    try {
+      if (!projectId || projectId === 'default') {
+        logger.info('Skipping backend sync - no valid project ID');
+        return;
+      }
+
+      logger.info(`🔄 Syncing backend project ${projectId} with IndexedDB data...`);
+
+      const { ProjectService: projectService } = await import('~/lib/services/projectService');
+
+      // Step 1: Get current backend project state
+      const backendProject = await projectService.getProject(projectId);
+      logger.info('📋 Backend project state:', backendProject);
+
+      // Step 2: Check what data is missing in backend
+      const missingName = !backendProject.name || backendProject.name === '';
+      const missingDescription = !backendProject.description || backendProject.description === '';
+      const missingUrl = !backendProject.url || backendProject.url === '';
+
+      logger.info('🔍 Backend missing data check:', {
+        missingName,
+        missingDescription,
+        missingUrl,
+      });
+
+      // Step 3: If missing data, update backend with IndexedDB data
+      if (missingName || missingDescription || missingUrl) {
+        const updateData: any = {};
+
+        if ((missingName || missingDescription) && indexedDBDescription) {
+          updateData.name = indexedDBDescription;
+          updateData.description = indexedDBDescription;
+        }
+
+        if (missingUrl) {
+          updateData.url = `home/projects/${projectId}`;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          logger.info('🔄 Updating backend with IndexedDB data:', updateData);
+          await projectService.updateProject(projectId, updateData);
+          logger.info('✅ Backend project synced successfully');
+        }
+      } else {
+        logger.info('✅ Backend project already complete - no sync needed');
+      }
+    } catch (error) {
+      logger.error('❌ Failed to sync backend project:', error);
+
+      // Don't throw - keep chat loading even if sync fails
     }
   };
 
