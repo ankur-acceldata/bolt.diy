@@ -16,6 +16,7 @@ export class PostMessageService {
   private _status: BusStatus;
   private _messageHistory: BusMessage[] = [];
   private _logger = createScopedLogger('PostMessageService');
+  private _hasBroadcastReady: boolean = false;
 
   constructor(config: CommunicationBusConfig = {}) {
     this._config = {
@@ -48,6 +49,7 @@ export class PostMessageService {
       this._isConnected = true;
       this._status.isReady = true;
       this._status.isConnected = true;
+      this._broadcastPublicReady();
     }
   }
 
@@ -103,6 +105,11 @@ export class PostMessageService {
       return;
     }
 
+    // Ignore public broadcasts originating from the same window to prevent loops
+    if (message.visibility === 'public' && event.source === window) {
+      return;
+    }
+
     this._status.messagesReceived++;
 
     // Store message in history for debugging (keep last 50 messages)
@@ -110,16 +117,6 @@ export class PostMessageService {
 
     if (this._messageHistory.length > 50) {
       this._messageHistory.shift();
-    }
-
-    // Handle system messages
-    switch (message.type) {
-      case MessageType.READY:
-        this._handleReady(message);
-        return;
-      case MessageType.HEARTBEAT:
-        this._handleHeartbeat(message);
-        return;
     }
 
     // Handle response messages
@@ -149,23 +146,6 @@ export class PostMessageService {
     // Handle regular messages
     this._dispatchMessage(message);
   };
-
-  private _handleReady(message: BusMessage) {
-    this._isReady = true;
-    this._isConnected = true;
-    this._status.isReady = true;
-    this._status.isConnected = true;
-    this._log('info', 'Connection ready');
-    this._flushMessageQueue();
-    this._dispatchMessage(message);
-  }
-
-  private _handleHeartbeat(message: BusMessage) {
-    // Only respond to heartbeats, not responses (prevents infinite loops)
-    if (!message.responseId) {
-      this.sendMessage({ type: MessageType.HEARTBEAT, responseId: message.messageId });
-    }
-  }
 
   private _dispatchMessage(message: BusMessage) {
     const handlers = this._handlers.get(message.type);
@@ -312,6 +292,7 @@ export class PostMessageService {
     this._status.isReady = true;
     this._status.isConnected = true;
     this._log('info', 'Connection set to ready state');
+    this._broadcastPublicReady();
     this._flushMessageQueue();
   }
 
@@ -348,5 +329,27 @@ export class PostMessageService {
     this._messageQueue = [];
     this._isReady = false;
     this._isConnected = false;
+    this._hasBroadcastReady = false;
+  }
+
+  private _broadcastPublicReady() {
+    if (this._hasBroadcastReady) {
+      return;
+    }
+
+    try {
+      const publicMessage: BusMessage = {
+        type: MessageType.READY,
+        timestamp: Date.now(),
+        messageId: this._generateMessageId(),
+        source: 'bolt.diy',
+        visibility: 'public',
+      };
+
+      window.postMessage(publicMessage, this._config.targetOrigin);
+      this._hasBroadcastReady = true;
+    } catch (error) {
+      this._log('warn', 'Failed to broadcast READY message publicly', error);
+    }
   }
 }

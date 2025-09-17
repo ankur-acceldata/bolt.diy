@@ -5,7 +5,6 @@
 export enum MessageType {
   // System messages
   READY = 'READY',
-  HEARTBEAT = 'HEARTBEAT',
   ERROR = 'ERROR',
 
   // Demo/Test messages
@@ -39,6 +38,7 @@ export interface BusMessage<T = any> {
   responseId?: string;
   timestamp?: number;
   source?: string;
+  visibility?: 'private' | 'public';
 }
 
 export type MessageHandler<T = any> = (payload: T, message: BusMessage<T>) => void;

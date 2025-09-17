@@ -117,7 +117,6 @@ interface BusMessage<T = any> {
 ```typescript
 enum MessageType {
   READY = 'READY',         // System ready signal
-  HEARTBEAT = 'HEARTBEAT', // Connection health check
   ERROR = 'ERROR',         // Error notifications
 }
 ```
