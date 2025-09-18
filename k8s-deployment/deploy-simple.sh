@@ -55,7 +55,7 @@ metadata:
   name: xdp-mcp-server-config
   namespace: $NAMESPACE
 data:
-  XDP_BASE_URL: "https://demo.xdp-playground.acceldata.tech/xdp-cp-service/api"
+  XDP_BASE_URL: "https://demo.xdp-dev.acceldata.tech/xdp-cp-service/api"
   BOLT_API_URL: "http://bolt-diy-service:5173"
   NODE_ENV: "production"
 EOF

@@ -14,10 +14,10 @@ export interface XDPMCPConfig {
  * Default XDP MCP server configuration
  */
 export const DEFAULT_XDP_CONFIG = {
-  baseUrl: 'https://demo.xdp-playground.acceldata.tech/xdp-cp-service/api',
+  baseUrl: 'https://demo.xdp-dev.acceldata.tech/xdp-cp-service/api',
   webSocketUrl: 'ws://localhost:9099/ws', // Default to container WebSocket
-  accessKey: 'SGTN9GW70UOPFUM',
-  secretKey: 'FUY80AFFBHR0EDHQWGLB67PW9S8JOJ',
+  accessKey: '9N2J4ZX6UPB8SP5',
+  secretKey: 'KDBL51QO8OJSBH9EZ7X7TUN3DEV9WI',
 };
 
 /**
