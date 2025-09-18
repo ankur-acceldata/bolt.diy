@@ -178,6 +178,8 @@ export function useSync() {
             reason: !projectId ? 'projectId is null/undefined' : 'projectId is default',
           });
           globalIsInitialized = false;
+          globalInitializationRef = false; // Reset to allow retry when project ID becomes available
+          initializationRef.current = false; // Reset local ref too
           setIsInitialized(false);
           globalInitializationPromise = null;
 
@@ -314,6 +316,8 @@ export function useSync() {
         logStore.logError('Failed to initialize sync', error);
         toast.error(`Failed to initialize sync: ${(error as Error).message}`);
         globalIsInitialized = false;
+        globalInitializationRef = false; // Reset to allow retry
+        initializationRef.current = false; // Reset local ref
         setIsInitialized(false);
       } finally {
         globalInitializationPromise = null;
@@ -419,7 +423,13 @@ export function useSync() {
             newChatId,
             syncEnabled,
             globalIsInitialized,
+            globalInitializationRef,
           });
+
+          // Force reset flags to allow initialization
+          globalInitializationRef = false;
+          initializationRef.current = false;
+
           await initializeSync();
         } else {
           logStore.logSystem('[FERN-DEBUG] No action taken in updateSyncChatId', {

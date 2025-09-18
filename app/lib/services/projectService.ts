@@ -3,6 +3,7 @@ import { PostMessageService } from './postMessageService';
 import { MessageType } from '~/types/communicationBus';
 import type { DataplaneInfoPayload } from '~/types/communicationBus';
 import { getCurrentChatId, setProjectId } from '~/utils/fileLocks';
+import { logStore } from '~/lib/stores/logs';
 
 const logger = createScopedLogger('ProjectService');
 
@@ -215,29 +216,82 @@ export class ProjectService {
       logger.info('Creating project with data:', projectData);
       logger.info('=== MAKING API CALL TO /api/projects ===');
 
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(projectData),
-      });
+      let response;
 
-      if (!response.ok) {
-        throw new Error(`Project creation failed: ${response.status} ${response.statusText}`);
+      try {
+        response = await fetch('/api/projects', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(projectData),
+        });
+
+        logStore.logSystem('[FERN-DEBUG] Project API response received', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          url: response.url,
+        });
+      } catch (fetchError: any) {
+        logStore.logError('[FERN-DEBUG] Project API fetch failed', fetchError);
+        logStore.logSystem('[FERN-DEBUG] Fetch error details', {
+          message: fetchError.message,
+          stack: fetchError.stack,
+          fullError: JSON.stringify(fetchError, Object.getOwnPropertyNames(fetchError)),
+        });
+        throw fetchError;
       }
 
-      const result: any = await response.json();
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unable to read error text');
+        logStore.logError('[FERN-DEBUG] Project API request failed', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+        });
+        throw new Error(`Project creation failed: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      let result: any;
+
+      try {
+        result = await response.json();
+        logStore.logSystem('[FERN-DEBUG] Project API JSON response parsed', {
+          success: result?.success,
+          hasData: !!result?.data,
+          resultKeys: Object.keys(result || {}),
+        });
+      } catch (jsonError: any) {
+        logStore.logError('[FERN-DEBUG] Failed to parse project API JSON response', jsonError);
+        throw new Error(`Failed to parse API response: ${jsonError.message}`);
+      }
 
       if (!result.success) {
+        logStore.logError('[FERN-DEBUG] Project API returned unsuccessful result', {
+          success: result.success,
+          error: result.error,
+          fullResult: JSON.stringify(result),
+        });
         throw new Error(result.error || 'Project creation failed');
       }
 
       // Handle nested response structure: result.data.data.id
       const responseData = result.data?.data || result.data;
 
+      logStore.logSystem('[FERN-DEBUG] Processing project response data', {
+        hasResponseData: !!responseData,
+        responseDataKeys: Object.keys(responseData || {}),
+        id: responseData?.id,
+        idType: typeof responseData?.id,
+      });
+
       if (!responseData?.id) {
         logger.error('Project response structure:', JSON.stringify(result, null, 2));
+        logStore.logError('[FERN-DEBUG] Project response missing id', {
+          responseData,
+          fullResult: result,
+        });
         throw new Error('Project response missing id');
       }
 
@@ -246,6 +300,12 @@ export class ProjectService {
       // Store the backend project ID for GET_PROJECT_ID requests
       const currentChatId = getCurrentChatId();
       setProjectId(currentChatId, responseData.id);
+
+      logStore.logSystem('[FERN-DEBUG] Project creation completed successfully', {
+        projectId: responseData.id,
+        currentChatId,
+        timestamp: new Date().toISOString(),
+      });
 
       return responseData.id;
     } catch (error) {
