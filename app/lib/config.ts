@@ -66,8 +66,8 @@ function getConfigFromSources(): Partial<AppConfig> {
  * Normalize and validate configuration
  */
 function normalizeConfig(config: Partial<AppConfig>): AppConfig {
-  // Set defaults - use /ai-editor as default base path
-  const rawBasePath = config.basePath || '/ai-editor';
+  // Set defaults - use environment variable or empty string for root path
+  const rawBasePath = config.basePath || '';
 
   // Remove trailing slashes, except for root path
   const basePath = rawBasePath === '/' ? '/' : rawBasePath.replace(/\/+$/, '');
@@ -263,7 +263,7 @@ export function getAcceldataApiUrl(path: string, request?: Request): string {
   const baseUrl = getAcceldataBaseUrl(request);
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
-  return `${baseUrl}${cleanPath}`;
+  return `${baseUrl}/xdp-cp-service${cleanPath}`;
 }
 
 /**

@@ -59,28 +59,31 @@ class ProjectIdManager {
   }
 
   /**
-   * Get or create a project ID for a given chat ID
-   * @param chatId The chat ID to get/create project ID for
-   * @returns Consistent project ID for the chat
+   * Get project ID for a given chat ID
+   * Since we're using unified IDs, chatId IS the projectId
+   * @param chatId The chat ID (which is also the projectId)
+   * @returns The same ID since they're unified
    */
   getProjectId(chatId: string): string {
     if (!this._initialized) {
       this._loadFromStorage();
     }
 
-    // Return existing project ID if available
+    /*
+     * With unified ID system, chatId IS the projectId
+     * But maintain the mapping for any legacy data or special cases
+     */
     if (this._projectIds[chatId]) {
       return this._projectIds[chatId];
     }
 
-    // Generate new project ID for this chat
-    const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    this._projectIds[chatId] = projectId;
+    // Store the mapping (chatId = projectId in unified system)
+    this._projectIds[chatId] = chatId;
     this._saveToStorage();
 
-    logger.debug(`Generated new project ID: ${projectId} for chat: ${chatId}`);
+    logger.debug(`Using unified projectId: ${chatId}`);
 
-    return projectId;
+    return chatId;
   }
 
   /**

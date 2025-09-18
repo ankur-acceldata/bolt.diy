@@ -3,7 +3,6 @@
  * Preventing TS checks with files presented in the video for a better presentation.
  */
 import type { JSONValue, Message } from 'ai';
-import { generateId } from 'ai';
 import React, { type RefCallback, useEffect, useState, useRef, useCallback } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
@@ -756,17 +755,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 model={model}
                 provider={provider?.name}
                 onSendMessage={(message: string) => {
-                  if (append) {
-                    append({
-                      id: generateId(),
-                      role: 'user',
-                      content: [
-                        {
-                          type: 'text',
-                          text: message,
-                        },
-                      ] as any,
-                    });
+                  if (sendMessage) {
+                    sendMessage({} as React.UIEvent, message);
                   }
                 }}
                 onSetChatInput={(message: string) => {

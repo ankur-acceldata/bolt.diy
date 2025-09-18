@@ -27,7 +27,12 @@ export function HistoryItem({
   onToggleSelection,
 }: HistoryItemProps) {
   const { id: urlId } = useParams();
-  const isActiveChat = urlId === item.urlId;
+
+  /*
+   * In unified ID system, both item.id and item.urlId should be the same
+   * Check against both for backward compatibility
+   */
+  const isActiveChat = urlId === item.id || urlId === item.urlId;
 
   const { editing, handleChange, handleBlur, handleSubmit, handleKeyDown, currentDescription, toggleEditMode } =
     useEditChatDescription({
@@ -105,7 +110,7 @@ export function HistoryItem({
         </form>
       ) : (
         <a
-          href={createChatUrl(item.urlId || '')}
+          href={createChatUrl(item.id)}
           className="flex w-full relative truncate block"
           onClick={selectionMode ? handleItemClick : undefined}
         >
