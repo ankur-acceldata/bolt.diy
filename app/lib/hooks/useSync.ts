@@ -68,6 +68,75 @@ export function useSync() {
     }
   }, [syncEnabled]);
 
+  // Monitor project ID from fileLocks - this is the source of truth
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const checkProjectId = () => {
+      try {
+        const chatId = getCurrentChatId();
+        const projectIdFromFileLocks = getProjectId(chatId);
+
+        logStore.logSystem('[FERN-DEBUG] Project ID monitoring check', {
+          chatId,
+          projectIdFromFileLocks,
+          currentProjectId,
+          globalCurrentProjectId,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Update if we found a valid project ID and it's different from current
+        if (
+          projectIdFromFileLocks &&
+          projectIdFromFileLocks !== 'default' &&
+          projectIdFromFileLocks !== currentProjectId
+        ) {
+          logStore.logSystem('[FERN-DEBUG] Project ID updated from fileLocks', {
+            oldProjectId: currentProjectId,
+            newProjectId: projectIdFromFileLocks,
+            source: 'fileLocks monitoring',
+          });
+
+          // Update both local and global state
+          globalCurrentProjectId = projectIdFromFileLocks;
+          setCurrentProjectId(projectIdFromFileLocks);
+
+          // If sync is enabled and not already initialized, try to initialize now
+          if (syncEnabled && !globalIsInitialized && !globalInitializationRef) {
+            logStore.logSystem('[FERN-DEBUG] Project ID available and sync enabled, initializing sync...');
+            globalInitializationRef = true;
+            initializationRef.current = true;
+            initializeSync();
+          }
+        }
+      } catch (error) {
+        logStore.logError('[FERN-DEBUG] Error in project ID monitoring', error);
+      }
+    };
+
+    // Check immediately
+    checkProjectId();
+
+    /*
+     * Set up polling
+     * More frequent checks initially when no project ID, then less frequent
+     */
+    const pollInterval = currentProjectId && currentProjectId !== 'default' ? 5000 : 500;
+    intervalId = setInterval(checkProjectId, pollInterval);
+
+    logStore.logSystem('[FERN-DEBUG] Project ID monitoring started', {
+      pollInterval,
+      currentProjectId,
+    });
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        logStore.logSystem('[FERN-DEBUG] Project ID monitoring stopped');
+      }
+    };
+  }, [currentProjectId, syncEnabled, globalIsInitialized, globalInitializationRef]);
+
   // Update sync configuration when settings change
   useEffect(() => {
     const updateSyncConfig = () => {
@@ -159,15 +228,17 @@ export function useSync() {
 
     globalInitializationPromise = (async () => {
       try {
-        // Use centralized project ID manager for consistency
+        // Use the project ID from monitoring effect (source of truth from fileLocks)
         const chatId = getCurrentChatId();
-        const projectId = getProjectId(chatId);
+        const projectId = globalCurrentProjectId || getProjectId(chatId);
 
         logStore.logSystem('[FERN-DEBUG] Project ID resolution result', {
           chatId,
           projectId,
+          globalCurrentProjectId,
           chatIdType: typeof chatId,
           projectIdType: typeof projectId,
+          source: globalCurrentProjectId ? 'monitoring effect' : 'fallback to fileLocks',
         });
 
         // Only initialize sync if we have a valid project ID
@@ -331,10 +402,28 @@ export function useSync() {
     try {
       await disposeFernSync();
       globalIsInitialized = false;
-      globalCurrentProjectId = '';
       globalInitializationRef = false;
       setIsInitialized(false);
-      setCurrentProjectId('');
+
+      /*
+       * Keep project ID available from fileLocks even when sync is disposed
+       * This ensures adhoc runs still work when sync is disabled
+       */
+      const chatId = getCurrentChatId();
+      const projectIdFromFileLocks = getProjectId(chatId);
+
+      if (projectIdFromFileLocks && projectIdFromFileLocks !== 'default') {
+        globalCurrentProjectId = projectIdFromFileLocks;
+        setCurrentProjectId(projectIdFromFileLocks);
+        logStore.logSystem('[FERN-DEBUG] Keeping project ID available after sync disposal', {
+          projectId: projectIdFromFileLocks,
+          reason: 'for adhoc runs when sync disabled',
+        });
+      } else {
+        globalCurrentProjectId = '';
+        setCurrentProjectId('');
+      }
+
       setSyncStatus({
         isRunning: false,
         lastSync: null,
@@ -403,8 +492,26 @@ export function useSync() {
       }
 
       try {
-        globalCurrentProjectId = newChatId;
-        setCurrentProjectId(newChatId);
+        /*
+         * With the new monitoring approach, the project ID should come from fileLocks
+         * Check if the project ID is actually available in fileLocks for this chatId
+         */
+        const projectIdFromFileLocks = getProjectId(newChatId);
+
+        logStore.logSystem('[FERN-DEBUG] updateSyncChatId - checking fileLocks', {
+          newChatId,
+          projectIdFromFileLocks,
+          source: 'updateSyncChatId',
+        });
+
+        // Only update if we have a valid project ID from fileLocks
+        if (projectIdFromFileLocks && projectIdFromFileLocks !== 'default') {
+          globalCurrentProjectId = projectIdFromFileLocks;
+          setCurrentProjectId(projectIdFromFileLocks);
+        } else {
+          logStore.logSystem('[FERN-DEBUG] No valid project ID in fileLocks for chatId', { newChatId });
+          return;
+        }
 
         const fernSync = getFernSyncService();
         logStore.logSystem('[FERN-DEBUG] updateSyncChatId - fernSync service check', {
