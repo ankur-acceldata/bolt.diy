@@ -273,7 +273,7 @@ export function useSync() {
 
   // Update sync status periodically
   useEffect(() => {
-    if (!syncEnabled || !isInitialized) {
+    if (!syncEnabled) {
       return undefined;
     }
 
@@ -287,10 +287,11 @@ export function useSync() {
 
     updateStatus();
 
-    const interval = setInterval(updateStatus, 5000); // Update every 5 seconds
+    const interval = setInterval(updateStatus, 5000);
 
+    // Update every 5 seconds
     return () => clearInterval(interval);
-  }, [syncEnabled, isInitialized]);
+  }, [syncEnabled]);
 
   const initializeSync = async () => {
     const initStart = Date.now();
@@ -722,7 +723,7 @@ export function useSync() {
   );
 
   return {
-    isInitialized,
+    isInitialized: isInitialized || !!getFernSyncService(),
     syncStatus,
     currentProjectId,
     forceSync,
