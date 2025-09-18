@@ -44,8 +44,8 @@ export class FernApiService {
   /**
    * Set the project ID for all API calls
    */
-  setProjectId(projectId: string): void {
-    this._projectId = projectId;
+  setProjectId(projectId: string | number): void {
+    this._projectId = projectId?.toString() || null;
   }
 
   /**
@@ -189,7 +189,7 @@ export class FernApiService {
         body: JSON.stringify({
           content,
           path,
-          projectId: this._projectId,
+          projectId: this._projectId?.toString(),
         }),
       });
 
@@ -252,7 +252,7 @@ export class FernApiService {
         body: JSON.stringify({
           oldPath,
           newPath,
-          projectId: this._projectId,
+          projectId: this._projectId?.toString(),
         }),
       });
 
