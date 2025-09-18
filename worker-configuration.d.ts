@@ -1,6 +1,8 @@
 interface Env {
   RUNNING_IN_DOCKER: Settings;
   DEFAULT_NUM_CTX: Settings;
+  BASE_PATH: Settings;
+  VITE_BASE_PATH: Settings;
   ANTHROPIC_API_KEY: string;
   OPENAI_API_KEY: string;
   GROQ_API_KEY: string;

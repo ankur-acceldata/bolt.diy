@@ -38,7 +38,7 @@ ARG ACCELDATA_ACCESS_KEY=XGHSG51IQYK1HH8
 ARG ACCELDATA_SECRET_KEY=RVYHR2NPKXHEO9U4ZOE42CC9JYJZUQ
 
 # Dynamic configuration args with defaults
-ARG BASE_PATH=/ai-editor
+ARG BASE_PATH=/xdp/dp/bhuvan-xdp-dp/bolt
 ARG HOST
 ARG PORT=5173
 
@@ -63,10 +63,6 @@ ENV WRANGLER_SEND_METRICS=false \
     PORT=${PORT} \
     RUNNING_IN_DOCKER=true
 
-# Pre-configure wrangler to disable metrics
-RUN mkdir -p /root/.config/.wrangler && \
-    echo '{"enabled":false}' > /root/.config/.wrangler/metrics.json
-
 RUN pnpm run build
 
-CMD [ "pnpm", "run", "dev"]
+CMD ["pnpm", "run", "start:prod"]
