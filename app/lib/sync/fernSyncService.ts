@@ -37,7 +37,7 @@ export class FernSyncService {
       // Use dynamic base path from configuration
       const basePath = getBasePath();
       const apiUrl = `${basePath}api/fern-fs`;
-      const wsUrl = `${basePath}ws/fern-fs`;
+      const wsUrl = `${basePath}api/ws/fern-fs`;
       fernApiService.updateConfig(apiUrl, wsUrl);
     }
 

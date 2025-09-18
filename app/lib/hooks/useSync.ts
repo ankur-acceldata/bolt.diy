@@ -49,7 +49,7 @@ export function useSync() {
 
         // Parse URLs properly for config update
         let configServerUrl = '/api/fern-fs';
-        let configWsUrl = '/ws/fern-fs';
+        let configWsUrl = '/api/ws/fern-fs';
 
         if (syncRemoteUrl) {
           if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
@@ -59,7 +59,7 @@ export function useSync() {
           } else if (syncRemoteUrl.startsWith('/')) {
             // Proxy URL - use as is
             configServerUrl = syncRemoteUrl;
-            configWsUrl = syncRemoteUrl.replace('/api/fern-fs', '/ws/fern-fs');
+            configWsUrl = syncRemoteUrl.replace('/api/fern-fs', '/api/ws/fern-fs');
           } else {
             // Add /api to server URL if not present
             configServerUrl = syncRemoteUrl.endsWith('/api') ? syncRemoteUrl : syncRemoteUrl + '/api';
@@ -139,7 +139,7 @@ export function useSync() {
 
         // Parse remote URL for server and WebSocket URLs
         let serverUrl = '/api/fern-fs';
-        let wsUrl = '/ws/fern-fs';
+        let wsUrl = '/api/ws/fern-fs';
 
         if (syncRemoteUrl) {
           if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
@@ -149,7 +149,7 @@ export function useSync() {
           } else if (syncRemoteUrl.startsWith('/')) {
             // Proxy URL - use as is
             serverUrl = syncRemoteUrl;
-            wsUrl = syncRemoteUrl.replace('/api/fern-fs', '/ws/fern-fs');
+            wsUrl = syncRemoteUrl.replace('/api/fern-fs', '/api/ws/fern-fs');
           } else {
             // Add /api to server URL if not present
             serverUrl = syncRemoteUrl.endsWith('/api') ? syncRemoteUrl : syncRemoteUrl + '/api';
