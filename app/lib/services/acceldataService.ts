@@ -205,7 +205,7 @@ export class AcceldataService {
         data: responseData as T,
       };
     } catch (error) {
-      logger.error('API call error:', error);
+      logger.error('API call error:', JSON.stringify(error, null, 2));
 
       return {
         success: false,
@@ -223,7 +223,7 @@ export class AcceldataService {
 
     // Generate curl command for debugging
     try {
-      const endpoint = getAcceldataApiUrl('/xdp-cp-service/api/job/adhoc-runs', request);
+      const endpoint = getAcceldataApiUrl('/api/job/adhoc-runs', request);
       const headers = {
         ...(request?.headers ? this._headersToRecord(request.headers) : {}),
         ...this._getStandardHeaders(),
@@ -241,7 +241,7 @@ export class AcceldataService {
       logger.warn('Failed to generate curl command:', curlError);
     }
 
-    const result = await this.call('/xdp-cp-service/api/job/adhoc-runs', {
+    const result = await this.call('/api/job/adhoc-runs', {
       method: 'POST',
       body: config,
       requestHeaders: request?.headers,
@@ -261,7 +261,7 @@ export class AcceldataService {
   static async getPipelineAudit(runId: string | number, request?: Request): Promise<AcceldataApiResponse> {
     logger.info(`Fetching audit for run ${runId}`);
 
-    const result = await this.call(`/xdp-cp-service/api/pipelines/runs/${runId}/audit`, {
+    const result = await this.call(`/api/pipelines/runs/${runId}/audit`, {
       requestHeaders: request?.headers,
       request,
     });
@@ -279,7 +279,7 @@ export class AcceldataService {
   static async executePipeline(pipelineId: number = 5, request?: Request): Promise<AcceldataApiResponse> {
     logger.info(`Executing pipeline ${pipelineId}`);
 
-    const result = await this.call(`/xdp-cp-service/api/pipelines/${pipelineId}/execute`, {
+    const result = await this.call(`/api/pipelines/${pipelineId}/execute`, {
       method: 'POST',
       body: '',
       requestHeaders: request?.headers,
@@ -298,7 +298,7 @@ export class AcceldataService {
    * This doesn't make the actual call since it's for streaming
    */
   static getLogStreamUrl(dataplaneId: string, runId: string, tailLines: string = '50', request?: Request): string {
-    return getAcceldataApiUrl(`/xdp-cp-service/api/job/run/logs/${runId}/sse?tailLines=${tailLines}`, request);
+    return getAcceldataApiUrl(`/api/job/run/logs/${runId}/sse?tailLines=${tailLines}`, request);
   }
 
   /**
@@ -381,6 +381,165 @@ export class AcceldataService {
     logger.info(`Stream CURL command:\n${curlCommand}`);
 
     return fetch(endpoint, requestOptions);
+  }
+
+  /**
+   * Create a new project
+   */
+  static async createProject(projectData: any, request?: Request): Promise<AcceldataApiResponse> {
+    logger.info('Creating new project:', projectData);
+
+    const endpoint = getAcceldataApiUrl('/api/projects', request);
+
+    const headers = {
+      ...(request?.headers ? this._headersToRecord(request.headers) : {}),
+      ...this._getStandardHeaders(),
+    };
+
+    const curlHeaders = Object.entries(headers)
+      .map(([key, value]) => `-H '${key}: ${value}'`)
+      .join(' ');
+
+    const curlBody = ` --data '${JSON.stringify(projectData)}'`;
+    const curlCommand = `curl -X POST ${curlHeaders}${curlBody} '${endpoint}'`;
+
+    logger.info(`CURL equivalent for adhoc run:\n${curlCommand}`);
+
+    const result = await this.call('/api/projects', {
+      method: 'POST',
+      body: projectData,
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = 'Project created successfully';
+    }
+
+    return result;
+  }
+
+  /**
+   * Get all projects
+   */
+  static async getAllProjects(request?: Request): Promise<AcceldataApiResponse> {
+    logger.info('Fetching all projects');
+
+    const result = await this.call('/api/projects', {
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = 'Projects fetched successfully';
+    }
+
+    return result;
+  }
+
+  /**
+   * Get project by ID
+   */
+  static async getProjectById(projectId: string | number, request?: Request): Promise<AcceldataApiResponse> {
+    logger.info(`Fetching project ${projectId}`);
+
+    const result = await this.call(`/api/projects/${projectId}`, {
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = `Project ${projectId} fetched successfully`;
+    }
+
+    return result;
+  }
+
+  /**
+   * Update project by ID
+   */
+  static async updateProject(
+    projectId: string | number,
+    projectData: any,
+    request?: Request,
+  ): Promise<AcceldataApiResponse> {
+    logger.info(`Updating project ${projectId}:`, JSON.stringify(projectData, null, 2));
+
+    const result = await this.call(`/api/projects/${projectId}`, {
+      method: 'PUT',
+      body: projectData,
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = `Project ${projectId} updated successfully`;
+    }
+
+    return result;
+  }
+
+  /**
+   * Create user session for a project
+   */
+  static async createUserSession(
+    projectId: string | number,
+    sessionData: any,
+    request?: Request,
+  ): Promise<AcceldataApiResponse> {
+    logger.info(`Creating user session for project ${projectId}:`, sessionData);
+
+    const result = await this.call(`/api/projects/${projectId}/sessions`, {
+      method: 'POST',
+      body: sessionData,
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = `User session created successfully for project ${projectId}`;
+    }
+
+    return result;
+  }
+
+  /**
+   * Get all sessions by project ID
+   */
+  static async getAllSessionsByProjectId(projectId: string | number, request?: Request): Promise<AcceldataApiResponse> {
+    logger.info(`Fetching all sessions for project ${projectId}`);
+
+    const result = await this.call(`/api/projects/${projectId}/sessions`, {
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = `Sessions for project ${projectId} fetched successfully`;
+    }
+
+    return result;
+  }
+
+  /**
+   * Get latest session for project ID
+   */
+  static async getLatestSessionForProjectId(
+    projectId: string | number,
+    request?: Request,
+  ): Promise<AcceldataApiResponse> {
+    logger.info(`Fetching latest session for project ${projectId}`);
+
+    const result = await this.call(`/api/projects/${projectId}/sessions/latest`, {
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = `Latest session for project ${projectId} fetched successfully`;
+    }
+
+    return result;
   }
 
   /**

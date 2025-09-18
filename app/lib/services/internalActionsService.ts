@@ -177,8 +177,6 @@ export class InternalActionsService {
         },
       },
     };
-
-    logger.info('Initialized internal tools:', Object.keys(this._tools));
   }
 
   get tools(): InternalToolSet {
@@ -201,23 +199,14 @@ export class InternalActionsService {
   }
 
   async executeTool(toolName: string, parameters: any = {}): Promise<any> {
-    console.log('🔧 INTERNAL ACTIONS SERVICE - executeTool called:', toolName, parameters);
-
     const tool = this._tools[toolName];
 
     if (!tool) {
-      console.log('❌ Tool not found in registry:', toolName, 'Available tools:', Object.keys(this._tools));
       throw new Error(`Internal tool '${toolName}' not found`);
     }
 
     try {
-      console.log('⚙️ Executing internal tool:', toolName);
-      logger.info(`Executing internal tool '${toolName}' with parameters:`, parameters);
-
       const result = await tool.execute(parameters);
-      console.log('🎊 Internal tool execution success:', result);
-      logger.info(`Internal tool '${toolName}' executed successfully:`, result);
-
       return result;
     } catch (error) {
       console.log('💥 Internal tool execution failed:', error);

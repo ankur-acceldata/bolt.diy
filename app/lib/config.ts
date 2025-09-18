@@ -263,7 +263,7 @@ export function getAcceldataApiUrl(path: string, request?: Request): string {
   const baseUrl = getAcceldataBaseUrl(request);
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
-  return `${baseUrl}${cleanPath}`;
+  return `${baseUrl}/xdp-cp-service${cleanPath}`;
 }
 
 /**

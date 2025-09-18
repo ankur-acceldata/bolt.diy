@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useSettings } from './useSettings';
 import { workbenchStore } from '~/lib/stores/workbench';
@@ -118,9 +118,21 @@ export function useSync() {
         const chatId = getCurrentChatId();
         const projectId = getProjectId(chatId);
 
-        logStore.logSystem(`Using project ID: ${projectId} for chat: ${chatId}`);
+        logStore.logSystem(`Checking project ID: ${projectId} for chat: ${chatId}`);
+
+        // Only initialize sync if we have a valid project ID
+        if (!projectId || projectId === 'default') {
+          logStore.logSystem('No valid project ID available, skipping sync initialization until chatId is available');
+          globalIsInitialized = false;
+          setIsInitialized(false);
+          globalInitializationPromise = null;
+
+          return;
+        }
+
         globalCurrentProjectId = projectId;
         setCurrentProjectId(projectId);
+        logStore.logSystem(`Initializing sync with project ID: ${projectId}`);
 
         // Use Fern API sync service for Golang/Minio integration
         logStore.logSystem('Initializing Fern API sync service...');
@@ -211,6 +223,12 @@ export function useSync() {
         setIsInitialized(true);
         logStore.logSystem('Fern API sync service initialized successfully');
 
+        /*
+         * Project will be updated with meaningful name/description when AI generates title
+         * No need to update here with generic names since AI will provide better ones
+         */
+        logStore.logSystem('Sync initialized - project will be updated when AI generates meaningful title');
+
         // Removed toast - using status indicator instead
       } catch (error) {
         logStore.logError('Failed to initialize sync', error);
@@ -285,6 +303,35 @@ export function useSync() {
     return fernSync ? fernSync.getSyncStatus() : syncStatus;
   };
 
+  // Method to update sync service with real chatId when it becomes available
+  const updateSyncChatId = useCallback(
+    async (newChatId: string) => {
+      if (!newChatId || newChatId === 'default') {
+        return;
+      }
+
+      try {
+        globalCurrentProjectId = newChatId;
+        setCurrentProjectId(newChatId);
+
+        const fernSync = getFernSyncService();
+
+        if (fernSync) {
+          // Update the Fern sync service with the new chat ID
+          logStore.logSystem(`Updating sync service with real chatId: ${newChatId}`);
+          await fernSync.updateChatId(newChatId);
+        } else if (syncEnabled && !globalIsInitialized) {
+          // If sync is enabled but not initialized (due to missing projectId), initialize now
+          logStore.logSystem(`Valid chatId now available (${newChatId}), initializing sync service...`);
+          await initializeSync();
+        }
+      } catch (error) {
+        logStore.logError('Failed to update sync service with new chatId:', error);
+      }
+    },
+    [syncEnabled],
+  );
+
   return {
     isInitialized,
     syncStatus,
@@ -292,5 +339,6 @@ export function useSync() {
     forceSync,
     getSyncStatus,
     disposeSync,
+    updateSyncChatId, // Expose method to update chatId
   };
 }

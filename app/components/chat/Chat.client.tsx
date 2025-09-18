@@ -5,7 +5,7 @@ import { useAnimate } from 'framer-motion';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
 import { useMessageParser, usePromptEnhancer, useShortcuts, useSync } from '~/lib/hooks';
-import { description, useChatHistory } from '~/lib/persistence';
+import { description, useChatHistory, chatId } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
@@ -40,7 +40,8 @@ const logger = createScopedLogger('Chat');
 export function Chat() {
   renderLogger.trace('Chat');
 
-  const { ready, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
+  const { ready, initialMessages, storeMessageHistory, importChat, exportChat, createNewChatProject } =
+    useChatHistory();
   const title = useStore(description);
   useEffect(() => {
     workbenchStore.setReloadedMessages(initialMessages.map((m) => m.id));
@@ -55,6 +56,7 @@ export function Chat() {
           exportChat={exportChat}
           storeMessageHistory={storeMessageHistory}
           importChat={importChat}
+          createNewChatProject={createNewChatProject}
         />
       )}
       <ToastContainer
@@ -111,16 +113,17 @@ interface ChatProps {
   initialMessages: Message[];
   storeMessageHistory: (messages: Message[]) => Promise<void>;
   importChat: (description: string, messages: Message[]) => Promise<void>;
+  createNewChatProject: () => Promise<void>;
   exportChat: () => void;
   description?: string;
 }
 
 export const ChatImpl = memo(
-  ({ description, initialMessages, storeMessageHistory, importChat, exportChat }: ChatProps) => {
+  ({ description, initialMessages, storeMessageHistory, importChat, exportChat, createNewChatProject }: ChatProps) => {
     useShortcuts();
 
     // Initialize sync functionality
-    const { currentProjectId } = useSync();
+    const { currentProjectId, updateSyncChatId } = useSync();
 
     // Debug project ID consistency
     useEffect(() => {
@@ -166,6 +169,18 @@ export const ChatImpl = memo(
 
     const mcpSettings = useMCPStore((state) => state.settings);
 
+    // Track chatId changes to make useChat reactive
+    const [currentChatId, setCurrentChatId] = useState(chatId.get());
+
+    // Update local state when chatId changes
+    useEffect(() => {
+      const unsubscribe = chatId.subscribe((newChatId) => {
+        logger.info('🔄 ChatID subscription update:', { old: currentChatId, new: newChatId });
+        setCurrentChatId(newChatId);
+      });
+      return unsubscribe;
+    }, [currentChatId]);
+
     const {
       messages,
       isLoading,
@@ -182,24 +197,28 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: import.meta.env.BASE_URL ? `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/chat` : '/api/chat',
-      body: {
-        apiKeys,
-        files,
-        promptId,
-        contextOptimization: contextOptimizationEnabled,
-        chatMode,
-        designScheme,
-        selectedTemplate,
-        supabase: {
-          isConnected: supabaseConn.isConnected,
-          hasSelectedProject: !!selectedProject,
-          credentials: {
-            supabaseUrl: supabaseConn?.credentials?.supabaseUrl,
-            anonKey: supabaseConn?.credentials?.anonKey,
+      body: (() => {
+        logger.info('🌐 useChat body configuration - chatId:', currentChatId);
+        return {
+          apiKeys,
+          files,
+          promptId,
+          contextOptimization: contextOptimizationEnabled,
+          chatMode,
+          designScheme,
+          selectedTemplate,
+          chatId: currentChatId, // Use reactive chatId state
+          supabase: {
+            isConnected: supabaseConn.isConnected,
+            hasSelectedProject: !!selectedProject,
+            credentials: {
+              supabaseUrl: supabaseConn?.credentials?.supabaseUrl,
+              anonKey: supabaseConn?.credentials?.anonKey,
+            },
           },
-        },
-        maxLLMSteps: mcpSettings.maxLLMSteps,
-      },
+          maxLLMSteps: mcpSettings.maxLLMSteps,
+        };
+      })(),
       sendExtraMessageFields: true,
       onError: (e: Error) => {
         setFakeLoading(false);
@@ -240,12 +259,76 @@ export const ChatImpl = memo(
       if (prompt) {
         setSearchParams({});
         runAnimation();
-        append({
+        ensureChatIdAndSend({
           role: 'user',
           content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${prompt}`,
         });
       }
     }, [model, provider, searchParams]);
+
+    // Enhanced send message handler that creates chatId if needed
+    const ensureChatIdAndSend = useCallback(
+      async (messageOrFunc: any, options?: any) => {
+        const currentChatId = chatId.get();
+
+        logger.info('🔥 ensureChatIdAndSend called with chatId:', currentChatId);
+
+        // If no chatId exists, create a new chat project first
+        if (!currentChatId || currentChatId === 'default') {
+          try {
+            logger.info('🔥 Creating new chat project before sending first message...');
+            await createNewChatProject();
+
+            // Get the newly created chatId
+            const newChatId = chatId.get();
+
+            logger.info('✅ New chat project created:', newChatId);
+            logger.info('🔍 Verifying chatId is set before API call...');
+
+            // Verify chatId is properly set
+            if (!newChatId || newChatId === 'default') {
+              logger.error('❌ CRITICAL: chatId not properly set after project creation!', {
+                newChatId,
+                chatIdType: typeof newChatId,
+              });
+              toast.error('Failed to set chat ID. Please try again.');
+
+              return;
+            }
+
+            // Update sync service with the real chatId
+            if (updateSyncChatId && newChatId && newChatId !== 'default') {
+              await updateSyncChatId(newChatId);
+              logger.info('✅ Sync service updated with new chatId:', newChatId);
+            }
+          } catch (error) {
+            logger.error('❌ Failed to create chat project before sending message:', error);
+            toast.error('Failed to create chat. Please try again.');
+
+            return;
+          }
+        }
+
+        // Give a moment for state to propagate
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        // Final verification before API call
+        const finalChatId = chatId.get();
+        logger.info('🎯 Final chatId check before append:', finalChatId);
+
+        if (!finalChatId || finalChatId === 'default') {
+          logger.error('❌ ABORT: Final chatId check failed!', finalChatId);
+          toast.error('Chat ID verification failed. Please refresh and try again.');
+
+          return;
+        }
+
+        // Now proceed with sending the message
+        logger.info('✅ Proceeding with append - chatId verified:', finalChatId);
+        append(messageOrFunc, options);
+      },
+      [createNewChatProject, updateSyncChatId, append],
+    );
 
     const { enhancingPrompt, promptEnhanced, enhancePrompt, resetEnhancer } = usePromptEnhancer();
     const { parsedMessages, parseMessages } = useMessageParser();
@@ -474,7 +557,10 @@ export const ChatImpl = memo(
     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
       const messageContent = messageInput || input;
 
+      logger.info('🚀 sendMessage called with:', { messageContent, messageInput, input });
+
       if (!messageContent?.trim()) {
+        logger.info('❌ sendMessage: Empty message content, returning');
         return;
       }
 
@@ -568,10 +654,14 @@ export const ChatImpl = memo(
         }
 
         // If autoSelectTemplate is disabled or template selection failed, proceed with normal message
+
+        logger.info('📋 Template path: proceeding with ensureChatIdAndSend for template message');
+
         const userMessageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
         const attachments = uploadedFiles.length > 0 ? await filesToAttachments(uploadedFiles) : undefined;
 
-        setMessages([
+        // Use ensureChatIdAndSend instead of direct reload for template-based messages
+        await ensureChatIdAndSend(
           {
             id: `${new Date().getTime()}`,
             role: 'user',
@@ -579,8 +669,8 @@ export const ChatImpl = memo(
             parts: createMessageParts(userMessageText, imageDataList),
             experimental_attachments: attachments,
           },
-        ]);
-        reload(attachments ? { experimental_attachments: attachments } : undefined);
+          attachments ? { experimental_attachments: attachments } : undefined,
+        );
         setFakeLoading(false);
         setInput('');
         Cookies.remove(PROMPT_COOKIE_KEY);
@@ -610,7 +700,7 @@ export const ChatImpl = memo(
         const attachmentOptions =
           uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
 
-        append(
+        ensureChatIdAndSend(
           {
             role: 'user',
             content: messageText,
@@ -626,7 +716,7 @@ export const ChatImpl = memo(
         const attachmentOptions =
           uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
 
-        append(
+        ensureChatIdAndSend(
           {
             role: 'user',
             content: messageText,
@@ -684,6 +774,14 @@ export const ChatImpl = memo(
       setProvider(newProvider);
       Cookies.set('selectedProvider', newProvider.name, { expires: 30 });
     };
+
+    // Wrapped append function that ensures chatId is created
+    const wrappedAppend = useCallback(
+      (message: Message, options?: any) => {
+        ensureChatIdAndSend(message, options);
+      },
+      [ensureChatIdAndSend],
+    );
 
     return (
       <BaseChat
@@ -750,7 +848,7 @@ export const ChatImpl = memo(
         data={chatData}
         chatMode={chatMode}
         setChatMode={setChatMode}
-        append={append}
+        append={wrappedAppend}
         designScheme={designScheme}
         setDesignScheme={setDesignScheme}
         selectedElement={selectedElement}
