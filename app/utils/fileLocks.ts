@@ -77,6 +77,23 @@ class ProjectIdManager {
       return this._projectIds[chatId];
     }
 
+    // Fallback: if we're still on a default/placeholder chatId, try to use the most recent project id
+    try {
+      if (typeof window !== 'undefined' && (chatId === 'default' || !chatId)) {
+        const recent = localStorage.getItem('bolt_recent_project_id');
+
+        if (recent) {
+          this._projectIds[chatId] = recent;
+          this._saveToStorage();
+          logger.debug(`Using recent projectId fallback for chat '${chatId}': ${recent}`);
+
+          return recent;
+        }
+      }
+    } catch (e) {
+      logger.warn('Failed reading recent project id from localStorage', e);
+    }
+
     // Store the mapping (chatId = projectId in unified system)
     this._projectIds[chatId] = chatId;
     this._saveToStorage();
@@ -99,6 +116,13 @@ class ProjectIdManager {
     this._projectIds[chatId] = projectId;
     this._saveToStorage();
     logger.debug(`Set project ID: ${projectId} for chat: ${chatId}`);
+
+    // Persist as most recent project id for fallback discovery on first-load
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('bolt_recent_project_id', projectId);
+      }
+    } catch {}
   }
 
   /**

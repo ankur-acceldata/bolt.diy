@@ -106,7 +106,15 @@ export function useSync() {
             logStore.logSystem('[FERN-DEBUG] Project ID available and sync enabled, initializing sync...');
             globalInitializationRef = true;
             initializationRef.current = true;
-            initializeSync();
+
+            // Initialize sync with error handling
+            initializeSync().catch((initError) => {
+              logStore.logError('[FERN-DEBUG] Failed to initialize sync from monitoring effect', initError);
+
+              // Reset flags to allow retry
+              globalInitializationRef = false;
+              initializationRef.current = false;
+            });
           }
         }
       } catch (error) {
@@ -118,10 +126,10 @@ export function useSync() {
     checkProjectId();
 
     /*
-     * Set up polling
+     * Set up polling with faster initial polling for project creation scenarios
      * More frequent checks initially when no project ID, then less frequent
      */
-    const pollInterval = currentProjectId && currentProjectId !== 'default' ? 5000 : 500;
+    const pollInterval = currentProjectId && currentProjectId !== 'default' ? 5000 : 100; // Reduced from 500ms to 100ms
     intervalId = setInterval(checkProjectId, pollInterval);
 
     logStore.logSystem('[FERN-DEBUG] Project ID monitoring started', {
@@ -136,6 +144,58 @@ export function useSync() {
       }
     };
   }, [currentProjectId, syncEnabled, globalIsInitialized, globalInitializationRef]);
+
+  // Listen for project creation events to trigger immediate sync
+  // eslint-disable-next-line consistent-return
+  useEffect(() => {
+    const handleProjectCreated = (event: CustomEvent) => {
+      const { projectId, chatId } = event.detail;
+      logStore.logSystem('[FERN-DEBUG] Received project-created event', {
+        projectId,
+        chatId,
+        currentProjectId,
+        syncEnabled,
+      });
+
+      // Trigger immediate sync check
+      if (syncEnabled && (!currentProjectId || currentProjectId === 'default')) {
+        logStore.logSystem('[FERN-DEBUG] Triggering immediate sync from project-created event');
+
+        // Use setTimeout to ensure the event is fully processed
+        setTimeout(() => {
+          try {
+            const projectIdFromFileLocks = getProjectId(chatId);
+
+            if (projectIdFromFileLocks && projectIdFromFileLocks !== 'default') {
+              globalCurrentProjectId = projectIdFromFileLocks;
+              setCurrentProjectId(projectIdFromFileLocks);
+
+              // Initialize sync if not already initialized
+              if (!globalIsInitialized && !globalInitializationRef) {
+                globalInitializationRef = true;
+                initializationRef.current = true;
+                initializeSync().catch((error) => {
+                  logStore.logError('[FERN-DEBUG] Failed to initialize sync from project-created event', error);
+                  globalInitializationRef = false;
+                  initializationRef.current = false;
+                });
+              }
+            }
+          } catch (error) {
+            logStore.logError('[FERN-DEBUG] Error handling project-created event', error);
+          }
+        }, 20); // Small delay to ensure fileLocks is updated
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('project-created', handleProjectCreated as EventListener);
+
+      return () => {
+        window.removeEventListener('project-created', handleProjectCreated as EventListener);
+      };
+    }
+  }, [syncEnabled, currentProjectId]);
 
   // Update sync configuration when settings change
   useEffect(() => {
@@ -493,24 +553,59 @@ export function useSync() {
 
       try {
         /*
-         * With the new monitoring approach, the project ID should come from fileLocks
-         * Check if the project ID is actually available in fileLocks for this chatId
+         * Immediate project ID check with retry mechanism
+         * This fixes the race condition where setProjectId() happens just before this call
          */
-        const projectIdFromFileLocks = getProjectId(newChatId);
+        let projectIdFromFileLocks = getProjectId(newChatId);
+        let retryCount = 0;
+        const maxRetries = 5;
 
-        logStore.logSystem('[FERN-DEBUG] updateSyncChatId - checking fileLocks', {
+        // Retry mechanism: if no project ID found, wait briefly and try again
+        while ((!projectIdFromFileLocks || projectIdFromFileLocks === 'default') && retryCount < maxRetries) {
+          logStore.logSystem('[FERN-DEBUG] Project ID not found, retrying...', {
+            newChatId,
+            retryCount,
+            maxRetries,
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 50)); // 50ms delay
+          projectIdFromFileLocks = getProjectId(newChatId);
+          retryCount++;
+        }
+
+        logStore.logSystem('[FERN-DEBUG] updateSyncChatId - final project ID check', {
           newChatId,
           projectIdFromFileLocks,
-          source: 'updateSyncChatId',
+          retryCount,
+          source: 'updateSyncChatId with retry',
         });
 
         // Only update if we have a valid project ID from fileLocks
         if (projectIdFromFileLocks && projectIdFromFileLocks !== 'default') {
           globalCurrentProjectId = projectIdFromFileLocks;
           setCurrentProjectId(projectIdFromFileLocks);
+
+          logStore.logSystem('[FERN-DEBUG] Project ID successfully updated', {
+            newProjectId: projectIdFromFileLocks,
+            source: 'updateSyncChatId immediate check',
+          });
         } else {
-          logStore.logSystem('[FERN-DEBUG] No valid project ID in fileLocks for chatId', { newChatId });
-          return;
+          // Fallback: trust the provided newChatId if it's not default
+          if (newChatId && newChatId !== 'default') {
+            globalCurrentProjectId = newChatId;
+            setCurrentProjectId(newChatId);
+            logStore.logSystem('[FERN-DEBUG] Using newChatId as project ID fallback', {
+              newChatId,
+              retryCount,
+            });
+          } else {
+            logStore.logSystem('[FERN-DEBUG] No valid project ID in fileLocks after retries and newChatId invalid', {
+              newChatId,
+              retryCount,
+              finalProjectId: projectIdFromFileLocks,
+            });
+            return;
+          }
         }
 
         const fernSync = getFernSyncService();
@@ -552,6 +647,50 @@ export function useSync() {
     [syncEnabled],
   );
 
+  // Function to trigger immediate project ID check and sync initialization
+  const triggerImmediateSync = useCallback(
+    async (chatId?: string) => {
+      try {
+        const targetChatId = chatId || getCurrentChatId();
+        logStore.logSystem('[FERN-DEBUG] triggerImmediateSync called', {
+          targetChatId,
+          syncEnabled,
+          globalIsInitialized,
+        });
+
+        // Force immediate project ID check
+        const projectIdFromFileLocks = getProjectId(targetChatId);
+
+        if (projectIdFromFileLocks && projectIdFromFileLocks !== 'default') {
+          globalCurrentProjectId = projectIdFromFileLocks;
+          setCurrentProjectId(projectIdFromFileLocks);
+
+          logStore.logSystem('[FERN-DEBUG] Immediate sync trigger - project ID found', {
+            projectId: projectIdFromFileLocks,
+            chatId: targetChatId,
+          });
+
+          // Initialize sync if enabled and not already initialized
+          if (syncEnabled && !globalIsInitialized && !globalInitializationRef) {
+            logStore.logSystem('[FERN-DEBUG] Triggering immediate sync initialization');
+            globalInitializationRef = true;
+            initializationRef.current = true;
+
+            await initializeSync();
+          }
+        } else {
+          logStore.logSystem('[FERN-DEBUG] Immediate sync trigger - no project ID found', {
+            projectId: projectIdFromFileLocks,
+            chatId: targetChatId,
+          });
+        }
+      } catch (error) {
+        logStore.logError('[FERN-DEBUG] Error in triggerImmediateSync', error);
+      }
+    },
+    [syncEnabled],
+  );
+
   return {
     isInitialized,
     syncStatus,
@@ -560,5 +699,6 @@ export function useSync() {
     getSyncStatus,
     disposeSync,
     updateSyncChatId, // Expose method to update chatId
+    triggerImmediateSync, // Expose method to trigger immediate sync
   };
 }

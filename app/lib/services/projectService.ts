@@ -297,9 +297,54 @@ export class ProjectService {
 
       logger.info('Created backend project:', responseData.id);
 
-      // Store the backend project ID for GET_PROJECT_ID requests
+      // Store the backend project ID mapping for both current (possibly 'default') and real IDs
       const currentChatId = getCurrentChatId();
-      setProjectId(currentChatId, responseData.id);
+
+      try {
+        // Map whatever the current chatId is (often 'default' pre-URL update) to the backend project id
+        setProjectId(currentChatId, responseData.id);
+
+        // Also assert the unified mapping: realId -> realId
+        setProjectId(responseData.id.toString(), responseData.id.toString());
+
+        // Persist a recent project ID for robust fallback discovery
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('bolt_recent_project_id', responseData.id.toString());
+          } catch {}
+        }
+      } catch (e) {
+        logger.warn('Failed to persist project ID mappings to localStorage', e);
+      }
+
+      // Trigger immediate sync initialization after project ID is set
+      try {
+        // Use setTimeout to ensure setProjectId has completed
+        setTimeout(async () => {
+          logStore.logSystem('[FERN-DEBUG] Triggering immediate sync after project creation', {
+            projectId: responseData.id,
+            currentChatId,
+          });
+
+          // Dispatch a custom event to notify sync services
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('project-created', {
+                detail: {
+                  projectId: responseData.id,
+
+                  // Send the real chatId (backend project id) to avoid reliance on polling/aliases
+                  chatId: responseData.id.toString(),
+                },
+              }),
+            );
+          }
+        }, 10); // Small delay to ensure setProjectId is persisted
+      } catch (syncTriggerError) {
+        logStore.logError('[FERN-DEBUG] Failed to trigger immediate sync', syncTriggerError);
+
+        // Don't throw here - project creation should still succeed
+      }
 
       logStore.logSystem('[FERN-DEBUG] Project creation completed successfully', {
         projectId: responseData.id,
