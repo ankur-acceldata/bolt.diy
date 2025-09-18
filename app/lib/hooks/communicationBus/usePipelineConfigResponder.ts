@@ -1,18 +1,19 @@
 import { useEffect, useRef } from 'react';
-import { useCommunicationBusChild } from '~/lib/hooks';
+import { useCommunicationBusChild } from './useCommunicationBusChild';
 import { MessageType } from '~/types/communicationBus';
 import { createScopedLogger } from '~/utils/logger';
 import { description } from '~/lib/persistence';
 import { extractShellCommands } from '~/lib/utils/shellCommands';
 import { getJobConfigFromXdp } from '~/lib/services/jobConfigService';
+import { getProjectId } from '~/utils/fileLocks';
 
-const logger = createScopedLogger('usePipelineConfigHandler');
+const logger = createScopedLogger('usePipelineConfigResponder');
 
-interface UsePipelineConfigHandlerProps {
+interface UsePipelineConfigResponderOptions {
   currentProjectId?: string;
 }
 
-export function usePipelineConfigHandler({ currentProjectId }: UsePipelineConfigHandlerProps) {
+export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConfigResponderOptions) {
   const bus = useCommunicationBusChild();
   const projectIdRef = useRef(currentProjectId);
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -38,12 +39,12 @@ export function usePipelineConfigHandler({ currentProjectId }: UsePipelineConfig
 
         // Build pipeline config response
         const projectName = (description.get() ?? 'project').toLowerCase().split(' ').join('_');
-        const codeSourceUrl = `applications/${projectIdRef.current || 'default-project'}`;
+        const codeSourceUrl = `applications/${projectIdRef.current || getProjectId() || 'default-project'}`;
 
         const pipelineConfig = {
           name: projectName,
           description: description.get() || '',
-          projectId: projectIdRef.current || 'default-project',
+          projectId: projectIdRef.current || getProjectId() || 'default-project',
           sourceUrl: codeSourceUrl,
           stages,
           imageFromUrl: jobConfig.baseImage || '',

@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
-import { useCommunicationBusChild } from '~/lib/hooks/useCommunicationBus';
+import { useCommunicationBusChild } from './useCommunicationBusChild';
 import { MessageType } from '~/types/communicationBus';
 import { JobPromotionService, type JobPromotionParams } from '~/lib/services/jobPromotionService';
 import { createScopedLogger } from '~/utils/logger';
 
-const logger = createScopedLogger('useJobPromotion');
+const logger = createScopedLogger('useJobPromotionResponder');
 
 export interface JobPromotionRequest {
   baseImage?: string;
@@ -19,7 +19,7 @@ export interface JobPromotionResponse {
 /**
  * Hook for handling job promotion functionality via postMessage communication
  */
-export function useJobPromotion() {
+export function useJobPromotionResponder() {
   const bus = useCommunicationBusChild();
 
   // Handle PROMOTE_TO_JOB messages from parent

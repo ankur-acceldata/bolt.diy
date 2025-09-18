@@ -29,8 +29,7 @@ import { InternalActionsService } from '~/lib/services/internalActionsService';
 
 // Extracted imports
 import type { WorkspaceProps } from '~/types/jobConfig';
-import { useAdhocRun } from '~/lib/hooks/useAdhocRun';
-import { usePipelineConfigHandler } from '~/lib/hooks/usePipelineConfigHandler';
+import { useAdhocRunClient, usePipelineConfigResponder, useProjectIdResponder } from '~/lib/hooks/communicationBus';
 import { viewTransition, sliderOptions, workbenchVariants } from './workbench.constants';
 import type { FileHistory } from '~/types/actions';
 
@@ -59,10 +58,14 @@ export const Workbench = memo(
     const { syncEnabled } = useSettings();
 
     // Use extracted hooks
-    const { isExecuting, executeAdhocRun } = useAdhocRun();
+    const { isExecuting, executeAdhocRun } = useAdhocRunClient();
 
     // Handle pipeline config messages
-    usePipelineConfigHandler({
+    usePipelineConfigResponder({
+      currentProjectId,
+    });
+
+    useProjectIdResponder({
       currentProjectId,
     });
 
@@ -199,7 +202,7 @@ export const Workbench = memo(
       // Set workbench store reference
       InternalActionsService.setWorkbenchStore(workbenchStore);
 
-      logger.info('InternalActionsService initialized with workbench functions');
+      // logger.info('InternalActionsService initialized with workbench functions');
     }, [handleExecuteAdhocRun, handleSyncFiles]);
 
     // Auto-execute workbench actions from AI messages
