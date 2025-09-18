@@ -56,14 +56,39 @@ export class FernApiService {
   }
 
   /**
+   * Get the current server URL for debugging
+   */
+  getServerUrl(): string {
+    return this._baseUrl;
+  }
+
+  /**
+   * Get the current WebSocket URL for debugging
+   */
+  getWebSocketUrl(): string {
+    return this._wsUrl;
+  }
+
+  /**
    * Check if the Golang API server is available
    */
   async isServerAvailable(): Promise<boolean> {
+    const checkStart = Date.now();
+    const healthUrl = `${this._baseUrl}/health`;
+
+    logStore.logSystem('[FERN-DEBUG] Server availability check starting', {
+      url: healthUrl,
+      timestamp: new Date().toISOString(),
+      projectId: this._projectId,
+      baseUrl: this._baseUrl,
+      wsUrl: this._wsUrl,
+    });
+
     try {
-      console.log('Checking server availability at:', `${this._baseUrl}/health`);
+      console.log('[FERN-DEBUG] Checking server availability at:', healthUrl);
 
       // Create a promise that resolves with the fetch result
-      const fetchPromise = fetch(`${this._baseUrl}/health`, {
+      const fetchPromise = fetch(healthUrl, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -73,34 +98,60 @@ export class FernApiService {
 
       // Create a timeout promise
       const timeoutPromise = new Promise<Response>((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout')), 5000);
+        setTimeout(() => reject(new Error('Request timeout after 5000ms')), 5000);
       });
 
       // Race between fetch and timeout
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      logStore.logSystem('[FERN-DEBUG] Starting fetch race (5s timeout)');
 
-      console.log('Server health check response:', {
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      const fetchDuration = Date.now() - checkStart;
+
+      const responseInfo = {
         ok: response.ok,
         status: response.status,
         statusText: response.statusText,
         url: response.url,
-      });
+        duration: `${fetchDuration}ms`,
+        headers: Object.fromEntries(response.headers.entries()),
+      };
+
+      logStore.logSystem('[FERN-DEBUG] Server health check response received', responseInfo);
+      console.log('[FERN-DEBUG] Server health check response:', responseInfo);
 
       if (response.ok) {
-        const data = await response.json();
-        console.log('Server health data:', data);
+        try {
+          const data = await response.json();
+          logStore.logSystem('[FERN-DEBUG] Server health data parsed successfully', data as Record<string, any>);
+          console.log('[FERN-DEBUG] Server health data:', data);
 
-        return true;
+          return true;
+        } catch (jsonError) {
+          logStore.logSystem('[FERN-DEBUG] Failed to parse health response JSON', jsonError as Record<string, any>);
+
+          // Server responded but with invalid JSON - consider it available
+          return true;
+        }
+      } else {
+        logStore.logSystem('[FERN-DEBUG] Server health check failed - response not OK', {
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return false;
       }
-
-      return false;
     } catch (error) {
-      console.error('Server availability check failed:', error);
-      console.error('Error details:', {
+      const errorDuration = Date.now() - checkStart;
+      const errorInfo = {
         message: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
-      });
-      logStore.logError('Fern API server not available', error);
+        duration: `${errorDuration}ms`,
+        url: healthUrl,
+        projectId: this._projectId,
+      };
+
+      logStore.logError('[FERN-DEBUG] Server availability check failed', error, errorInfo);
+      console.error('[FERN-DEBUG] Server availability check failed:', error);
+      console.error('[FERN-DEBUG] Error details:', errorInfo);
 
       return false;
     }
@@ -367,28 +418,58 @@ export class FernApiService {
   }
 
   connectWebSocket(onMessage?: (data: any) => void, onError?: (error: Event) => void): Promise<void> {
+    const connectStart = Date.now();
+
+    logStore.logSystem('[FERN-DEBUG] WebSocket connection starting', {
+      timestamp: new Date().toISOString(),
+      baseWsUrl: this._wsUrl,
+      projectId: this._projectId,
+      reconnectAttempts: this._reconnectAttempts,
+      maxReconnectAttempts: this._maxReconnectAttempts,
+    });
+
     return new Promise((resolve, reject) => {
+      let absoluteWsUrl = ''; // Declare at top level for error handling
+
       try {
         // Apply base path to WebSocket URL (same logic as fetch interceptor)
         let wsUrl = this._applyBasePathToWsUrl(this._wsUrl);
+        logStore.logSystem('[FERN-DEBUG] Base path applied to WebSocket URL', {
+          originalUrl: this._wsUrl,
+          processedUrl: wsUrl,
+        });
 
         // Include project ID in WebSocket URL if available
-
         if (this._projectId) {
           const separator = wsUrl.includes('?') ? '&' : '?';
           wsUrl = `${wsUrl}${separator}projectId=${encodeURIComponent(this._projectId)}`;
+          logStore.logSystem('[FERN-DEBUG] Project ID added to WebSocket URL', {
+            projectId: this._projectId,
+            finalUrl: wsUrl,
+          });
+        } else {
+          logStore.logSystem('[FERN-DEBUG] WARNING: No project ID available for WebSocket connection');
         }
 
         // Convert relative WebSocket URL to absolute URL with proper protocol
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
-        const absoluteWsUrl = wsUrl.startsWith('/') ? `${protocol}//${host}${wsUrl}` : wsUrl;
+        absoluteWsUrl = wsUrl.startsWith('/') ? `${protocol}//${host}${wsUrl}` : wsUrl;
+
+        logStore.logSystem('[FERN-DEBUG] Final WebSocket URL constructed', {
+          protocol,
+          host,
+          relativeUrl: wsUrl,
+          absoluteUrl: absoluteWsUrl,
+        });
 
         // Check if dev mode is enabled
         const isDev = localStorage.getItem('dev') === 'true';
 
         if (!isDev) {
           // Production mode: Use Kubernetes authentication
+          logStore.logSystem('[FERN-DEBUG] Using production mode with Kubernetes authentication');
+
           function getCookie(name: string) {
             const value = `; ${document.cookie}`;
             const parts = value.split(`; ${name}=`);
@@ -410,14 +491,30 @@ export class FernApiService {
           const encodedToken = base64urlEncode(accessToken);
           const protocols = [`base64url.bearer.authorization.k8s.io.${encodedToken}`, 'base64.binary.k8s.io'];
 
+          logStore.logSystem('[FERN-DEBUG] Production WebSocket auth details', {
+            hasAccessToken: !!accessToken,
+            accessTokenLength: accessToken.length,
+            encodedTokenLength: encodedToken.length,
+            protocols,
+          });
+
           this._websocket = new WebSocket(absoluteWsUrl, protocols);
         } else {
           // Dev mode: Use regular WebSocket without authentication
+          logStore.logSystem('[FERN-DEBUG] Using dev mode without authentication');
           this._websocket = new WebSocket(absoluteWsUrl);
         }
 
+        logStore.logSystem('[FERN-DEBUG] WebSocket instance created, setting up event handlers');
+
         this._websocket.onopen = () => {
-          logStore.logSystem('WebSocket connected to Fern API');
+          const connectDuration = Date.now() - connectStart;
+          logStore.logSystem('[FERN-DEBUG] WebSocket connected to Fern API', {
+            duration: `${connectDuration}ms`,
+            readyState: this._websocket?.readyState,
+            url: absoluteWsUrl,
+            reconnectAttempts: this._reconnectAttempts,
+          });
           this._reconnectAttempts = 0;
           resolve();
         };
@@ -425,20 +522,44 @@ export class FernApiService {
         this._websocket.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            logStore.logSystem(`WebSocket message received: ${data.type}`);
+            logStore.logSystem('[FERN-DEBUG] WebSocket message received', {
+              type: data.type,
+              dataSize: event.data.length,
+              timestamp: new Date().toISOString(),
+            });
             onMessage?.(data);
           } catch (error) {
-            logStore.logError('Failed to parse WebSocket message', error);
+            logStore.logError('[FERN-DEBUG] Failed to parse WebSocket message', error, {
+              rawData: event.data,
+              dataType: typeof event.data,
+            });
           }
         };
 
         this._websocket.onerror = (error) => {
-          logStore.logError('WebSocket error', error);
+          const connectDuration = Date.now() - connectStart;
+          logStore.logError('[FERN-DEBUG] WebSocket error occurred', error, {
+            duration: `${connectDuration}ms`,
+            url: absoluteWsUrl,
+            readyState: this._websocket?.readyState,
+            reconnectAttempts: this._reconnectAttempts,
+            projectId: this._projectId,
+          });
           onError?.(error);
+          reject(error);
         };
 
-        this._websocket.onclose = () => {
-          logStore.logSystem('WebSocket disconnected from Fern API');
+        this._websocket.onclose = (event) => {
+          const connectDuration = Date.now() - connectStart;
+          logStore.logSystem('[FERN-DEBUG] WebSocket disconnected from Fern API', {
+            duration: `${connectDuration}ms`,
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+            url: absoluteWsUrl,
+            reconnectAttempts: this._reconnectAttempts,
+            willRetry: this._reconnectAttempts < this._maxReconnectAttempts,
+          });
           this._websocket = null;
 
           // Auto-reconnect with exponential backoff
@@ -447,15 +568,29 @@ export class FernApiService {
 
             const delay = this._reconnectDelay * Math.pow(2, this._reconnectAttempts - 1);
 
+            logStore.logSystem('[FERN-DEBUG] Scheduling WebSocket reconnection', {
+              attempt: this._reconnectAttempts,
+              maxAttempts: this._maxReconnectAttempts,
+              delayMs: delay,
+            });
+
             setTimeout(() => {
               logStore.logSystem(
-                `Attempting WebSocket reconnection (${this._reconnectAttempts}/${this._maxReconnectAttempts})`,
+                `[FERN-DEBUG] Attempting WebSocket reconnection (${this._reconnectAttempts}/${this._maxReconnectAttempts})`,
               );
               this.connectWebSocket(onMessage, onError);
             }, delay);
+          } else {
+            logStore.logSystem('[FERN-DEBUG] Max reconnection attempts reached, giving up');
           }
         };
       } catch (error) {
+        const connectDuration = Date.now() - connectStart;
+        logStore.logError('[FERN-DEBUG] Exception during WebSocket setup', error, {
+          duration: `${connectDuration}ms`,
+          url: absoluteWsUrl,
+          projectId: this._projectId,
+        });
         reject(error);
       }
     });

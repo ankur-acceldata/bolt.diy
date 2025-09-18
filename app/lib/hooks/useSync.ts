@@ -15,6 +15,14 @@ let globalCurrentProjectId = '';
 let globalInitializationRef = false;
 
 export function useSync() {
+  logStore.logSystem('[FERN-DEBUG] useSync hook instantiated', {
+    timestamp: new Date().toISOString(),
+    currentUrl: typeof window !== 'undefined' ? window.location.href : 'server-side',
+    globalIsInitialized,
+    globalCurrentProjectId,
+    globalInitializationRef,
+  });
+
   const { syncEnabled, syncAutoSync, syncInterval, syncRemoteUrl } = useSettings();
   const [syncStatus, setSyncStatus] = useState({
     isRunning: false,
@@ -26,16 +34,37 @@ export function useSync() {
   const [currentProjectId, setCurrentProjectId] = useState<string>(globalCurrentProjectId);
   const initializationRef = useRef(globalInitializationRef);
 
+  logStore.logSystem('[FERN-DEBUG] useSync hook settings loaded', {
+    syncEnabled,
+    syncAutoSync,
+    syncInterval,
+    syncRemoteUrl,
+  });
+
   // Initialize sync when enabled
   useEffect(() => {
+    logStore.logSystem('[FERN-DEBUG] useSync useEffect triggered (syncEnabled dependency)', {
+      syncEnabled,
+      globalInitializationRef,
+      globalIsInitialized,
+      globalCurrentProjectId,
+      timestamp: new Date().toISOString(),
+    });
+
     if (syncEnabled && !globalInitializationRef) {
+      logStore.logSystem('[FERN-DEBUG] Starting sync initialization due to syncEnabled=true');
       globalInitializationRef = true;
       initializationRef.current = true;
       initializeSync();
     } else if (!syncEnabled && globalInitializationRef) {
+      logStore.logSystem('[FERN-DEBUG] Disposing sync due to syncEnabled=false');
       globalInitializationRef = false;
       initializationRef.current = false;
       disposeSync();
+    } else {
+      logStore.logSystem('[FERN-DEBUG] No action taken in useSync useEffect', {
+        reason: syncEnabled ? 'already initialized' : 'sync disabled',
+      });
     }
   }, [syncEnabled]);
 
@@ -102,12 +131,28 @@ export function useSync() {
   }, [syncEnabled, isInitialized]);
 
   const initializeSync = async () => {
+    const initStart = Date.now();
+    logStore.logSystem('[FERN-DEBUG] useSync.initializeSync called', {
+      timestamp: new Date().toISOString(),
+      currentUrl: typeof window !== 'undefined' ? window.location.href : 'server-side',
+      globalIsInitialized,
+      globalCurrentProjectId,
+      hasGlobalInitPromise: !!globalInitializationPromise,
+    });
+
     // Prevent multiple simultaneous initializations
     if (globalInitializationPromise) {
-      logStore.logSystem('Sync initialization already in progress, waiting...');
+      logStore.logSystem('[FERN-DEBUG] Sync initialization already in progress, waiting...');
       await globalInitializationPromise;
       setIsInitialized(globalIsInitialized);
       setCurrentProjectId(globalCurrentProjectId);
+
+      const waitDuration = Date.now() - initStart;
+      logStore.logSystem('[FERN-DEBUG] Waited for existing initialization', {
+        duration: `${waitDuration}ms`,
+        finalState: globalIsInitialized,
+        projectId: globalCurrentProjectId,
+      });
 
       return;
     }
@@ -118,11 +163,20 @@ export function useSync() {
         const chatId = getCurrentChatId();
         const projectId = getProjectId(chatId);
 
-        logStore.logSystem(`Checking project ID: ${projectId} for chat: ${chatId}`);
+        logStore.logSystem('[FERN-DEBUG] Project ID resolution result', {
+          chatId,
+          projectId,
+          chatIdType: typeof chatId,
+          projectIdType: typeof projectId,
+        });
 
         // Only initialize sync if we have a valid project ID
         if (!projectId || projectId === 'default') {
-          logStore.logSystem('No valid project ID available, skipping sync initialization until chatId is available');
+          logStore.logSystem('[FERN-DEBUG] No valid project ID available, skipping sync initialization', {
+            projectId,
+            chatId,
+            reason: !projectId ? 'projectId is null/undefined' : 'projectId is default',
+          });
           globalIsInitialized = false;
           setIsInitialized(false);
           globalInitializationPromise = null;
@@ -132,16 +186,27 @@ export function useSync() {
 
         globalCurrentProjectId = projectId;
         setCurrentProjectId(projectId);
-        logStore.logSystem(`Initializing sync with project ID: ${projectId}`);
+        logStore.logSystem('[FERN-DEBUG] Sync initialization proceeding', {
+          projectId,
+          globalCurrentProjectId,
+          timestamp: new Date().toISOString(),
+        });
 
         // Use Fern API sync service for Golang/Minio integration
-        logStore.logSystem('Initializing Fern API sync service...');
+        logStore.logSystem('[FERN-DEBUG] Initializing Fern API sync service...', {
+          syncEnabled,
+          syncAutoSync,
+          syncInterval,
+          syncRemoteUrl,
+        });
 
         // Parse remote URL for server and WebSocket URLs
         let serverUrl = '/api/fern-fs';
         let wsUrl = '/api/ws/fern-fs';
 
         if (syncRemoteUrl) {
+          logStore.logSystem('[FERN-DEBUG] Processing custom sync remote URL', { syncRemoteUrl });
+
           if (syncRemoteUrl.startsWith('ws://') || syncRemoteUrl.startsWith('wss://')) {
             wsUrl = syncRemoteUrl;
             serverUrl =
@@ -157,6 +222,15 @@ export function useSync() {
           }
         }
 
+        logStore.logSystem('[FERN-DEBUG] Final sync URLs resolved', {
+          serverUrl,
+          wsUrl,
+          originalRemoteUrl: syncRemoteUrl,
+        });
+
+        const fernSyncStart = Date.now();
+        logStore.logSystem('[FERN-DEBUG] Calling initializeFernSync...');
+
         const syncIntegration = await initializeFernSync({
           workbenchStore,
           chatId: projectId, // Use the consistent project ID
@@ -164,6 +238,12 @@ export function useSync() {
           wsUrl,
           autoSync: syncAutoSync,
           syncInterval,
+        });
+
+        const fernSyncDuration = Date.now() - fernSyncStart;
+        logStore.logSystem('[FERN-DEBUG] initializeFernSync completed', {
+          duration: `${fernSyncDuration}ms`,
+          hasSyncIntegration: !!syncIntegration,
         });
 
         // Set up event listeners for Fern sync service
@@ -306,7 +386,15 @@ export function useSync() {
   // Method to update sync service with real chatId when it becomes available
   const updateSyncChatId = useCallback(
     async (newChatId: string) => {
+      logStore.logSystem('[FERN-DEBUG] updateSyncChatId called', {
+        newChatId,
+        syncEnabled,
+        globalIsInitialized,
+        timestamp: new Date().toISOString(),
+      });
+
       if (!newChatId || newChatId === 'default') {
+        logStore.logSystem('[FERN-DEBUG] updateSyncChatId rejected - invalid chatId', { newChatId });
         return;
       }
 
@@ -315,15 +403,30 @@ export function useSync() {
         setCurrentProjectId(newChatId);
 
         const fernSync = getFernSyncService();
+        logStore.logSystem('[FERN-DEBUG] updateSyncChatId - fernSync service check', {
+          hasFernSync: !!fernSync,
+          syncEnabled,
+          globalIsInitialized,
+        });
 
         if (fernSync) {
           // Update the Fern sync service with the new chat ID
-          logStore.logSystem(`Updating sync service with real chatId: ${newChatId}`);
+          logStore.logSystem('[FERN-DEBUG] Updating existing sync service with real chatId', { newChatId });
           await fernSync.updateChatId(newChatId);
         } else if (syncEnabled && !globalIsInitialized) {
           // If sync is enabled but not initialized (due to missing projectId), initialize now
-          logStore.logSystem(`Valid chatId now available (${newChatId}), initializing sync service...`);
+          logStore.logSystem('[FERN-DEBUG] Valid chatId now available, initializing sync service...', {
+            newChatId,
+            syncEnabled,
+            globalIsInitialized,
+          });
           await initializeSync();
+        } else {
+          logStore.logSystem('[FERN-DEBUG] No action taken in updateSyncChatId', {
+            reason: !syncEnabled ? 'sync disabled' : 'already initialized',
+            syncEnabled,
+            globalIsInitialized,
+          });
         }
       } catch (error) {
         logStore.logError('Failed to update sync service with new chatId:', error);

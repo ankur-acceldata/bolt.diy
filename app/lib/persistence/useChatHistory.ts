@@ -284,10 +284,16 @@ ${value.content}
 
   const createNewChatProject = async () => {
     try {
+      logStore.logSystem('[FERN-DEBUG] createNewChatProject called', {
+        timestamp: new Date().toISOString(),
+        currentUrl: typeof window !== 'undefined' ? window.location.href : 'server-side',
+      });
+
       // Check if we already have a chatId to prevent duplicate creation
       const existingChatId = chatId.get();
 
       if (existingChatId) {
+        logStore.logSystem('[FERN-DEBUG] Chat project already exists, skipping creation', { existingChatId });
         logger.info('Chat project already exists:', existingChatId);
         setUrlId(existingChatId);
 
@@ -301,13 +307,24 @@ ${value.content}
         description: currentDescription || 'AI Chat Project',
       };
 
+      logStore.logSystem('[FERN-DEBUG] Creating new backend project...', { projectData });
       logger.info('Creating new backend project...');
 
       const backendProjectId = await createProjectAndGetId(projectData);
 
+      logStore.logSystem('[FERN-DEBUG] Backend project created', {
+        backendProjectId,
+        type: typeof backendProjectId,
+      });
+
       // Set the chat ID to the backend project ID immediately
       chatId.set(backendProjectId);
       setUrlId(backendProjectId);
+
+      logStore.logSystem('[FERN-DEBUG] ChatID set and URL updated', {
+        backendProjectId,
+        newUrl: typeof window !== 'undefined' ? window.location.href : 'server-side',
+      });
 
       // Store empty chat in IndexedDB immediately so it can be loaded later
       if (db) {

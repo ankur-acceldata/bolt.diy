@@ -28,52 +28,109 @@ export class FernSyncService {
   private _autoSaveTimeouts = new Map<string, NodeJS.Timeout>();
 
   constructor(options: FernSyncOptions) {
+    logStore.logSystem('[FERN-DEBUG] FernSyncService constructor called', {
+      chatId: options.chatId,
+      serverUrl: options.serverUrl,
+      wsUrl: options.wsUrl,
+      autoSync: options.autoSync,
+      syncInterval: options.syncInterval,
+    });
+
     this._options = options;
 
     // Configure API service with dynamic base path
     if (options.serverUrl || options.wsUrl) {
+      logStore.logSystem('[FERN-DEBUG] Using provided URLs', {
+        serverUrl: options.serverUrl,
+        wsUrl: options.wsUrl,
+      });
       fernApiService.updateConfig(options.serverUrl, options.wsUrl);
     } else {
       // Use dynamic base path from configuration
       const basePath = getBasePath();
       const apiUrl = `${basePath}api/fern-fs`;
       const wsUrl = `${basePath}api/ws/fern-fs`;
+      logStore.logSystem('[FERN-DEBUG] Using default URLs', {
+        basePath,
+        apiUrl,
+        wsUrl,
+      });
       fernApiService.updateConfig(apiUrl, wsUrl);
     }
 
     // Set project ID (chatId)
     if (options.chatId) {
+      logStore.logSystem('[FERN-DEBUG] Setting project ID', { projectId: options.chatId });
       fernApiService.setProjectId(options.chatId);
+    } else {
+      logStore.logSystem('[FERN-DEBUG] WARNING: No chatId provided to FernSyncService');
     }
   }
 
   async initialize(): Promise<void> {
-    logStore.logSystem('Initializing Fern sync service...');
+    const startTime = Date.now();
+    logStore.logSystem('[FERN-DEBUG] Starting Fern sync service initialization', {
+      timestamp: new Date().toISOString(),
+      chatId: this._options.chatId,
+      currentUrl: typeof window !== 'undefined' ? window.location.href : 'server-side',
+    });
 
     try {
       // Check if Golang server is available
+      logStore.logSystem('[FERN-DEBUG] Checking server availability...');
+
+      const serverCheckStart = Date.now();
       this._isServerAvailable = await fernApiService.isServerAvailable();
 
+      const serverCheckDuration = Date.now() - serverCheckStart;
+
+      logStore.logSystem('[FERN-DEBUG] Server availability check result', {
+        available: this._isServerAvailable,
+        duration: `${serverCheckDuration}ms`,
+        serverUrl: fernApiService.getServerUrl(),
+      });
+
       if (!this._isServerAvailable) {
+        logStore.logSystem('[FERN-DEBUG] Server not available, throwing error');
         throw new Error('Fern API server is not available. Please ensure the Golang server is running.');
       }
 
       // Set up WebSocket connection for real-time sync
+      logStore.logSystem('[FERN-DEBUG] Setting up WebSocket connection...');
+
+      const wsSetupStart = Date.now();
       await this._setupWebSocket();
 
+      const wsSetupDuration = Date.now() - wsSetupStart;
+      logStore.logSystem('[FERN-DEBUG] WebSocket setup completed', { duration: `${wsSetupDuration}ms` });
+
       // Set up file watching for auto-save
+      logStore.logSystem('[FERN-DEBUG] Setting up file watching...');
       this._setupFileWatching();
 
       // Start auto-sync if enabled
       if (this._options.autoSync) {
+        logStore.logSystem('[FERN-DEBUG] Starting auto-sync...');
         this._startAutoSync();
+      } else {
+        logStore.logSystem('[FERN-DEBUG] Auto-sync disabled');
       }
 
-      logStore.logSystem('Fern sync service initialized successfully');
+      const totalDuration = Date.now() - startTime;
+      logStore.logSystem('[FERN-DEBUG] Fern sync service initialized successfully', {
+        totalDuration: `${totalDuration}ms`,
+        finalProjectId: fernApiService.getProjectId(),
+      });
 
       // Removed toast - using status indicator instead
     } catch (error) {
-      logStore.logError('Failed to initialize Fern sync service', error);
+      const totalDuration = Date.now() - startTime;
+      logStore.logError('[FERN-DEBUG] Failed to initialize Fern sync service', error, {
+        duration: `${totalDuration}ms`,
+        chatId: this._options.chatId,
+        serverUrl: fernApiService.getServerUrl(),
+        wsUrl: fernApiService.getWebSocketUrl(),
+      });
       throw error;
     }
   }
@@ -215,16 +272,41 @@ export class FernSyncService {
   }
 
   private async _setupWebSocket(): Promise<void> {
+    const wsSetupStart = Date.now();
+    logStore.logSystem('[FERN-DEBUG] WebSocket setup starting', {
+      timestamp: new Date().toISOString(),
+      wsUrl: fernApiService.getWebSocketUrl(),
+      projectId: fernApiService.getProjectId(),
+    });
+
     try {
+      logStore.logSystem('[FERN-DEBUG] Calling fernApiService.connectWebSocket...');
       await fernApiService.connectWebSocket(
-        (data) => this._handleWebSocketMessage(data),
-        (error) => this._handleWebSocketError(error),
+        (data) => {
+          logStore.logSystem('[FERN-DEBUG] WebSocket message received', data);
+          this._handleWebSocketMessage(data);
+        },
+        (error) => {
+          logStore.logError('[FERN-DEBUG] WebSocket error occurred', error);
+          this._handleWebSocketError(error);
+        },
       );
+
+      const wsSetupDuration = Date.now() - wsSetupStart;
+      logStore.logSystem('[FERN-DEBUG] WebSocket connection established successfully', {
+        duration: `${wsSetupDuration}ms`,
+      });
 
       this._emit('connection-changed', true);
     } catch (error) {
-      logStore.logError('Failed to setup WebSocket connection', error);
+      const wsSetupDuration = Date.now() - wsSetupStart;
+      logStore.logError('[FERN-DEBUG] Failed to setup WebSocket connection', error, {
+        duration: `${wsSetupDuration}ms`,
+        wsUrl: fernApiService.getWebSocketUrl(),
+        projectId: fernApiService.getProjectId(),
+      });
       this._emit('connection-changed', false);
+      throw error;
     }
   }
 
