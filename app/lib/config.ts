@@ -66,8 +66,8 @@ function getConfigFromSources(): Partial<AppConfig> {
  * Normalize and validate configuration
  */
 function normalizeConfig(config: Partial<AppConfig>): AppConfig {
-  // Set defaults - use environment variable or empty string for root path
-  const rawBasePath = config.basePath || '';
+  // Set defaults - use /ai-editor as default base path
+  const rawBasePath = config.basePath || '/ai-editor';
 
   // Remove trailing slashes, except for root path
   const basePath = rawBasePath === '/' ? '/' : rawBasePath.replace(/\/+$/, '');
