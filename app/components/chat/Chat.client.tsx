@@ -124,7 +124,7 @@ export const ChatImpl = memo(
     useShortcuts();
 
     // Initialize sync functionality
-    const { currentProjectId, updateSyncChatId, triggerImmediateSync } = useSync();
+    const { currentProjectId, updateSyncChatId } = useSync();
 
     // Debug project ID consistency
     useEffect(() => {
@@ -301,13 +301,6 @@ export const ChatImpl = memo(
             if (updateSyncChatId && newChatId && newChatId !== 'default') {
               await updateSyncChatId(newChatId);
               logger.info('✅ Sync service updated with new chatId:', newChatId);
-
-              // Double‑ensure sync initializes now for first‑prompt race scenarios
-              try {
-                await triggerImmediateSync?.(newChatId);
-              } catch (e) {
-                logger.warn('Trigger immediate sync threw, continuing:', e);
-              }
 
               // Wait briefly for Fern to initialize and connect (non-fatal timeout)
               const waitForFernInit = async (timeoutMs = 4000) => {

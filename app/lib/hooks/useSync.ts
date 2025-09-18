@@ -661,11 +661,8 @@ export function useSync() {
             globalInitializationRef,
           });
 
-          // Force reset flags to allow initialization
-          globalInitializationRef = false;
-          initializationRef.current = false;
-
-          await initializeSync();
+          // Use unified starter to avoid duplicate inits
+          await startSyncIfReady('updateSyncChatId', newChatId);
         } else {
           logStore.logSystem('[FERN-DEBUG] No action taken in updateSyncChatId', {
             reason: !syncEnabled ? 'sync disabled' : 'already initialized',
