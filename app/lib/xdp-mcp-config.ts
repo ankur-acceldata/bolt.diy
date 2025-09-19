@@ -8,6 +8,7 @@ export interface XDPMCPConfig {
   accessKey: string;
   secretKey: string;
   baseUrl?: string;
+  mcpServerUrl?: string;
 }
 
 /**
@@ -27,6 +28,7 @@ export function createXDPMCPConfig({
   accessKey,
   secretKey,
   baseUrl = DEFAULT_XDP_CONFIG.baseUrl,
+  mcpServerUrl,
 }: XDPMCPConfig): MCPConfig {
   const callId = Math.random().toString(36).substring(7);
   const isBrowser = typeof window !== 'undefined';
@@ -36,16 +38,17 @@ export function createXDPMCPConfig({
     accessKey,
     secretKey,
     baseUrl,
+    mcpServerUrl,
     caller: callerInfo,
   });
 
   /*
    * Use HTTP/WS connection only - no stdio mode
-   * Get WebSocket URL from environment or use default
+   * Get WebSocket URL from mcpServerUrl parameter, environment, or use default
    */
   const mcpWebSocketUrl = isBrowser
     ? DEFAULT_XDP_CONFIG.webSocketUrl
-    : process.env.MCP_SERVER_URL || DEFAULT_XDP_CONFIG.webSocketUrl;
+    : mcpServerUrl || process.env.MCP_SERVER_URL || DEFAULT_XDP_CONFIG.webSocketUrl;
 
   console.log(`[${callId}] Environment debug:`, {
     MCP_SERVER_URL: process.env.MCP_SERVER_URL,

@@ -1,14 +1,24 @@
+import { type LoaderFunction, type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import { createScopedLogger } from '~/utils/logger';
 import { MCPService } from '~/lib/services/mcpService';
 
 const logger = createScopedLogger('api.mcp-check');
 
-export async function loader() {
+interface AppContext {
+  env?: {
+    MCP_SERVER_URL?: string;
+  };
+}
+
+export const loader: LoaderFunction = async ({ context }: LoaderFunctionArgs & { context: AppContext }) => {
   try {
     const mcpService = MCPService.getInstance();
 
-    // Ensure the service is initialized with XDP config
-    await mcpService._ensureInitialized();
+    // Pass environment context for initialization
+    const mcpServerUrl = context?.env?.MCP_SERVER_URL || process.env.MCP_SERVER_URL;
+
+    // Ensure the service is initialized with XDP config and context
+    await mcpService._ensureInitialized(mcpServerUrl);
 
     const serverTools = await mcpService.checkServersAvailabilities();
     const mcpConfig = mcpService.getCurrentConfig();
@@ -16,6 +26,7 @@ export async function loader() {
     console.log('🔍 MCP-CHECK API - Returning data:', {
       serverTools,
       mcpConfig,
+      mcpServerUrl,
     });
 
     return Response.json({
@@ -26,4 +37,4 @@ export async function loader() {
     logger.error('Error checking MCP servers:', error);
     return Response.json({ error: 'Failed to check MCP servers' }, { status: 500 });
   }
-}
+};

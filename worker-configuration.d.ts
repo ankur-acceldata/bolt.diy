@@ -3,6 +3,7 @@ interface Env {
   DEFAULT_NUM_CTX: Settings;
   BASE_PATH: Settings;
   VITE_BASE_PATH: Settings;
+  MCP_SERVER_URL: string;
   ANTHROPIC_API_KEY: string;
   OPENAI_API_KEY: string;
   GROQ_API_KEY: string;

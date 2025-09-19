@@ -136,7 +136,7 @@ export class MCPService {
     return MCPService._instance;
   }
 
-  async _ensureInitialized() {
+  async _ensureInitialized(mcpServerUrl?: string) {
     if (this._initialized) {
       return;
     }
@@ -150,9 +150,10 @@ export class MCPService {
           accessKey: DEFAULT_XDP_CONFIG.accessKey,
           secretKey: DEFAULT_XDP_CONFIG.secretKey,
           baseUrl: DEFAULT_XDP_CONFIG.baseUrl,
+          mcpServerUrl,
         });
 
-        console.log('🔧 MCP SERVICE - Auto-initializing with XDP config');
+        console.log('🔧 MCP SERVICE - Auto-initializing with XDP config, mcpServerUrl:', mcpServerUrl);
 
         try {
           const serverTools = await this.updateConfig(xdpConfig);
