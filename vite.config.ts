@@ -157,12 +157,12 @@ export default defineConfig((config) => {
                 });
               },
             };
-            proxyConfig[`${normalizedBasePath}/ws/fern-fs`] = {
+            proxyConfig[`${normalizedBasePath}/api/ws/fern-fs`] = {
               target: proxyUrls.wsUrl,
               changeOrigin: true,
               rewrite: (path: string) =>
                 path.replace(
-                  new RegExp(`^${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/ws/fern-fs`),
+                  new RegExp(`^${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/ws/fern-fs`),
                   '/ws',
                 ),
               ws: true,
@@ -174,10 +174,10 @@ export default defineConfig((config) => {
               changeOrigin: true,
               rewrite: (path: string) => path.replace(/^\/api\/fern-fs/, '/api'),
             };
-            proxyConfig['/ws/fern-fs'] = {
+            proxyConfig['/api/ws/fern-fs'] = {
               target: proxyUrls.wsUrl,
               changeOrigin: true,
-              rewrite: (path: string) => path.replace(/^\/ws\/fern-fs/, '/ws'),
+              rewrite: (path: string) => path.replace(/^\/api\/ws\/fern-fs/, '/ws'),
               ws: true,
             };
           }
@@ -318,12 +318,12 @@ export default defineConfig((config) => {
               });
             },
           };
-          proxyConfig[`${normalizedBasePath}/ws/fern-fs`] = {
+          proxyConfig[`${normalizedBasePath}/api/ws/fern-fs`] = {
             target: proxyUrls.wsUrl,
             changeOrigin: true,
             rewrite: (path: string) =>
               path.replace(
-                new RegExp(`^${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/ws/fern-fs`),
+                new RegExp(`^${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/ws/fern-fs`),
                 '/ws',
               ),
             ws: true,
@@ -335,10 +335,10 @@ export default defineConfig((config) => {
             changeOrigin: true,
             rewrite: (path: string) => path.replace(/^\/api\/fern-fs/, '/api'),
           };
-          proxyConfig['/ws/fern-fs'] = {
+          proxyConfig['/api/ws/fern-fs'] = {
             target: proxyUrls.wsUrl,
             changeOrigin: true,
-            rewrite: (path: string) => path.replace(/^\/ws\/fern-fs/, '/ws'),
+            rewrite: (path: string) => path.replace(/^\/api\/ws\/fern-fs/, '/ws'),
             ws: true,
           };
         }

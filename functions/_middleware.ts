@@ -395,7 +395,7 @@ export const onRequest = async ({ request, next, env }: EventContext): Promise<R
       // Default to localhost:8080 for local dev, ad-fern-fs for production
       const isProduction = env.RUNNING_IN_DOCKER === 'true' || url.hostname !== 'localhost';
       const fernFsUrl = env.FERN_FS_URL || (isProduction ? 'ad-fern-fs' : 'localhost:8080');
-      const fernFsPath = pathWithoutBase.replace('/api/ws/fern-fs', '/api/ws');
+      const fernFsPath = pathWithoutBase.replace('/api/ws/fern-fs', '/ws');
       const targetUrl = `ws://${fernFsUrl}${fernFsPath}${url.search}`;
       
       console.log(`Proxying WebSocket fern-fs request: ${url.pathname} -> ${targetUrl}`);

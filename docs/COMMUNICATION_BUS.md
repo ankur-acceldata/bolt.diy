@@ -34,7 +34,7 @@ useCommunicationBusChild({
 ### 2. Usage in Components
 
 ```typescript
-import { useCommunicationBusChild } from '~/lib/hooks/useCommunicationBus';
+import { useCommunicationBusChild } from '~/lib/hooks/communicationBus';
 
 function MyComponent() {
   const bus = useCommunicationBusChild();
@@ -117,8 +117,14 @@ interface BusMessage<T = any> {
 ```typescript
 enum MessageType {
   READY = 'READY',         // System ready signal
-  HEARTBEAT = 'HEARTBEAT', // Connection health check
   ERROR = 'ERROR',         // Error notifications
+  RESPONSE_IN_PROGRESS = 'ResponseInProgress',
+  RESPONSE_GENERATED = 'ResponseGenerated',
+  RESPONSE_RESET = 'ResponseReset',
+  GET_RESPONSE_STATUS = 'GetResponseStatus', // Parent request for current generation state
+  RESPONSE_STATUS = 'ResponseStatus',       // Child response with current state snapshot
+  GET_PROJECT_ID = 'GET_PROJECT_ID',                     // Request current project ID
+  GET_PROJECT_ID_RESPONSE = 'GET_PROJECT_ID_RESPONSE',   // Respond with project ID
 }
 ```
 
@@ -168,7 +174,21 @@ const dataResult = await bus.sendMessageWithResponse({
   timeout: 10000,
   responseType: 'DATA_RESPONSE' // Will validate that response has this type
 });
+
+// Ask the iframe for its current project ID
+const { projectId } = await bus.sendMessageWithResponse({
+  type: 'GET_PROJECT_ID',
+}, {
+  responseType: 'GET_PROJECT_ID_RESPONSE',
+});
 ```
+
+### Parent implementation notes for `GET_PROJECT_ID`
+
+- The parent should treat `GET_PROJECT_ID` as a lightweight query that returns `{ projectId: string }` in the payload.
+- Always specify `responseType: MessageType.GET_PROJECT_ID_RESPONSE` when calling `sendMessageWithResponse` so unexpected responses are ignored.
+- If the iframe responds with the fallback value `'default'`, it means the chat has not finished bootstrapping a real project yet; retry after the chat signals readiness.
+- Cache the value on the parent only for the current iframe session—any navigation inside the iframe may update the active chat, so re-fetch before making project-scoped backend calls.
 
 ### 3. Listening for Parent Messages
 
@@ -281,7 +301,7 @@ useCommunicationBusChild({
 
 ```typescript
 import React, { useState, useEffect } from 'react';
-import { useCommunicationBusChild } from '~/lib/hooks/useCommunicationBus';
+import { useCommunicationBusChild } from '~/lib/hooks/communicationBus';
 
 export function EditorComponent() {
   const bus = useCommunicationBusChild();

@@ -284,10 +284,16 @@ ${value.content}
 
   const createNewChatProject = async () => {
     try {
+      logStore.logSystem('[FERN-DEBUG] createNewChatProject called', {
+        timestamp: new Date().toISOString(),
+        currentUrl: typeof window !== 'undefined' ? window.location.href : 'server-side',
+      });
+
       // Check if we already have a chatId to prevent duplicate creation
       const existingChatId = chatId.get();
 
       if (existingChatId) {
+        logStore.logSystem('[FERN-DEBUG] Chat project already exists, skipping creation', { existingChatId });
         logger.info('Chat project already exists:', existingChatId);
         setUrlId(existingChatId);
 
@@ -301,36 +307,69 @@ ${value.content}
         description: currentDescription || 'AI Chat Project',
       };
 
+      logStore.logSystem('[FERN-DEBUG] Creating new backend project...', { projectData });
       logger.info('Creating new backend project...');
 
-      const backendProjectId = await createProjectAndGetId(projectData);
+      try {
+        const backendProjectId = await createProjectAndGetId(projectData);
 
-      // Set the chat ID to the backend project ID immediately
-      chatId.set(backendProjectId);
-      setUrlId(backendProjectId);
-
-      // Store empty chat in IndexedDB immediately so it can be loaded later
-      if (db) {
-        try {
-          await setMessages(
-            db,
-            backendProjectId,
-            [], // Empty messages array
-            backendProjectId, // urlId same as id in unified system
-            currentDescription || 'New Chat',
-            undefined,
-            { gitUrl: '', projectId: backendProjectId }, // Basic metadata
-          );
-          logger.info('✅ Stored empty chat in IndexedDB:', backendProjectId);
-        } catch (error) {
-          logger.error('❌ Failed to store empty chat in IndexedDB:', error);
+        if (!backendProjectId) {
+          throw new Error('No project ID returned from backend');
         }
+
+        logStore.logSystem('[FERN-DEBUG] Backend project created successfully', {
+          backendProjectId,
+          type: typeof backendProjectId,
+        });
+
+        // Continue with setting the project ID
+        logStore.logSystem('[FERN-DEBUG] Setting chatId and URL...', {
+          backendProjectId,
+          currentChatId: chatId.get(),
+        });
+
+        // Set the chat ID to the backend project ID immediately
+        chatId.set(backendProjectId);
+        setUrlId(backendProjectId);
+
+        logStore.logSystem('[FERN-DEBUG] ChatID set and URL updated', {
+          backendProjectId,
+          newUrl: typeof window !== 'undefined' ? window.location.href : 'server-side',
+        });
+
+        // Store empty chat in IndexedDB immediately so it can be loaded later
+        if (db) {
+          try {
+            await setMessages(
+              db,
+              backendProjectId,
+              [], // Empty messages array
+              backendProjectId, // urlId same as id in unified system
+              currentDescription || 'New Chat',
+              undefined,
+              { gitUrl: '', projectId: backendProjectId }, // Basic metadata
+            );
+            logger.info('✅ Stored empty chat in IndexedDB:', backendProjectId);
+          } catch (error) {
+            logger.error('❌ Failed to store empty chat in IndexedDB:', error);
+          }
+        }
+
+        // Update URL with backend projectId
+        window.history.replaceState({}, '', createChatUrl(backendProjectId));
+
+        logger.info('Created new chat with backend projectId:', backendProjectId);
+      } catch (projectCreationError: any) {
+        logStore.logError('[FERN-DEBUG] Failed to create backend project', projectCreationError);
+
+        // Log full error details for debugging
+        logStore.logSystem('[FERN-DEBUG] Project creation error details', {
+          message: projectCreationError.message,
+          stack: projectCreationError.stack,
+          fullError: JSON.stringify(projectCreationError, Object.getOwnPropertyNames(projectCreationError)),
+        });
+        throw projectCreationError;
       }
-
-      // Update URL with backend projectId
-      window.history.replaceState({}, '', createChatUrl(backendProjectId));
-
-      logger.info('Created new chat with backend projectId:', backendProjectId);
     } catch (error) {
       logger.error('Failed to create backend project for new chat:', error);
       throw error;

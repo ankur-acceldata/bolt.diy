@@ -1,7 +1,9 @@
 import { createScopedLogger } from '~/utils/logger';
 import { PostMessageService } from './postMessageService';
 import { MessageType } from '~/types/communicationBus';
-import type { JobConfig } from '~/types/jobConfig';
+import type { DataplaneInfoPayload } from '~/types/communicationBus';
+import { getCurrentChatId, setProjectId } from '~/utils/fileLocks';
+import { logStore } from '~/lib/stores/logs';
 
 const logger = createScopedLogger('ProjectService');
 
@@ -46,7 +48,7 @@ export class ProjectService {
    */
   private static async _getDataplaneId(bus?: CommunicationBus): Promise<number | undefined> {
     try {
-      logger.info('Starting dataplaneId fetch...');
+      logger.info('Starting dataplaneId fetch using request-response pattern...');
 
       if (!bus) {
         logger.info('No communication bus provided, trying to create temporary one...');
@@ -54,71 +56,127 @@ export class ProjectService {
         // Create a temporary communication bus instance only if none provided
         const tempBus = new PostMessageService({ timeout: 10000 });
 
+        // Critical: Mark bus as ready to send messages immediately
+        tempBus.setReady();
+
+        // Wait for parent handlers to be ready
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         // Only attempt if we're in an iframe environment
         if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-          logger.info('In iframe environment, attempting to get dataplaneId...');
-
-          const response = await tempBus.sendMessageWithResponse<{ stages: string[] }, JobConfig>(
-            {
-              type: MessageType.GET_DEFAULT_ADHOC_RUN_CONFIG,
-              payload: {
-                stages: [], // Empty stages for getting default config
+          try {
+            const response = await tempBus.sendMessageWithResponse<{}, DataplaneInfoPayload>(
+              {
+                type: MessageType.GET_DATAPLANE_INFO,
               },
-            },
-            {
-              responseType: MessageType.GET_DEFAULT_ADHOC_RUN_CONFIG_RESPONSE,
-              timeout: 10000,
-            },
-          );
+              {
+                responseType: MessageType.GET_DATAPLANE_INFO_RESPONSE,
+                timeout: 10000,
+              },
+            );
 
-          logger.info('Received response from communication bus:', JSON.stringify(response, null, 2));
+            const dataplaneId = response?.dataplaneId ? Number(response.dataplaneId) : undefined;
 
-          // Handle both array and single object responses (like adhoc-run does)
-          const jobConfig = Array.isArray(response) ? response[0] : response;
-          const dataplaneId = jobConfig?.dataplaneId ? Number(jobConfig.dataplaneId) : undefined;
-          logger.info('Extracted job config:', jobConfig);
-          logger.info('Retrieved dataplaneId from communication bus:', dataplaneId);
+            // Clean up the temporary bus
+            tempBus.destroy();
 
-          // Clean up the temporary bus
-          tempBus.destroy();
+            return dataplaneId;
+          } catch (error) {
+            logger.error('PostMessageService failed, will try direct approach:', error);
+            tempBus.destroy();
 
-          return dataplaneId;
+            // Fallback to direct postMessage approach
+            return await ProjectService._getDataplaneIdDirect();
+          }
         }
 
-        logger.info('Not in iframe environment, no dataplaneId available');
         tempBus.destroy();
 
         return undefined;
       }
 
       // Use provided bus instance
-      logger.info('Using provided communication bus...');
-
-      const response = await bus.sendMessageWithResponse<{ stages: string[] }, JobConfig>(
+      const response = await bus.sendMessageWithResponse<{}, DataplaneInfoPayload>(
         {
-          type: MessageType.GET_DEFAULT_ADHOC_RUN_CONFIG,
-          payload: {
-            stages: [], // Empty stages for getting default config
-          },
+          type: MessageType.GET_DATAPLANE_INFO,
         },
         {
-          responseType: MessageType.GET_DEFAULT_ADHOC_RUN_CONFIG_RESPONSE,
+          responseType: MessageType.GET_DATAPLANE_INFO_RESPONSE,
           timeout: 10000,
         },
       );
 
-      logger.info('Received response from communication bus:', JSON.stringify(response, null, 2));
-
-      // Handle both array and single object responses (like adhoc-run does)
-      const jobConfig = Array.isArray(response) ? response[0] : response;
-      const dataplaneId = jobConfig?.dataplaneId ? Number(jobConfig.dataplaneId) : undefined;
-      logger.info('Extracted job config:', jobConfig);
-      logger.info('Retrieved dataplaneId from communication bus:', dataplaneId);
+      const dataplaneId = response?.dataplaneId ? Number(response.dataplaneId) : undefined;
 
       return dataplaneId;
     } catch (error) {
       logger.warn('Failed to get dataplaneId from communication bus:', error);
+      return undefined;
+    }
+  }
 
+  /**
+   * Direct postMessage fallback for getting dataplane info
+   */
+  private static async _getDataplaneIdDirect(): Promise<number | undefined> {
+    try {
+      if (typeof window === 'undefined' || !window.parent || window.parent === window) {
+        return undefined;
+      }
+
+      const messageId = `dataplane-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+      // Send request directly
+      const requestMessage = {
+        type: 'GET_DATAPLANE_INFO',
+        messageId,
+        timestamp: Date.now(),
+        source: 'bolt.diy',
+      };
+
+      window.parent.postMessage(requestMessage, '*');
+
+      // Listen for response
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', messageHandler);
+          resolve(undefined);
+        }, 10000);
+
+        const messageHandler = (event: MessageEvent) => {
+          if (event.data.type === 'GET_DATAPLANE_INFO_RESPONSE' && event.data.responseId === messageId) {
+            clearTimeout(timeout);
+            window.removeEventListener('message', messageHandler);
+
+            const dataplaneId = event.data.payload?.dataplaneId ? Number(event.data.payload.dataplaneId) : undefined;
+            resolve(dataplaneId);
+          }
+        };
+
+        window.addEventListener('message', messageHandler);
+      });
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Public utility function to get dataplane info from parent iframe
+   * Can be used throughout the application
+   */
+  static async getDataplaneInfo(): Promise<DataplaneInfoPayload | undefined> {
+    try {
+      const dataplaneId = await this._getDataplaneId();
+
+      if (dataplaneId) {
+        return {
+          dataplaneId: String(dataplaneId),
+          dataplaneName: `Dataplane ${dataplaneId}`, // Fallback name
+        };
+      }
+
+      return undefined;
+    } catch {
       return undefined;
     }
   }
@@ -158,33 +216,141 @@ export class ProjectService {
       logger.info('Creating project with data:', projectData);
       logger.info('=== MAKING API CALL TO /api/projects ===');
 
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(projectData),
-      });
+      let response;
 
-      if (!response.ok) {
-        throw new Error(`Project creation failed: ${response.status} ${response.statusText}`);
+      try {
+        response = await fetch('/api/projects', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(projectData),
+        });
+
+        logStore.logSystem('[FERN-DEBUG] Project API response received', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          url: response.url,
+        });
+      } catch (fetchError: any) {
+        logStore.logError('[FERN-DEBUG] Project API fetch failed', fetchError);
+        logStore.logSystem('[FERN-DEBUG] Fetch error details', {
+          message: fetchError.message,
+          stack: fetchError.stack,
+          fullError: JSON.stringify(fetchError, Object.getOwnPropertyNames(fetchError)),
+        });
+        throw fetchError;
       }
 
-      const result: any = await response.json();
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unable to read error text');
+        logStore.logError('[FERN-DEBUG] Project API request failed', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+        });
+        throw new Error(`Project creation failed: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      let result: any;
+
+      try {
+        result = await response.json();
+        logStore.logSystem('[FERN-DEBUG] Project API JSON response parsed', {
+          success: result?.success,
+          hasData: !!result?.data,
+          resultKeys: Object.keys(result || {}),
+        });
+      } catch (jsonError: any) {
+        logStore.logError('[FERN-DEBUG] Failed to parse project API JSON response', jsonError);
+        throw new Error(`Failed to parse API response: ${jsonError.message}`);
+      }
 
       if (!result.success) {
+        logStore.logError('[FERN-DEBUG] Project API returned unsuccessful result', {
+          success: result.success,
+          error: result.error,
+          fullResult: JSON.stringify(result),
+        });
         throw new Error(result.error || 'Project creation failed');
       }
 
       // Handle nested response structure: result.data.data.id
       const responseData = result.data?.data || result.data;
 
+      logStore.logSystem('[FERN-DEBUG] Processing project response data', {
+        hasResponseData: !!responseData,
+        responseDataKeys: Object.keys(responseData || {}),
+        id: responseData?.id,
+        idType: typeof responseData?.id,
+      });
+
       if (!responseData?.id) {
         logger.error('Project response structure:', JSON.stringify(result, null, 2));
+        logStore.logError('[FERN-DEBUG] Project response missing id', {
+          responseData,
+          fullResult: result,
+        });
         throw new Error('Project response missing id');
       }
 
       logger.info('Created backend project:', responseData.id);
+
+      // Store the backend project ID mapping for both current (possibly 'default') and real IDs
+      const currentChatId = getCurrentChatId();
+
+      try {
+        // Map whatever the current chatId is (often 'default' pre-URL update) to the backend project id
+        setProjectId(currentChatId, responseData.id);
+
+        // Also assert the unified mapping: realId -> realId
+        setProjectId(responseData.id.toString(), responseData.id.toString());
+
+        // Persist a recent project ID for robust fallback discovery
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('bolt_recent_project_id', responseData.id.toString());
+          } catch {}
+        }
+      } catch (e) {
+        logger.warn('Failed to persist project ID mappings to localStorage', e);
+      }
+
+      // Trigger immediate sync initialization after project ID is set
+      try {
+        // Use setTimeout to ensure setProjectId has completed
+        setTimeout(async () => {
+          logStore.logSystem('[FERN-DEBUG] Triggering immediate sync after project creation', {
+            projectId: responseData.id,
+            currentChatId,
+          });
+
+          // Dispatch a custom event to notify sync services
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('project-created', {
+                detail: {
+                  projectId: responseData.id,
+
+                  // Send the real chatId (backend project id) to avoid reliance on polling/aliases
+                  chatId: responseData.id.toString(),
+                },
+              }),
+            );
+          }
+        }, 10); // Small delay to ensure setProjectId is persisted
+      } catch (syncTriggerError) {
+        logStore.logError('[FERN-DEBUG] Failed to trigger immediate sync', syncTriggerError);
+
+        // Don't throw here - project creation should still succeed
+      }
+
+      logStore.logSystem('[FERN-DEBUG] Project creation completed successfully', {
+        projectId: responseData.id,
+        currentChatId,
+        timestamp: new Date().toISOString(),
+      });
 
       return responseData.id;
     } catch (error) {
@@ -268,6 +434,10 @@ export class ProjectService {
       }
 
       logger.info('Updated backend project:', responseData.id);
+
+      // Store the backend project ID for GET_PROJECT_ID requests
+      const currentChatId = getCurrentChatId();
+      setProjectId(currentChatId, responseData.id);
 
       return responseData;
     } catch (error) {

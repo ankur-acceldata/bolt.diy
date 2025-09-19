@@ -26,6 +26,7 @@ import { supabaseConnection } from '~/lib/stores/supabase';
 import { defaultDesignScheme, type DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import { debugProjectId } from '~/utils/fileLocks';
+import { getFernSyncService } from '~/lib/sync/fernSyncService';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
@@ -296,10 +297,34 @@ export const ChatImpl = memo(
               return;
             }
 
-            // Update sync service with the real chatId
+            // Update sync service with the real chatId and ensure initialization completes
             if (updateSyncChatId && newChatId && newChatId !== 'default') {
               await updateSyncChatId(newChatId);
               logger.info('✅ Sync service updated with new chatId:', newChatId);
+
+              // Wait briefly for Fern to initialize and connect (non-fatal timeout)
+              const waitForFernInit = async (timeoutMs = 4000) => {
+                const start = Date.now();
+
+                while (Date.now() - start < timeoutMs) {
+                  const svc = getFernSyncService();
+
+                  if (svc) {
+                    const status = svc.getSyncStatus();
+
+                    if (status.connected || status.isRunning) {
+                      return true;
+                    }
+                  }
+
+                  await new Promise((r) => setTimeout(r, 50));
+                }
+
+                return false;
+              };
+
+              const ready = await waitForFernInit(4000);
+              logger.info('🧩 Fern init wait done', { ready });
             }
           } catch (error) {
             logger.error('❌ Failed to create chat project before sending message:', error);

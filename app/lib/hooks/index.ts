@@ -9,4 +9,5 @@ export { useNotifications } from './useNotifications';
 export { useConnectionStatus } from './useConnectionStatus';
 export { useSync } from './useSync';
 export { useLogStream } from './useLogStream';
-export * from './useCommunicationBus';
+export * from './communicationBus';
+export { useDataplaneInfo, useDataplaneInfoWithState } from './useDataplaneInfo';

@@ -5,8 +5,8 @@
 export enum MessageType {
   // System messages
   READY = 'READY',
-  HEARTBEAT = 'HEARTBEAT',
   ERROR = 'ERROR',
+  DATAPLANE_INFO = 'DATAPLANE_INFO',
 
   // Demo/Test messages
   GET_DATA = 'GET_DATA',
@@ -22,10 +22,17 @@ export enum MessageType {
   GET_DEFAULT_ADHOC_RUN_CONFIG_RESPONSE = 'GET_DEFAULT_ADHOC_RUN_CONFIG_RESPONSE',
   GET_PIPELINE_CONFIG = 'GET_PIPELINE_CONFIG',
   GET_PIPELINE_CONFIG_RESPONSE = 'GET_PIPELINE_CONFIG_RESPONSE',
+  GET_PROJECT_ID = 'GET_PROJECT_ID',
+  GET_PROJECT_ID_RESPONSE = 'GET_PROJECT_ID_RESPONSE',
+  GET_DATAPLANE_INFO = 'GET_DATAPLANE_INFO',
+  GET_DATAPLANE_INFO_RESPONSE = 'GET_DATAPLANE_INFO_RESPONSE',
 
   // Response status messages
   RESPONSE_IN_PROGRESS = 'ResponseInProgress',
   RESPONSE_GENERATED = 'ResponseGenerated',
+  RESPONSE_RESET = 'ResponseReset',
+  GET_RESPONSE_STATUS = 'GetResponseStatus',
+  RESPONSE_STATUS = 'ResponseStatus',
 
   // Job promotion messages
   PROMOTE_TO_JOB = 'PROMOTE_TO_JOB',
@@ -39,6 +46,8 @@ export interface BusMessage<T = any> {
   responseId?: string;
   timestamp?: number;
   source?: string;
+  visibility?: 'private' | 'public';
+  reason?: string;
 }
 
 export type MessageHandler<T = any> = (payload: T, message: BusMessage<T>) => void;
@@ -58,4 +67,9 @@ export interface BusStatus {
   messagesReceived: number;
   pendingResponses: number;
   queuedMessages: number;
+}
+
+export interface DataplaneInfoPayload {
+  dataplaneId: string;
+  dataplaneName: string;
 }

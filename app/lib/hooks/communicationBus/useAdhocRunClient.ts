@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'react-toastify';
-import { useCommunicationBusChild } from '~/lib/hooks';
+import { useCommunicationBusChild } from './useCommunicationBusChild';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { createScopedLogger } from '~/utils/logger';
 import { extractShellCommands } from '~/lib/utils/shellCommands';
@@ -8,9 +8,9 @@ import { getEditedJobConfigFromXdp, getJobConfigFromXdp } from '~/lib/services/j
 import { getExecutionConfig } from '~/lib/utils/executionConfig';
 import type { AdhocRunRequestBody, ExecuteAdhocRunResponse, JobType } from '~/types/jobConfig';
 
-const logger = createScopedLogger('useAdhocRun');
+const logger = createScopedLogger('useAdhocRunClient');
 
-export function useAdhocRun() {
+export function useAdhocRunClient() {
   const [isExecuting, setIsExecuting] = useState(false);
   const bus = useCommunicationBusChild();
 

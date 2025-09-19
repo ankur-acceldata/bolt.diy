@@ -3,9 +3,7 @@
  * Preventing TS checks with files presented in the video for a better presentation.
  */
 import type { JSONValue, Message } from 'ai';
-
-// import { generateId } from 'ai';
-import React, { type RefCallback, useEffect, useState, useRef } from 'react';
+import React, { type RefCallback, useEffect, useState, useRef, useCallback } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
@@ -13,6 +11,7 @@ import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { PostMessageService } from '~/lib/services/postMessageService';
 import { MessageType } from '~/types/communicationBus';
+import type { BusMessage } from '~/types/communicationBus';
 
 import { Messages } from './Messages.client';
 import { getApiKeysFromCookies } from './APIKeyManager';
@@ -159,11 +158,36 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const postMessageServiceRef = useRef<PostMessageService | null>(null);
+    const lastResponseBroadcastRef = useRef<{
+      state: 'idle' | 'in-progress' | 'generated' | 'error';
+      message?: string;
+      reason?: string;
+    }>({
+      state: 'idle',
+      message: undefined,
+      reason: undefined,
+    });
 
     useEffect(() => {
       // Initialize PostMessageService
       if (!postMessageServiceRef.current) {
-        postMessageServiceRef.current = new PostMessageService();
+        const service = new PostMessageService();
+        service.setReady();
+
+        const resetPayload = {
+          type: MessageType.RESPONSE_RESET,
+          payload: {
+            message: 'Response reset',
+            status: 'idle',
+            timestamp: Date.now(),
+            reason: 'initial-load',
+          },
+          visibility: 'public' as const,
+        } satisfies Partial<BusMessage<any>>;
+
+        service.sendMessage(resetPayload);
+        postMessageServiceRef.current = service;
+        lastResponseBroadcastRef.current = { state: 'idle', message: 'Response reset', reason: 'initial-load' };
       }
 
       return () => {
@@ -179,30 +203,204 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     }, [expoUrl]);
 
     useEffect(() => {
-      if (data) {
-        const progressList = data.filter(
-          (x) => typeof x === 'object' && (x as any).type === 'progress',
-        ) as ProgressAnnotation[];
-        setProgressAnnotations(progressList);
+      if (!Array.isArray(data) || data.length === 0) {
+        return;
       }
+
+      const progressList = data.filter(
+        (x) => typeof x === 'object' && (x as any).type === 'progress',
+      ) as ProgressAnnotation[];
+      setProgressAnnotations(progressList);
     }, [data]);
     useEffect(() => {
-      console.log(transcript);
+      // Transcript effect
     }, [transcript]);
 
     useEffect(() => {
       onStreamingChange?.(isStreaming);
+    }, [isStreaming, onStreamingChange]);
 
-      // Only broadcast response status if chat has started
-      if (postMessageServiceRef.current && chatStarted) {
-        const messageType = isStreaming ? MessageType.RESPONSE_IN_PROGRESS : MessageType.RESPONSE_GENERATED;
+    const buildStatusPayload = useCallback(() => {
+      return {
+        state: lastResponseBroadcastRef.current.state,
+        message: lastResponseBroadcastRef.current.message,
+        reason: lastResponseBroadcastRef.current.reason,
+        timestamp: Date.now(),
+      };
+    }, []);
 
-        postMessageServiceRef.current.sendMessage({
-          type: messageType,
-          payload: { isStreaming },
+    const sendStatusMessage = useCallback(
+      (options?: { responseId?: string; visibility?: 'public' | 'private' }) => {
+        const service = postMessageServiceRef.current;
+
+        if (!service) {
+          return;
+        }
+
+        service.sendMessage({
+          type: MessageType.RESPONSE_STATUS,
+          payload: buildStatusPayload(),
+          responseId: options?.responseId,
+          visibility: options?.visibility,
+        });
+      },
+      [buildStatusPayload],
+    );
+
+    const broadcastResponseState = useCallback(
+      (
+        state: 'idle' | 'in-progress' | 'generated' | 'error',
+        annotation?: ProgressAnnotation | { message?: string; status?: string; reason?: string },
+      ) => {
+        const service = postMessageServiceRef.current;
+        const lastState = lastResponseBroadcastRef.current.state;
+        const lastMessage = lastResponseBroadcastRef.current.message;
+        const lastReason = lastResponseBroadcastRef.current.reason;
+        const incomingMessage = annotation?.message;
+        const incomingReason = annotation && 'reason' in annotation ? annotation.reason : undefined;
+
+        if (state === lastState && incomingMessage === lastMessage && incomingReason === lastReason) {
+          return;
+        }
+
+        const basePayload: Record<string, any> = {
+          message: incomingMessage,
+          status: annotation?.status,
+          timestamp: Date.now(),
+          reason: incomingReason,
+        };
+
+        if (service) {
+          if (state === 'idle') {
+            service.sendMessage({
+              type: MessageType.RESPONSE_RESET,
+              payload: basePayload,
+              visibility: 'public',
+            });
+          } else if (state === 'in-progress') {
+            service.sendMessage({
+              type: MessageType.RESPONSE_IN_PROGRESS,
+              payload: basePayload,
+              visibility: 'public',
+            });
+          } else {
+            service.sendMessage({
+              type: MessageType.RESPONSE_GENERATED,
+              payload: {
+                ...basePayload,
+                success: state === 'generated',
+                error: state === 'error',
+              },
+              visibility: 'public',
+            });
+          }
+        }
+
+        lastResponseBroadcastRef.current = {
+          state,
+          message: incomingMessage,
+          reason: incomingReason,
+        };
+
+        if (state !== 'idle') {
+          sendStatusMessage();
+        }
+      },
+      [sendStatusMessage],
+    );
+
+    useEffect(() => {
+      const handleBeforeUnload = () => {
+        broadcastResponseState('idle', { message: 'Response reset', reason: 'frame-unload' });
+        lastResponseBroadcastRef.current = { state: 'idle', message: undefined, reason: 'frame-unload' };
+      };
+
+      window.addEventListener('beforeunload', handleBeforeUnload);
+
+      return () => {
+        broadcastResponseState('idle', { message: 'Response reset', reason: 'frame-destroy' });
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        lastResponseBroadcastRef.current = { state: 'idle', message: undefined, reason: 'frame-destroy' };
+      };
+    }, [broadcastResponseState]);
+
+    const previousStreamingRef = useRef(false);
+
+    useEffect(() => {
+      const wasStreaming = previousStreamingRef.current;
+      previousStreamingRef.current = isStreaming;
+
+      if (isStreaming && !wasStreaming) {
+        setProgressAnnotations([]);
+        lastResponseBroadcastRef.current = { state: 'idle', message: undefined, reason: 'stream-start' };
+        broadcastResponseState('in-progress', {
+          message: 'Generating Response',
+          status: 'in-progress',
+          label: 'response',
+        });
+
+        return;
+      }
+
+      if (!isStreaming && wasStreaming && lastResponseBroadcastRef.current.state === 'in-progress') {
+        broadcastResponseState('error', {
+          message: 'Response not generated',
+          status: 'complete',
+          label: 'response',
         });
       }
-    }, [isStreaming, onStreamingChange, chatStarted]);
+    }, [broadcastResponseState, isStreaming]);
+
+    useEffect(() => {
+      if (!chatStarted) {
+        lastResponseBroadcastRef.current = { state: 'idle', message: undefined, reason: 'chat-not-started' };
+        return;
+      }
+
+      const responseAnnotations = progressAnnotations.filter((annotation) => annotation.label === 'response');
+      const latestAnnotation = responseAnnotations[responseAnnotations.length - 1];
+
+      if (latestAnnotation?.status === 'complete' && latestAnnotation.message === 'Response Generated') {
+        broadcastResponseState('generated', latestAnnotation);
+        return;
+      }
+
+      if (latestAnnotation?.status === 'complete' && latestAnnotation.message !== 'Response Generated') {
+        broadcastResponseState('error', latestAnnotation);
+        return;
+      }
+
+      if (latestAnnotation?.status === 'in-progress') {
+        broadcastResponseState('in-progress', latestAnnotation);
+        return;
+      }
+
+      if (lastResponseBroadcastRef.current.state !== 'idle') {
+        lastResponseBroadcastRef.current = {
+          state: 'idle',
+          message: undefined,
+          reason: 'idle-reset',
+        };
+      }
+    }, [broadcastResponseState, chatStarted, progressAnnotations]);
+
+    useEffect(() => {
+      const service = postMessageServiceRef.current;
+
+      if (!service) {
+        return undefined;
+      }
+
+      const unsubscribe = service.on(MessageType.GET_RESPONSE_STATUS, (_payload, message) => {
+        sendStatusMessage({ responseId: message.messageId });
+      });
+
+      return () => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      };
+    }, [sendStatusMessage]);
 
     useEffect(() => {
       if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
