@@ -46,13 +46,11 @@ export function createXDPMCPConfig({
    * Use HTTP/WS connection only - no stdio mode
    * Get WebSocket URL from mcpServerUrl parameter, environment, or use default
    */
-  const mcpWebSocketUrl = isBrowser
-    ? DEFAULT_XDP_CONFIG.webSocketUrl
-    : mcpServerUrl || process.env.MCP_SERVER_URL || DEFAULT_XDP_CONFIG.webSocketUrl;
+  const mcpWebSocketUrl = process.env.MCP_SERVER_URL || 'ws://localhost:9099/ws';
 
   console.log(`[${callId}] Environment debug:`, {
     MCP_SERVER_URL: process.env.MCP_SERVER_URL,
-    DEFAULT_webSocketUrl: DEFAULT_XDP_CONFIG.webSocketUrl,
+    DEFAULT_webSocketUrl: process.env.MCP_SERVER_URL || DEFAULT_XDP_CONFIG.webSocketUrl,
     mcpWebSocketUrl,
   });
 
