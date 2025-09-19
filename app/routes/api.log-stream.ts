@@ -41,7 +41,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
             // Use centralized AcceldataService for consistent header handling
             const response = await AcceldataService.callStream(
-              `/xdp-cp-service/api/job/run/logs/${runId}/sse?tailLines=${tailLines}`,
+              `/api/job/run/logs/${runId}/sse?tailLines=${tailLines}`,
               {
                 requestHeaders: request.headers,
                 request,
