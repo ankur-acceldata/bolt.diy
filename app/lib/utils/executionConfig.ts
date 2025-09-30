@@ -1,4 +1,7 @@
-import { extractShellCommands } from './shellCommands';
+import { extractShellCommands, getLastCompleteShellCommands } from './shellCommands';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('executionConfig');
 
 export interface TemplateConfig {
   jobType: string;
@@ -43,8 +46,36 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
 
   const defaults = getTemplateDefaults(template?.id);
 
-  // Use extracted commands if available, otherwise fall back to template defaults
-  const stages = extractedCommands.length > 0 ? extractedCommands : defaults.fallbackStages;
+  /*
+   * Use extracted commands if available, otherwise try to get last complete AI commands,
+   * and only fall back to hardcoded defaults as a last resort
+   */
+  let stages = extractedCommands;
+
+  if (stages.length === 0) {
+    // Try to get the last complete set of shell commands from AI
+    const lastCompleteCommands = getLastCompleteShellCommands();
+
+    if (lastCompleteCommands.length > 0) {
+      stages = lastCompleteCommands;
+      logger.info('Using last complete AI command set instead of hardcoded fallback:', {
+        commands: lastCompleteCommands,
+        templateId: template?.id,
+      });
+    } else {
+      // Final fallback to hardcoded defaults
+      stages = defaults.fallbackStages;
+      logger.warn('No AI commands found, using hardcoded fallback stages:', {
+        fallbackStages: defaults.fallbackStages,
+        templateId: template?.id,
+      });
+    }
+  } else {
+    logger.info('Using extracted commands from latest artifact:', {
+      commands: stages,
+      templateId: template?.id,
+    });
+  }
 
   return {
     jobType: defaults.jobType,

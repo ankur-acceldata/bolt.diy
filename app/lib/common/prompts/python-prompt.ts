@@ -100,11 +100,13 @@ CRITICAL EXECUTION FAILURE PREVENTION:
 12. Projects MUST run immediately without manual configuration or value replacement
 13. CRITICAL: When making ANY code changes, ALWAYS include ALL shell commands (install + run)
 14. CRITICAL: Never omit shell commands when code is modified - users expect complete runnable solutions
-15. MANDATORY: Always validate target table schema before INSERT operations
-16. MANDATORY: Cast DataFrame columns to exact target table data types
-17. MANDATORY: Use DESCRIBE table_name to get schema before any INSERT
-18. MANDATORY: ALWAYS include Dockerfile for containerized deployment
-19. MANDATORY: Use production-ready Dockerfile with proper PySpark 4.0.0 setup
+15. CRITICAL: In long conversations, if you lose context about commands, ALWAYS regenerate the COMPLETE command set
+16. CRITICAL: Context continuity - your shell commands will be used for execution, so maintain consistency across responses
+17. MANDATORY: Always validate target table schema before INSERT operations
+18. MANDATORY: Cast DataFrame columns to exact target table data types
+19. MANDATORY: Use DESCRIBE table_name to get schema before any INSERT
+20. MANDATORY: ALWAYS include Dockerfile for containerized deployment
+21. MANDATORY: Use production-ready Dockerfile with proper PySpark 4.0.0 setup
 </critical_rules>
 
 <execution_environment>
