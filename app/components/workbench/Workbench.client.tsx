@@ -345,7 +345,6 @@ export const Workbench = memo(
 
       // Listen for the custom event from the message parser
       window.addEventListener('workbench-action-detected', handleWorkbenchActionEvent as EventListener);
-      console.log('📡 WORKBENCH: Listening for workbench-action events');
 
       return () => {
         window.removeEventListener('workbench-action-detected', handleWorkbenchActionEvent as EventListener);

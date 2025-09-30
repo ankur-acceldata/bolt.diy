@@ -4,7 +4,7 @@ import { useChat } from '@ai-sdk/react';
 import { useAnimate } from 'framer-motion';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
-import { useMessageParser, usePromptEnhancer, useShortcuts, useSync } from '~/lib/hooks';
+import { useMessageParser, usePromptEnhancer, useShortcuts, useSync, useDataplaneInfo } from '~/lib/hooks';
 import { description, useChatHistory, chatId } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
@@ -157,6 +157,7 @@ export const ChatImpl = memo(
       return (PROVIDER_LIST.find((p) => p.name === savedProvider) || DEFAULT_PROVIDER) as ProviderInfo;
     });
     const { showChat } = useStore(chatStore);
+    const dataplaneInfo = useDataplaneInfo();
     const [animationScope, animate] = useAnimate();
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
@@ -218,6 +219,8 @@ export const ChatImpl = memo(
             },
           },
           maxLLMSteps: mcpSettings.maxLLMSteps,
+          dataplaneId: dataplaneInfo?.dataplaneId,
+          dataplaneName: dataplaneInfo?.dataplaneName,
         };
       })(),
       sendExtraMessageFields: true,

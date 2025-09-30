@@ -60,6 +60,8 @@ export async function streamText(props: {
     id: string;
     name: string;
   };
+  dataplaneId?: string;
+  dataplaneName?: string;
 }) {
   const {
     messages,
@@ -75,6 +77,8 @@ export async function streamText(props: {
     chatMode,
     designScheme,
     selectedTemplate,
+    dataplaneId,
+    dataplaneName,
   } = props;
   let currentModel = DEFAULT_MODEL;
   let currentProvider = DEFAULT_PROVIDER.name;
@@ -164,6 +168,8 @@ export async function streamText(props: {
         hasSelectedProject: options?.supabaseConnection?.hasSelectedProject || false,
         credentials: options?.supabaseConnection?.credentials || undefined,
       },
+      dataplaneId,
+      dataplaneName,
     }) ?? getSystemPrompt();
 
   console.log('📜 SYSTEM PROMPT LENGTH:', systemPrompt.length);

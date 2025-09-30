@@ -6,8 +6,24 @@ import { stripIndents } from '~/utils/stripIndent';
  * This policy ensures proper tool discovery, execution, and error handling
  * for all MCP tools available in the system.
  */
-export const getToolPolicy = () => stripIndents`
+export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
+  const hasDataplane = dataplaneId && dataplaneName;
+
+  return stripIndents`
 <mcp_tool_policy>
+  ${
+    hasDataplane
+      ? `<dataplane_context>
+    DATAPLANE PROVIDED: You have been given the following dataplane information:
+    - Dataplane ID: ${dataplaneId}
+    - Dataplane Name: ${dataplaneName}
+
+    CRITICAL: Use this provided dataplane information directly in MCP tool calls.
+    DO NOT call get_all_dataplanes() - use the provided dataplane ID immediately.
+  </dataplane_context>`
+      : ''
+  }
+
   <critical_instructions>
     You have access to Model Context Protocol (MCP) tools that provide real-time data and system interactions.
     
@@ -53,103 +69,206 @@ export const getToolPolicy = () => stripIndents`
     2. Use the discovered information to make more specific queries
     3. Validate assumptions with safe read operations before generating code
     4. Never stop at the first tool call - explore until you have complete information
-    
+
     Example workflows:
-    - For databases: list_catalogs → list_tables → describe_table → execute_query
-    - For platforms: list_dataplanes → list_datastores → get_specific_details
+    - For DATASTORES (external data): list_dataplanes → xdp_list_datastores → get connection details
+    - For TRINO CATALOGS (internal data): list_dataplanes → trino_list_catalogs → trino_list_tables → describe_table
+    - For MIGRATION tasks: discover source datastore + target datastore/catalog separately
   </tool_discovery_workflow>
 
   <xdp_specific_tools>
     XDP Platform Tools with MANDATORY parameter validation:
-    
-    - xdp_list_datastores: Lists all data stores with pagination support
+
+    CRITICAL DISTINCTION:
+    - Use MCP TOOLS for discovery during development (LLM queries data to understand structure)
+    - Use INTERNAL ENDPOINT in generated code for runtime queries (applications execute queries)
+
+    FUNDAMENTAL CONCEPTS - DATASTORES vs CATALOGS:
+
+    🏪 DATASTORES (External Data Sources):
+    - Physical data storage systems (databases, file systems, APIs, cloud storage)
+    - Examples: PostgreSQL database, S3 bucket, Snowflake warehouse, MongoDB collection
+    - Discovered via: xdp_list_datastores MCP tool
+    - Represents WHERE the actual data lives outside of XDP
+    - Used for: Data migration, ETL source/target identification, connection configuration
+
+    📚 CATALOGS (Trino Logical Groupings):
+    - Trino's logical organization of schemas within a dataplane
+    - Examples: "hive", "iceberg", "memory", "tpcds"
+    - Discovered via: trino_list_catalogs MCP tool (requires dataplane ID)
+    - Represents HOW Trino organizes and accesses data within the dataplane
+    - Used for: SQL queries, table exploration, schema discovery within Trino
+
+    KEY UNDERSTANDING:
+    ❌ WRONG ASSUMPTION: "Datastores are found in catalogs"
+    ✅ CORRECT UNDERSTANDING:
+      - Datastores are external data sources that can be CONNECTED TO or MIGRATED FROM/TO
+      - Catalogs are Trino's internal organization of data that's already accessible within a dataplane
+      - When migrating FROM a datastore TO Snowflake: source is external datastore, target is Snowflake (also external)
+      - When querying data IN Trino: you use catalogs/schemas/tables within the dataplane
+
+    MIGRATION SCENARIOS:
+    - Datastore → Datastore: External source to external target (e.g., PostgreSQL → Snowflake)
+    - Datastore → Trino: External source to Trino catalog/table (e.g., S3 → Iceberg table)
+    - Trino → Datastore: Trino catalog/table to external target (e.g., Hive table → PostgreSQL)
+    - Trino → Trino: Between catalogs/schemas within same dataplane (e.g., memory → iceberg)
+
+    CRITICAL TOOL SEPARATION:
+    🚫 NEVER MIX TOOLS BETWEEN CONTEXTS:
+    - If you discover a datastore via xdp_list_datastores → NEVER use trino_list_catalogs/trino_list_tables on it
+    - If you discover a catalog via trino_list_catalogs → NEVER use xdp_list_datastores to explore it
+    - Datastores have their own connection methods and schema discovery (not via Trino tools)
+    - Trino catalogs only exist within dataplanes and are explored via Trino tools only
+
+    AVAILABLE MCP TOOLS FOR DISCOVERY:
+
+    - get_all_dataplanes: Lists all available dataplanes from XDP platform
+      Parameters: None
+      Usage: ALWAYS start here to discover available dataplanes
+      Returns: Dataplane information including IDs and names
+
+    - xdp_list_datastores: Lists external data sources/targets (PostgreSQL, Snowflake, S3, etc.)
       Parameters: page (number), size (number), sortBy (string) - all optional
-      Usage: Start here to discover available data stores
-      
-    - trino_list_catalogs: Lists available Trino catalogs for a dataplane
-      Parameters: dataplane* (string, REQUIRED) - must be valid dataplane name
-      Usage: After getting dataplane info, discover available catalogs
-      CRITICAL: Only call with valid dataplane name from xdp_list_datastores
-      
+      Usage: Discover available external data sources for migration or connection
+      Returns: Datastore information including type, connection details, credentials
+      CRITICAL: This is for EXTERNAL systems only - NOT for Trino internal data
+
+    - trino_list_catalogs: Lists available Trino catalogs WITHIN a dataplane (hive, iceberg, memory)
+      Parameters: dataplane* (string, REQUIRED) - MUST be dataplane ID (number like "21"), NOT name
+      Usage: After getting dataplane ID, discover Trino's internal data organization
+      Returns: Catalog names that exist within the Trino dataplane
+      CRITICAL: Use dataplane ID (e.g., "21") not name - this is for INTERNAL Trino data only
+
     - trino_list_tables: Lists tables in a catalog/schema
-      Parameters: 
-        - dataplane* (string, REQUIRED) - valid dataplane name
+      Parameters:
+        - dataplane* (string, REQUIRED) - dataplane ID (number)
         - catalog* (string, REQUIRED) - valid catalog from trino_list_catalogs
-        - schema (string, OPTIONAL) - if not provided, lists all schemas
+        - schema (string, OPTIONAL) - if not provided, lists all tables in catalog
       Usage: Explore available tables after selecting catalog
-      CRITICAL: 
-        - NEVER pass null or undefined for required parameters
-        - ALWAYS get catalog from trino_list_catalogs first
-        - If schema doesn't exist, call without schema parameter to list all
-      
+      CRITICAL: Use dataplane ID, get catalog from trino_list_catalogs first
+
     - trino_describe_table: Gets column information for a table
       Parameters:
-        - dataplane* (string, REQUIRED) - valid dataplane name
+        - dataplane* (string, REQUIRED) - dataplane ID / dataplane Name
         - catalog* (string, REQUIRED) - valid catalog name
         - schema* (string, REQUIRED) - valid schema name
         - table* (string, REQUIRED) - valid table name
       Usage: Understand table structure before writing queries
       CRITICAL: All parameters are required - get them from previous tool calls
-      
-    - trino_execute_query: Executes custom Trino SQL queries
+
+    - trino_execute_query: Executes custom Trino SQL queries for discovery
       Parameters:
-        - dataplane* (string, REQUIRED) - valid dataplane name
+        - dataplane* (string, REQUIRED) - dataplane ID (number)
         - query* (string, REQUIRED) - valid SQL query
-      Usage: Validate data or perform operations after understanding structure
+      Usage: Execute specific queries for data validation during discovery
 
     PARAMETER VALIDATION RULES:
-    1. CRITICAL: NEVER pass null, undefined, or empty strings for required parameters (*)
-    2. ALWAYS validate parameter values from previous tool responses
-    3. If a parameter is marked as REQUIRED (*), it MUST have a valid value - NO EXCEPTIONS
-    4. For optional parameters, either provide valid value or omit entirely
-    5. Schema names like 'default' may not exist - validate before using
-    6. REMEMBER: Tools will immediately fail if required parameters are missing or invalid
+    ${
+      hasDataplane
+        ? `1. DATAPLANE PROVIDED: Use the provided dataplane ID (${dataplaneId}) directly
+    2. SKIP get_all_dataplanes() - dataplane information is already available
+    3. NEVER pass null, undefined, or empty strings for required parameters (*)
+    4. ALWAYS validate parameter values from previous tool responses
+    5. If a parameter is marked as REQUIRED (*), it MUST have a valid value - NO EXCEPTIONS
 
-    CORRECT WORKFLOW EXAMPLE:
-    1. xdp_list_datastores() → get dataplane names
-    2. trino_list_catalogs(dataplane="actual-dataplane-name") → get catalog names
-    3. trino_list_tables(dataplane="actual-dataplane-name", catalog="actual-catalog") → get tables
-    4. trino_describe_table(dataplane="...", catalog="...", schema="...", table="...") → get schema
-    5. Generate code with all discovered real values
+    STREAMLINED MCP TOOL WORKFLOW (DATAPLANE PROVIDED):
+    1. STEP 1 (SKIP): get_all_dataplanes() → SKIPPED (dataplane provided: ${dataplaneId})
+    2. STEP 2: Use provided dataplane ID "${dataplaneId}" directly
+    3. STEP 3: trino_list_catalogs(dataplane="${dataplaneId}") → get catalog names
+    4. STEP 4: trino_list_tables(dataplane="${dataplaneId}", catalog="discovered-catalog") → get tables
+    5. STEP 5: trino_describe_table(dataplane="${dataplaneId}", catalog="...", schema="...", table="...") → get schema
+    6. STEP 6: Generate code with discovered values + XDP endpoint for runtime queries`
+        : `1. CRITICAL: MANDATORY WORKFLOW - ALWAYS call get_all_dataplanes() FIRST before any other Trino tools
+    2. ALWAYS use dataplane ID from get_all_dataplanes response (number like "21" or "27")
+    3. NEVER call trino_list_catalogs, trino_list_tables, etc. without first calling get_all_dataplanes
+    4. NEVER pass null, undefined, or empty strings for required parameters (*)
+    5. ALWAYS validate parameter values from previous tool responses
+    6. If a parameter is marked as REQUIRED (*), it MUST have a valid value - NO EXCEPTIONS
 
-    COMMON ERRORS TO AVOID:
-    ❌ trino_list_tables(dataplane="dp1", catalog="hive", schema="default") // 'default' may not exist
-    ❌ trino_list_tables(dataplane="dp1", catalog=null) // NULL REQUIRED PARAM = INSTANT FAILURE
-    ❌ trino_describe_table(dataplane="dp1", catalog="hive", schema=null, table="users") // NULL REQUIRED PARAM = INSTANT FAILURE
-    ❌ trino_list_catalogs(dataplane="") // EMPTY REQUIRED PARAM = INSTANT FAILURE
-    
-    ✅ trino_list_catalogs(dataplane="discovered-dataplane-name") // ALL required params provided
-    ✅ trino_list_tables(dataplane="discovered-dataplane-name", catalog="discovered-catalog") // ALL required params provided
-    ✅ trino_list_tables(dataplane="discovered-dataplane-name", catalog="discovered-catalog") // omit optional schema to see all
+    MANDATORY MCP TOOL WORKFLOWS:
+
+    FOR TRINO DATA OPERATIONS (querying within dataplane):
+    1. STEP 1: ${hasDataplane ? `Use provided dataplane ID (${dataplaneId}) - SKIP get_all_dataplanes()` : 'get_all_dataplanes() → get available dataplanes with IDs'}
+    2. STEP 2: ${hasDataplane ? `Use provided dataplane "${dataplaneId}"` : 'Choose working dataplane ID (e.g., "27")'}
+    3. STEP 3: trino_list_catalogs(dataplane="${hasDataplane ? dataplaneId : 'discovered-id'}") → get Trino catalog names
+    4. STEP 4: trino_list_tables(dataplane="${hasDataplane ? dataplaneId : 'discovered-id'}", catalog="discovered-catalog") → get tables
+    5. STEP 5: trino_describe_table(dataplane="${hasDataplane ? dataplaneId : 'discovered-id'}", catalog="...", schema="...", table="...") → get schema
+    6. STEP 6: Generate code with discovered values + Trino Gateway for runtime queries
+
+    FOR DATASTORE OPERATIONS (external data migration/connection):
+    1. STEP 1: ${hasDataplane ? `Use provided dataplane ID (${dataplaneId}) - SKIP get_all_dataplanes()` : 'get_all_dataplanes() → get available dataplanes with IDs'}
+    2. STEP 2: ${hasDataplane ? `Use provided dataplane "${dataplaneId}"` : 'Choose working dataplane ID (e.g., "27")'}
+    3. STEP 3: xdp_list_datastores() → get external datastores (PostgreSQL, Snowflake, S3, etc.)
+    4. STEP 4: Get datastore connection details and configuration from xdp_list_datastores response
+    5. STEP 5: Generate code for datastore connections/migrations using datastore connection info
+
+    CRITICAL: After discovering datastores via xdp_list_datastores:
+    ❌ DO NOT use trino_list_catalogs to explore the datastore
+    ❌ DO NOT use trino_list_tables to find datastore tables
+    ❌ DO NOT use trino_describe_table for datastore schemas
+    ✅ Use datastore's native connection methods (JDBC, REST API, SDK)
+    ✅ Use datastore-specific schema discovery (DESCRIBE, INFORMATION_SCHEMA, etc.)
+    ✅ Generate connection code specific to the datastore type
+
+    FOR MIGRATION TASKS (datastore → datastore or datastore ↔ Trino):
+    1. STEP 1: ${hasDataplane ? `Use provided dataplane ID (${dataplaneId}) - SKIP get_all_dataplanes()` : 'get_all_dataplanes() → get available dataplanes'}
+    2. STEP 2: PARALLEL DISCOVERY:
+       - Source discovery: xdp_list_datastores() OR trino_list_catalogs(dataplane="${hasDataplane ? dataplaneId : 'discovered-id'}") depending on source type
+       - Target discovery: xdp_list_datastores() OR trino_list_catalogs(dataplane="${hasDataplane ? dataplaneId : 'discovered-id'}") depending on target type
+    3. STEP 3: Generate migration code with both source and target configurations
+
+    CRITICAL: ${hasDataplane ? 'Dataplane provided - use directly without get_all_dataplanes()' : 'If get_all_dataplanes is not called first, all subsequent MCP tools will fail!'}$`
+    }
+
+    TRINO GATEWAY FOR GENERATED CODE:
+    Generated applications should use direct Trino Gateway for runtime queries:
+    - Endpoint: http://trino-gateway:8080/v1/statement
+    - HTTP Method: POST
+    - Headers:
+      - X-Trino-User: admin
+    - Body: Raw SQL query string (not JSON)
+    - CRITICAL: Must implement polling pattern for nextUri until query completion
+
+    SPARK CONNECT COMPATIBILITY:
+    CRITICAL: Generated PySpark code must be Spark Connect compatible (no sparkContext access)
   </xdp_specific_tools>
 
   <error_handling>
-    Tool Failure Recovery:
-    1. If a tool call fails, analyze the error message carefully:
-       - SCHEMA_NOT_FOUND: Schema doesn't exist, call without schema parameter
-       - SYNTAX_ERROR with 'null': Required parameter is null/undefined
-       - EXECUTION errors: Check parameter validity
-    
+    MCP Tool Failure Recovery:
+    1. If an MCP tool call fails, analyze the error message carefully:
+       - Dataplane ID errors: Verify you're using dataplane ID (number) not name
+       - SCHEMA_NOT_FOUND: Schema doesn't exist, call trino_list_tables without schema parameter
+       - CATALOG_NOT_FOUND: Catalog doesn't exist, verify with trino_list_catalogs
+       - NULL/UNDEFINED parameters: Required parameter is missing or invalid
+
     2. Try alternative approaches in this order:
-       - Fix parameter validation (remove nulls, use real values)
-       - Call without optional parameters (especially schema)
-       - Use more general query first (list all, then filter)
+       - Verify dataplane ID is numeric and from get_all_dataplanes response
+       - Use trino_list_tables without schema to discover available schemas
+       - Use more general discovery tools first (catalogs before tables)
        - Try different discovered values from previous calls
-    
+
     3. Specific error recovery patterns:
-       - Schema 'default' not found → Call trino_list_tables without schema
-       - Null parameter error → Validate all required parameters are non-null
+       - Schema 'default' not found → Call trino_list_tables without schema parameter
+       - Dataplane name used instead of ID → Use get_all_dataplanes to get correct ID
        - Catalog not found → Re-run trino_list_catalogs to verify available catalogs
-    
+       - Null parameter error → Validate all required parameters are non-null
+
     4. If multiple attempts fail, explain the issue to the user
     5. NEVER give up after one failed attempt
     6. ALWAYS provide context about what was tried and what failed
-    
+
     ERROR RECOVERY EXAMPLE:
-    If trino_list_tables(dataplane="dp1", catalog="hive", schema="default") fails with "Schema 'default' does not exist":
-    1. Retry: trino_list_tables(dataplane="dp1", catalog="hive") // without schema
-    2. This will list all available schemas in the catalog
-    3. Use the actual schema names from the response for subsequent calls
+    If trino_list_tables(dataplane="manoj-xdp-trino", catalog="hive") fails:
+    1. Problem: Using dataplane name instead of ID
+    2. Solution: Call get_all_dataplanes() to find ID (e.g., "21")
+    3. Retry: trino_list_tables(dataplane="21", catalog="hive")
+
+    GENERATED CODE ERROR HANDLING:
+    For Trino Gateway usage in generated applications, include proper error handling:
+    - Network timeouts and retries
+    - Query polling state management
+    - SQL syntax error handling
+    - Failed query state responses
   </error_handling>
 
   <value_resolution>
@@ -163,9 +282,9 @@ export const getToolPolicy = () => stripIndents`
     ✅ CORRECT:
     - First use tools to discover actual values
     - Then use discovered values in code:
-      - "dataplane": "manoj-xdp-trino-dp3"  // discovered via tool
-      - catalog = "hive"  // discovered via trino_list_catalogs
-      - DATAPLANE_ID = "17"  // discovered via xdp_list_datastores
+      - "dataplane": "name or id of dataplane"  // discovered via tool
+      - catalog = "catalog discovered"  // discovered via trino_list_catalogs
+      - DATAPLANE_ID = "dataplane id"  // discovered via xdp_list_datastores
   </value_resolution>
 
   <continuous_exploration>
@@ -254,47 +373,63 @@ export const getToolPolicy = () => stripIndents`
 
   <common_pitfalls>
     AVOID THESE MISTAKES:
-    
-    1. Stopping after one tool call
+
+    1. CONFUSING DATASTORES WITH CATALOGS:
+       ❌ "Find the PostgreSQL datastore in the Trino catalog"
+       ❌ "List tables from the Snowflake datastore using trino_list_tables"
+       ❌ "The S3 datastore should be in the hive catalog"
+       ✅ Use xdp_list_datastores for external data sources (PostgreSQL, Snowflake, S3)
+       ✅ Use trino_list_catalogs for Trino's internal organization (hive, iceberg, memory)
+       ✅ For migration: discover source datastore AND target separately
+
+    2. MIXING DATASTORE AND TRINO TOOLS (CRITICAL ERROR):
+       ❌ Found Snowflake via xdp_list_datastores → then using trino_list_catalogs on it
+       ❌ Found PostgreSQL via xdp_list_datastores → then using trino_list_tables on it
+       ❌ Found datastore → then trying trino_describe_table to get its schema
+       ❌ Using trino_list_catalogs to find external Snowflake database
+       ❌ Using xdp_list_datastores to find Trino hive tables
+       ✅ External → External: Use xdp_list_datastores for both, native connection methods for each
+       ✅ External → Trino: Use xdp_list_datastores for source, trino_list_catalogs for target
+       ✅ Trino → External: Use trino_list_catalogs for source, xdp_list_datastores for target
+       ✅ Once you discover a datastore: use its native APIs, not Trino tools
+
+    3. Stopping after one tool call
        ❌ Call list_catalogs and immediately generate code
        ✅ Call list_catalogs → list_tables → describe_table → then generate
-    
-    2. Using placeholders instead of discovering values
+
+    4. Using placeholders instead of discovering values
        ❌ dataplane = "your-dataplane-id"
-       ✅ Use xdp_list_datastores to find actual dataplane
-    
-    3. Giving up after one failure
+       ✅ Use appropriate discovery tools based on data source type
+
+    5. Giving up after one failure
        ❌ "Tool failed, cannot proceed"
        ✅ Try different parameters or alternative tools
-    
-    4. Not validating discovered values
+
+    6. Not validating discovered values
        ❌ Assume first result is correct
        ✅ Verify with additional tool calls
-    
-    5. Incomplete exploration
+
+    7. Incomplete exploration
        ❌ Find one table and assume it's the right one
-       ✅ List all tables and choose based on context
+       ✅ List all available resources and choose based on context
     
-    6. CRITICAL: Parameter validation failures (causing your errors):
-       ❌ trino_list_tables(dataplane="dp1", catalog="hive", schema="default")
-           // Assumes "default" schema exists - causes SCHEMA_NOT_FOUND
-       ❌ trino_list_tables(dataplane="dp1", catalog=null)
-           // NULL REQUIRED PARAMETER - GUARANTEED INSTANT FAILURE
-       ❌ trino_describe_table(dataplane="dp1", catalog="hive", schema=undefined, table="users")
-           // UNDEFINED REQUIRED PARAMETER - GUARANTEED INSTANT FAILURE
-       ❌ trino_list_catalogs(dataplane="")
-           // EMPTY REQUIRED PARAMETER - GUARANTEED INSTANT FAILURE
-       
-       ✅ First call trino_list_catalogs(dataplane="dp1") to get available catalogs
-       ✅ Then call trino_list_tables(dataplane="dp1", catalog="discovered-catalog")
-       ✅ Use response to find actual schemas, don't assume "default" exists
-       ✅ ALWAYS validate ALL required parameters are non-null/non-empty before calling tools
-       ✅ REMEMBER: Missing/null/empty required params = immediate tool failure
+    6. CRITICAL: MCP Tool parameter validation failures (causing tool errors):
+       ❌ Using dataplane name instead of ID: trino_list_catalogs(dataplane="manoj-xdp-trino")
+       ❌ Null/undefined required parameters: trino_list_tables(dataplane=null, catalog="hive")
+       ❌ Missing required parameters: trino_describe_table(dataplane="21", catalog="hive")
+       ❌ Assuming "default" schema exists: trino_list_tables(dataplane="21", catalog="hive", schema="default")
+       ❌ Empty string parameters: trino_list_catalogs(dataplane="")
+
+       ✅ ALWAYS use dataplane ID from get_all_dataplanes: trino_list_catalogs(dataplane="21")
+       ✅ ALWAYS provide all required parameters with valid values
+       ✅ Use trino_list_tables without schema to discover available schemas first
+       ✅ Validate all parameter values from previous MCP tool responses
+       ✅ REMEMBER: Missing/null/invalid required params = immediate MCP tool failure
     
-    7. Schema assumption errors:
+    7. Schema discovery with MCP tools:
        ❌ Assuming "default" schema exists in every catalog
-       ✅ Call trino_list_tables without schema to discover available schemas
-       ✅ Use actual schema names from the tool responses
+       ✅ Use trino_list_tables without schema parameter to discover available schemas
+       ✅ Use actual schema names from MCP tool responses
   </common_pitfalls>
 
   <completion_requirements>
@@ -318,25 +453,26 @@ export const getToolPolicy = () => stripIndents`
   </completion_requirements>
 </mcp_tool_policy>
 `;
+};
 
 /**
  * Integration instructions for including tool policy in prompts
  */
 export const TOOL_POLICY_INTEGRATION = stripIndents`
   To integrate the tool policy into existing prompts, add the following:
-  
+
   1. Import the policy:
      import { getToolPolicy } from '~/lib/common/prompts/tool-policy';
-  
+
   2. Include in system prompt:
      const systemPrompt = \`
        [existing prompt content]
-       
-       \${getToolPolicy()}
-       
+
+       \${getToolPolicy(dataplaneId, dataplaneName)}
+
        [rest of prompt]
      \`;
-  
+
   3. The policy will ensure:
      - Proper tool discovery workflows
      - Complete data gathering before code generation

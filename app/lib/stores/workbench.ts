@@ -667,9 +667,10 @@ export class WorkbenchStore {
           isFromAI = triggeringMessage.role === 'assistant';
 
           if (isFromAI) {
-            console.log('This action was triggered by an AI message');
-
-            // Your logic here
+            /*
+             * console.log('This action was triggered by an AI message');
+             * Your logic here
+             */
           }
         }
       }
@@ -713,24 +714,17 @@ export class WorkbenchStore {
         await artifact.runner.runAction(data, isStreaming);
       }
 
-      console.log('DEBUG: _runAction - Before updateFile, current files:', Object.keys(this.files.get()).length);
       this.#editorStore.updateFile(fullPath, data.action.content);
 
       if (!isStreaming && data.action.content) {
-        console.log('DEBUG: _runAction - Before saveFile, current files:', Object.keys(this.files.get()).length);
-
         // Skip individual snapshots for batch imports - we'll create one after all files are processed
         await this.saveFile(fullPath, true);
-
-        console.log('DEBUG: _runAction - After saveFile, current files:', Object.keys(this.files.get()).length);
 
         // Check if this is the last file action in the batch by seeing if we have pending file actions
         const actions = artifact.runner.actions.get();
         const pendingFileActions = Object.values(actions).filter(
           (action) => action.type === 'file' && !action.executed,
         );
-
-        console.log('DEBUG: _runAction - Pending file actions:', pendingFileActions.length);
 
         /*
          * If no more pending file actions, trigger snapshot for the complete import
@@ -753,12 +747,6 @@ export class WorkbenchStore {
 
               // Only create snapshot if there are actually files to snapshot OR if user upload is in progress
               if (Object.keys(files).length > 0 || this.isUserUploadInProgress()) {
-                console.log(
-                  'DEBUG: _runAction - Triggering user batch import snapshot with',
-                  Object.keys(files).length,
-                  'files',
-                  this.isUserUploadInProgress() ? '(user upload in progress)' : '',
-                );
                 triggerSnapshot(db, actualChatId, files, isFromAI ? 'ai-response' : 'upload', data.messageId);
               } else {
                 console.log('DEBUG: _runAction - Skipping batch snapshot creation - no files to snapshot');

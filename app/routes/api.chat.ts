@@ -53,6 +53,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     maxLLMSteps,
     selectedTemplate,
     chatId,
+    dataplaneId,
+    dataplaneName,
   } = await request.json<{
     messages: Messages;
     files: any;
@@ -74,6 +76,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     };
     maxLLMSteps: number;
     chatId?: string;
+    dataplaneId?: string;
+    dataplaneName?: string;
   }>();
 
   const cookieHeader = request.headers.get('Cookie');
@@ -364,6 +368,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               selectedTemplate,
               summary,
               messageSliceId,
+              dataplaneId,
+              dataplaneName,
             });
             logger.debug('Continuation streamText initiated successfully');
 
@@ -430,6 +436,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           selectedTemplate,
           summary,
           messageSliceId,
+          dataplaneId,
+          dataplaneName,
         });
         logger.debug('streamText initiated successfully');
 

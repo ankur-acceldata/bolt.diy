@@ -80,12 +80,12 @@ export default defineConfig((config) => {
   const PORT = Number(env.PORT || 5173);
   const LISTEN_HOST = HOST ? `local.${HOST}` : undefined;
 
-  // Get BASE_PATH from environment - this must be set at build time for asset URLs
-  const BASE_PATH: string = env.BASE_PATH || '';
-  const BASE_URL = BASE_PATH && BASE_PATH.length > 0 ? (BASE_PATH.endsWith('/') ? BASE_PATH : `${BASE_PATH}/`) : '/';
+  // Get base path from environment variable with /ai-editor as default
+  const BASE_PATH = env.BASE_PATH || env.VITE_BASE_PATH || '/ai-editor';
+  const BASE_URL = BASE_PATH ? (BASE_PATH.endsWith('/') ? BASE_PATH : `${BASE_PATH}/`) : '/';
 
   // Normalize base path for proxy configuration (ensure leading slash, no trailing slash)
-  const normalizedBasePath = BASE_PATH && BASE_PATH.length > 0
+  const normalizedBasePath = BASE_PATH
     ? (BASE_PATH.startsWith('/') ? BASE_PATH : `/${BASE_PATH}`).replace(/\/+$/, '')
     : '';
 
@@ -241,12 +241,12 @@ export default defineConfig((config) => {
         },
         config.mode !== 'test' && remixCloudflareDevProxy(),
         remixVitePlugin({
-          basename: BASE_PATH || '/', // Use actual base path for client-side routing
+          basename: BASE_URL,
           future: {
             v3_fetcherPersist: true,
             v3_relativeSplatPath: true,
             v3_throwAbortReason: true,
-            v3_lazyRouteDiscovery: false, // Disabled due to base path routing issues
+            v3_lazyRouteDiscovery: true,
           },
         }),
         UnoCSS(),
@@ -396,12 +396,12 @@ export default defineConfig((config) => {
       },
       config.mode !== 'test' && remixCloudflareDevProxy(),
       remixVitePlugin({
-        basename: BASE_PATH || '/', // Use actual base path for client-side routing
+        basename: BASE_URL,
         future: {
           v3_fetcherPersist: true,
           v3_relativeSplatPath: true,
           v3_throwAbortReason: true,
-          v3_lazyRouteDiscovery: false, // Disabled due to base path routing issues
+          v3_lazyRouteDiscovery: true,
         },
       }),
       UnoCSS(),

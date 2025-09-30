@@ -18,6 +18,8 @@ export interface PromptOptions {
       supabaseUrl?: string;
     };
   };
+  dataplaneId?: string;
+  dataplaneName?: string;
 }
 
 export class PromptLibrary {
@@ -53,7 +55,7 @@ export class PromptLibrary {
     python: {
       label: 'Python Applications Prompt',
       description: 'Specialized prompt for Python applications, PySpark, data processing, and backend services',
-      get: (options) => getPythonPrompt(options.cwd, options.supabase),
+      get: (options) => getPythonPrompt(options.cwd, options.supabase, options.dataplaneId, options.dataplaneName),
     },
   };
   static getList() {

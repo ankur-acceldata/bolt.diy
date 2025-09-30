@@ -123,7 +123,6 @@ export class FernApiService {
         try {
           const data = await response.json();
           logStore.logSystem('[FERN-DEBUG] Server health data parsed successfully', data as Record<string, any>);
-          console.log('[FERN-DEBUG] Server health data:', data);
 
           return true;
         } catch (jsonError) {
@@ -150,8 +149,6 @@ export class FernApiService {
       };
 
       logStore.logError('[FERN-DEBUG] Server availability check failed', error, errorInfo);
-      console.error('[FERN-DEBUG] Server availability check failed:', error);
-      console.error('[FERN-DEBUG] Error details:', errorInfo);
 
       return false;
     }

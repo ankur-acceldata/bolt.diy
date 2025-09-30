@@ -127,7 +127,6 @@ export async function hasFilesChanged(db: IDBDatabase, chatId: string, currentFi
 
   // Since all snapshots are now full snapshots, we can directly use the files
   const lastFiles = lastSnapshot.files;
-  console.log('DEBUG: hasFilesChanged - Using full snapshot as baseline, files:', Object.keys(lastFiles).length);
 
   const changes = calculateChangedFiles(lastFiles, currentFiles);
 
@@ -298,12 +297,6 @@ export function triggerSnapshot(
 
       // Use a default chatIndex if not provided
       const effectiveChatIndex = chatIndex;
-
-      console.log('DEBUG: triggerSnapshot processing:', {
-        effectiveChatId,
-        filesCount: Object.keys(files).length,
-        changeType,
-      });
 
       // Check if this is the first snapshot for this chat
       const hasSnapshots = await hasExistingSnapshots(db, effectiveChatId);
