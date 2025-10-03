@@ -158,14 +158,51 @@ $code-font-size: 13px;
     border-collapse: collapse;
     width: 100%;
     margin-block-end: 16px;
+    background-color: var(--bolt-elements-background-depth-1);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--bolt-elements-borderColor);
 
     :is(th, td) {
-      padding: 6px 13px;
-      border: 1px solid #dfe2e5;
+      padding: 12px 16px;
+      border-right: 1px solid var(--bolt-elements-borderColor);
+      border-bottom: 1px solid var(--bolt-elements-borderColor);
+      text-align: left;
+      vertical-align: top;
+
+      &:last-child {
+        border-right: none;
+      }
     }
 
-    tr:nth-child(2n) {
-      background-color: #f6f8fa;
+    th {
+      background-color: var(--bolt-elements-background-depth-2);
+      font-weight: 600;
+      color: var(--bolt-elements-textPrimary);
+      border-bottom: 2px solid var(--bolt-elements-borderColor);
+    }
+
+    td {
+      color: var(--bolt-elements-textPrimary);
+    }
+
+    tr:nth-child(even) {
+      background-color: var(--bolt-elements-background-depth-2);
+    }
+
+    tr:nth-child(odd) {
+      background-color: var(--bolt-elements-background-depth-1);
+    }
+
+    tr:last-child {
+      :is(th, td) {
+        border-bottom: none;
+      }
+    }
+
+    // Hover effect for better interactivity
+    tbody tr:hover {
+      background-color: var(--bolt-elements-background-depth-3);
     }
   }
 }

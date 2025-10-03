@@ -16,6 +16,7 @@ import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
 import { createXDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
 import { getProjectId } from '~/utils/fileLocks';
+import { TIMEOUT_CONSTANTS } from '~/lib/constants/timeout';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -96,6 +97,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const encoder: TextEncoder = new TextEncoder();
   let progressCounter: number = 1;
 
+  // Keep-alive mechanism for long-running requests
+  let keepAliveInterval: NodeJS.Timeout | null = null;
+  let lastActivityTime = Date.now();
+
   try {
     const mcpService = MCPService.getInstance();
 
@@ -132,9 +137,43 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     logger.debug('Creating data stream for chat request');
 
+    // Helper function to send keep-alive messages
+    const sendKeepAlive = (dataStream: any) => {
+      const now = Date.now();
+
+      if (now - lastActivityTime > TIMEOUT_CONSTANTS.KEEP_ALIVE_INTERVAL) {
+        logger.debug('Sending keep-alive message to prevent timeout');
+        dataStream.writeData({
+          type: 'progress',
+          label: 'keep-alive',
+          status: 'in-progress',
+          order: progressCounter++,
+          message: 'Processing...',
+        } satisfies ProgressAnnotation);
+        lastActivityTime = now;
+      }
+    };
+
+    // Start keep-alive interval
+    keepAliveInterval = setInterval(() => {
+      const now = Date.now();
+
+      if (now - lastActivityTime > TIMEOUT_CONSTANTS.MAX_IDLE_TIME) {
+        logger.warn('Request exceeded maximum idle time, cleaning up');
+
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+          keepAliveInterval = null;
+        }
+
+        return;
+      }
+    }, TIMEOUT_CONSTANTS.KEEP_ALIVE_INTERVAL);
+
     const dataStream = createDataStream({
       async execute(dataStream) {
         logger.debug('Data stream execution started');
+        lastActivityTime = Date.now(); // Update activity time
 
         const filePaths = getFilePaths(files || {});
         let filteredFiles: FileMap | undefined = undefined;
@@ -174,6 +213,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         if (filePaths.length > 0 && contextOptimization) {
           logger.debug('Generating Chat Summary');
+          lastActivityTime = Date.now(); // Update activity time
           dataStream.writeData({
             type: 'progress',
             label: 'summary',
@@ -193,6 +233,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             promptId,
             contextOptimization,
             onFinish(resp) {
+              lastActivityTime = Date.now(); // Update activity time
+
               if (resp.usage) {
                 logger.debug('createSummary token usage', JSON.stringify(resp.usage));
                 cumulativeUsage.completionTokens += resp.usage.completionTokens || 0;
@@ -217,6 +259,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           // Update context buffer
           logger.debug('Updating Context Buffer');
+          lastActivityTime = Date.now(); // Update activity time
           dataStream.writeData({
             type: 'progress',
             label: 'context',
@@ -237,6 +280,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             contextOptimization,
             summary,
             onFinish(resp) {
+              lastActivityTime = Date.now(); // Update activity time
+
               if (resp.usage) {
                 logger.debug('selectContext token usage', JSON.stringify(resp.usage));
                 cumulativeUsage.completionTokens += resp.usage.completionTokens || 0;
@@ -283,6 +328,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           maxSteps: maxLLMSteps,
           onStepFinish: ({ toolCalls }) => {
             // add tool call annotations for frontend processing
+            lastActivityTime = Date.now(); // Update activity time
+
             try {
               toolCalls.forEach((toolCall) => {
                 mcpService.processToolCall(toolCall, dataStream);
@@ -295,6 +342,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           },
           onFinish: async ({ text: content, finishReason, usage }) => {
             logger.debug('usage', JSON.stringify(usage));
+            lastActivityTime = Date.now(); // Update activity time
 
             if (usage) {
               cumulativeUsage.completionTokens += usage.completionTokens || 0;
@@ -411,6 +459,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           },
         };
 
+        lastActivityTime = Date.now(); // Update activity time
         dataStream.writeData({
           type: 'progress',
           label: 'response',
@@ -448,6 +497,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           for await (const part of result.fullStream) {
             streamChunkCount++;
+            lastActivityTime = Date.now(); // Update activity time on each chunk
 
             if (part.type === 'error') {
               const error: any = part.error;
@@ -471,6 +521,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                 logger.debug(
                   `Stream in progress - processed ${streamChunkCount} chunks, content length: ${fullContent.length}`,
                 );
+
+                // Send keep-alive every 10 chunks to maintain connection
+                sendKeepAlive(dataStream);
               }
             }
           }
@@ -490,6 +543,13 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       },
       onError: (error: any) => {
         logger.error(`Data stream error: ${error.message}`);
+
+        // Clean up keep-alive interval on error
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+          keepAliveInterval = null;
+        }
+
         return `Custom error: ${error.message}`;
       },
     }).pipeThrough(
@@ -501,6 +561,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           // Add detailed logging for each chunk transformation
           const chunkType = typeof chunk;
           const chunkSize = chunk?.length || 0;
+          lastActivityTime = Date.now(); // Update activity time on each chunk
           logger.debug(
             `Transforming chunk: type=${chunkType}, size=${chunkSize}, preview=${String(chunk).substring(0, 100)}`,
           );
@@ -547,6 +608,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         },
         flush: () => {
           logger.debug('Transform stream completed - all chunks transformed and flushed');
+
+          // Clean up keep-alive interval when stream completes
+          if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+          }
         },
       }),
     );
@@ -588,10 +655,20 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         'Transfer-Encoding': 'chunked',
         Pragma: 'no-cache',
         Expires: '0',
+
+        // Add timeout-related headers
+        'Keep-Alive': `timeout=${TIMEOUT_CONSTANTS.CHAT_REQUEST_TIMEOUT / 1000}, max=1000`,
+        'X-Stream-Timeout': TIMEOUT_CONSTANTS.CHAT_REQUEST_TIMEOUT.toString(),
       },
     });
   } catch (error: any) {
     logger.error(error);
+
+    // Clean up keep-alive interval on error
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
 
     const errorResponse = {
       error: true,

@@ -256,6 +256,46 @@ export class AcceldataService {
   }
 
   /**
+   * Execute a pipeline adhoc run
+   */
+  static async executePipelineAdhocRun(config: any, request?: Request): Promise<AcceldataApiResponse> {
+    logger.info('Executing pipeline adhoc run with config:', config);
+
+    // Generate curl command for debugging
+    try {
+      const endpoint = getAcceldataApiUrl('/api/pipelines/adhoc-runs', request);
+      const headers = {
+        ...(request?.headers ? this._headersToRecord(request.headers) : {}),
+        ...this._getStandardHeaders(),
+      };
+
+      const curlHeaders = Object.entries(headers)
+        .map(([key, value]) => `-H '${key}: ${value}'`)
+        .join(' ');
+
+      const curlBody = ` --data '${JSON.stringify(config)}'`;
+      const curlCommand = `curl -X POST ${curlHeaders}${curlBody} '${endpoint}'`;
+
+      logger.info(`CURL equivalent for pipeline adhoc run:\n${curlCommand}`);
+    } catch (curlError) {
+      logger.warn('Failed to generate curl command:', curlError);
+    }
+
+    const result = await this.call('/api/pipelines/adhoc-runs', {
+      method: 'POST',
+      body: config,
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = 'Pipeline adhoc run executed successfully';
+    }
+
+    return result;
+  }
+
+  /**
    * Get pipeline audit data
    */
   static async getPipelineAudit(runId: string | number, request?: Request): Promise<AcceldataApiResponse> {

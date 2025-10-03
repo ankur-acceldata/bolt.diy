@@ -12,6 +12,7 @@ export function useLogStream({
   enabled = false,
   tailLines = LOG_STREAM_CONSTANTS.DEFAULT_TAIL_LINES,
   initialDelay = LOG_STREAM_CONSTANTS.DEFAULT_INITIAL_DELAY,
+  isPipeline = false,
 }: LogStreamOptions): LogStreamState {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -63,10 +64,16 @@ export function useLogStream({
       const baseUrl = `${window.location.protocol}//${window.location.host}`;
       const basePath = getBasePath();
       const cleanBasePath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-      const url = `${baseUrl}${cleanBasePath}/api/log-stream?dataplaneId=${encodeURIComponent(
-        dataplaneId,
-      )}&runId=${encodeURIComponent(runId)}&tailLines=${tailLines}`;
 
+      // Use different endpoint based on whether this is a pipeline log stream
+      const endpoint = isPipeline ? 'api/pipeline-log-stream' : 'api/log-stream';
+      const idParam = isPipeline ? 'jobId' : 'runId';
+
+      const url = `${baseUrl}${cleanBasePath}/${endpoint}?dataplaneId=${encodeURIComponent(
+        dataplaneId,
+      )}&${idParam}=${encodeURIComponent(runId)}&tailLines=${tailLines}`;
+
+      console.log('🔧 useLogStream connecting with:', { isPipeline, endpoint, idParam, url });
       logger.info('🔗 Connecting to log stream:', url);
 
       const eventSource = new EventSource(url);
@@ -186,7 +193,7 @@ export function useLogStream({
         },
       ]);
     }
-  }, [dataplaneId, runId, tailLines, disconnect]);
+  }, [dataplaneId, runId, tailLines, isPipeline]);
 
   const connect = useCallback(() => {
     if (!dataplaneId || !runId) {
@@ -220,7 +227,7 @@ export function useLogStream({
     initializationTimeoutRef.current = setTimeout(() => {
       connectToStream();
     }, initialDelay);
-  }, [dataplaneId, runId, initialDelay, disconnect, connectToStream]);
+  }, [dataplaneId, runId, initialDelay, connectToStream]);
 
   const clearLogs = useCallback(() => {
     logger.info('Clearing logs');

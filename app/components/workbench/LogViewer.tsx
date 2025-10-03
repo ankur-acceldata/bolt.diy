@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { classNames } from '~/utils/classNames';
 import { useLogStream } from '~/lib/hooks/useLogStream';
 import { analyzeLogMessage } from '~/utils/logLevelDetection';
+import { workbenchStore } from '~/lib/stores/workbench';
 import type { LogViewerProps } from '~/types/logStream';
 
 export function LogViewer({
@@ -13,6 +14,7 @@ export function LogViewer({
   onSetChatInput,
   model,
   provider,
+  isPipeline = false,
 }: LogViewerProps) {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -22,12 +24,24 @@ export function LogViewer({
 
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
 
+  /*
+   * Remove expensive console.log on every render
+   * console.log('🔧 LogViewer props:', { dataplaneId, runId, isOpen, isPipeline });
+   */
+
   const { logs, isConnected, isConnecting, isInitializing, error, connect, clearLogs } = useLogStream({
     dataplaneId,
     runId,
     enabled: isOpen,
     tailLines: 100,
+    isPipeline,
   });
+
+  // Update workbench store with streaming state
+  useEffect(() => {
+    const isStreamActive = isConnecting || isInitializing;
+    workbenchStore.setLogStreamActive(isStreamActive);
+  }, [isConnecting, isInitializing]);
 
   // Clear logs when configuration changes (new job) or when opening for the first time
   useEffect(() => {
@@ -35,7 +49,9 @@ export function LogViewer({
       console.log('LogViewer: Clearing logs for new job configuration:', { dataplaneId, runId });
       clearLogs();
     }
-  }, [isOpen, dataplaneId, runId, clearLogs]);
+
+    // clearLogs is stable (empty deps in useLogStream), safe to omit
+  }, [isOpen, dataplaneId, runId]);
 
   const scrollToBottom = useCallback(() => {
     if (logsEndRef.current) {
@@ -53,10 +69,9 @@ export function LogViewer({
       const logMessages = logs
         .filter((entry) => !entry.keepAlive) // Filter out keep-alive messages
         .map((entry) => {
-          const timestamp = new Date(entry.timestamp).toLocaleTimeString();
           const content = entry.error ? `[ERROR] ${entry.error}` : entry.log || '';
 
-          return `[${timestamp}] ${content}`;
+          return `${content}`;
         })
         .join('\n');
 
@@ -352,9 +367,6 @@ export function LogViewer({
 
                   return (
                     <div key={index} className={classNames('mb-1 leading-relaxed px-2 py-1 rounded', className)}>
-                      <span className="text-bolt-elements-textSecondary mr-2">
-                        {new Date(entry.timestamp).toLocaleTimeString()}
-                      </span>
                       <span className="whitespace-pre-wrap text-bolt-elements-textPrimary">{logText}</span>
                     </div>
                   );

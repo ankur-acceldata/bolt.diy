@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/react';
 import type { Message } from 'ai';
 import { useChat } from '@ai-sdk/react';
 import { useAnimate } from 'framer-motion';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
 import { useMessageParser, usePromptEnhancer, useShortcuts, useSync, useDataplaneInfo } from '~/lib/hooks';
 import { description, useChatHistory, chatId } from '~/lib/persistence';
@@ -30,6 +30,7 @@ import { getFernSyncService } from '~/lib/sync/fernSyncService';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
+import { TIMEOUT_CONSTANTS } from '~/lib/constants/timeout';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -199,7 +200,7 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: import.meta.env.BASE_URL ? `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/chat` : '/api/chat',
-      body: (() => {
+      body: useMemo(() => {
         logger.info('🌐 useChat body configuration - chatId:', currentChatId);
         return {
           apiKeys,
@@ -222,8 +223,34 @@ export const ChatImpl = memo(
           dataplaneId: dataplaneInfo?.dataplaneId,
           dataplaneName: dataplaneInfo?.dataplaneName,
         };
-      })(),
+      }, [
+        apiKeys,
+        files,
+        promptId,
+        contextOptimizationEnabled,
+        chatMode,
+        designScheme,
+        selectedTemplate,
+        currentChatId,
+        supabaseConn.isConnected,
+        selectedProject,
+        supabaseConn?.credentials?.supabaseUrl,
+        supabaseConn?.credentials?.anonKey,
+        mcpSettings.maxLLMSteps,
+        dataplaneInfo?.dataplaneId,
+        dataplaneInfo?.dataplaneName,
+      ]),
       sendExtraMessageFields: true,
+
+      // Configure fetch options for longer timeout
+      fetch: (url, options) => {
+        return fetch(url, {
+          ...options,
+
+          // Increase timeout to 5 minutes to match backend keep-alive
+          signal: AbortSignal.timeout(TIMEOUT_CONSTANTS.CHAT_REQUEST_TIMEOUT),
+        });
+      },
       onError: (e: Error) => {
         setFakeLoading(false);
         handleError(e, 'chat');
@@ -431,7 +458,14 @@ export const ChatImpl = memo(
         let errorType: LlmErrorAlertType['errorType'] = 'unknown';
         let title = 'Request Failed';
 
-        if (errorInfo.statusCode === 401 || errorInfo.message.toLowerCase().includes('api key')) {
+        // Handle timeout errors specifically
+        if (error.name === 'AbortError' || error.message?.toLowerCase().includes('timeout')) {
+          errorType = 'network';
+          title = 'Request Timeout';
+          errorInfo.message =
+            'The request took too long to complete. The AI model may still be processing your request in the background.';
+          errorInfo.isRetryable = true;
+        } else if (errorInfo.statusCode === 401 || errorInfo.message.toLowerCase().includes('api key')) {
           errorType = 'authentication';
           title = 'Authentication Error';
         } else if (errorInfo.statusCode === 429 || errorInfo.message.toLowerCase().includes('rate limit')) {

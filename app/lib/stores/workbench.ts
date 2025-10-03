@@ -59,8 +59,9 @@ export class WorkbenchStore {
   deployAlert: WritableAtom<DeployAlert | undefined> =
     import.meta.hot?.data.deployAlert ?? atom<DeployAlert | undefined>(undefined);
   showLogViewer: WritableAtom<boolean> = import.meta.hot?.data.showLogViewer ?? atom(false);
-  logViewerConfig: WritableAtom<{ dataplaneId?: string; runId?: string } | null> =
+  logViewerConfig: WritableAtom<{ dataplaneId?: string; runId?: string; isPipeline?: boolean } | null> =
     import.meta.hot?.data.logViewerConfig ?? atom(null);
+  logStreamActive: WritableAtom<boolean> = import.meta.hot?.data.logStreamActive ?? atom(false);
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
 
@@ -79,6 +80,7 @@ export class WorkbenchStore {
       import.meta.hot.data.deployAlert = this.deployAlert;
       import.meta.hot.data.showLogViewer = this.showLogViewer;
       import.meta.hot.data.logViewerConfig = this.logViewerConfig;
+      import.meta.hot.data.logStreamActive = this.logStreamActive;
 
       // Ensure binary files are properly preserved across hot reloads
       const filesMap = this.files.get();
@@ -149,12 +151,21 @@ export class WorkbenchStore {
     this.deployAlert.set(undefined);
   }
 
-  toggleLogViewer(value?: boolean, config?: { dataplaneId?: string; runId?: string } | null) {
+  toggleLogViewer(value?: boolean, config?: { dataplaneId?: string; runId?: string; isPipeline?: boolean } | null) {
+    console.log('🔧 WorkbenchStore.toggleLogViewer called with:', { value, config });
+
     this.showLogViewer.set(value !== undefined ? value : !this.showLogViewer.get());
+    console.log('🔧 showLogViewer set to:', this.showLogViewer.get());
 
     if (config !== undefined) {
       this.logViewerConfig.set(config);
+      console.log('🔧 logViewerConfig set to:', config);
     }
+  }
+
+  setLogStreamActive(active: boolean) {
+    this.logStreamActive.set(active);
+    console.log('🔧 logStreamActive set to:', active);
   }
 
   toggleTerminal(value?: boolean) {

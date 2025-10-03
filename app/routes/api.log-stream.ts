@@ -132,7 +132,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
           // Send initial connection message
           const connectMsg = `data: ${JSON.stringify({
             log: `Connected to log stream for run:${runId}`,
-            timestamp: new Date().toISOString(),
           })}\n\n`;
           controller.enqueue(new TextEncoder().encode(connectMsg));
 
@@ -147,7 +146,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
             if (now - lastDataReceived > 30000) {
               const keepAliveMsg = `data: ${JSON.stringify({
                 log: `Keep-alive: Monitoring logs for run:${runId}`,
-                timestamp: new Date().toISOString(),
                 keepAlive: true,
               })}\n\n`;
               controller.enqueue(new TextEncoder().encode(keepAliveMsg));
@@ -201,7 +199,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
                      */
                     const logData = {
                       log: logContent,
-                      timestamp: new Date().toISOString(),
                     };
 
                     // Forward the data in SSE format expected by frontend
@@ -215,7 +212,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
                     // Send error as log entry
                     const errorData = {
                       error: `Parse error: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
-                      timestamp: new Date().toISOString(),
                     };
 
                     const errorChunk = `data: ${JSON.stringify(errorData)}\n\n`;
@@ -231,7 +227,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
             const errorData = `data: ${JSON.stringify({
               error: readError instanceof Error ? readError.message : 'Stream error',
-              timestamp: new Date().toISOString(),
             })}\n\n`;
             controller.enqueue(new TextEncoder().encode(errorData));
           }
@@ -240,7 +235,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
           const errorData = `data: ${JSON.stringify({
             error: error instanceof Error ? error.message : 'Connection error',
-            timestamp: new Date().toISOString(),
           })}\n\n`;
           controller.enqueue(new TextEncoder().encode(errorData));
         } finally {

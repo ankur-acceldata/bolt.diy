@@ -203,6 +203,7 @@ export const EditorPanel = memo(
                 onSetChatInput={onSetChatInput}
                 model={model}
                 provider={provider}
+                isPipeline={logViewerConfig?.isPipeline}
               />
             </Panel>
           </>

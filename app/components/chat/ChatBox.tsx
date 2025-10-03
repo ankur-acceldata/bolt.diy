@@ -4,6 +4,7 @@ import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { ModelSelector } from '~/components/chat/ModelSelector';
 import { APIKeyManager } from './APIKeyManager';
+import { PipelineBuildButton } from './PipelineBuildButton';
 import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
 import FilePreview from './FilePreview';
 import { ScreenshotStateManager } from './ScreenshotStateManager';
@@ -144,6 +145,9 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                     }}
                   />
                 )}
+
+              {/* Pipeline Build Button - shown when chat is started */}
+              {props.chatStarted && <PipelineBuildButton />}
             </div>
           )}
         </ClientOnly>

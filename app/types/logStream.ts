@@ -33,6 +33,9 @@ export interface LogStreamOptions {
 
   /** Delay in milliseconds before starting the first connection attempt */
   initialDelay?: number;
+
+  /** Whether this is a pipeline log stream (uses different endpoint) */
+  isPipeline?: boolean;
 }
 
 /**
@@ -91,6 +94,9 @@ export interface LogViewerProps {
 
   /** Current provider for proper message formatting */
   provider?: string;
+
+  /** Whether this is a pipeline log stream (uses different endpoint) */
+  isPipeline?: boolean;
 }
 
 /**

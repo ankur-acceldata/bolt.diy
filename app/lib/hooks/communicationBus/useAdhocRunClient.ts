@@ -178,3 +178,148 @@ export function useAdhocRunClient() {
     executeAdhocRun,
   };
 }
+
+const pipelineLogger = createScopedLogger('usePipelineAdhocRunClient');
+
+export function usePipelineAdhocRunClient() {
+  const [isExecuting, setIsExecuting] = useState(false);
+  const bus = useCommunicationBusChild();
+
+  const executePipelineAdhocRun = useCallback(
+    async (currentProjectId?: string, currentProjectName?: string) => {
+      if (!currentProjectId) {
+        toast.error('Project ID not available. Please wait for sync initialization to complete.');
+        return;
+      }
+
+      setIsExecuting(true);
+
+      try {
+        // Get local execution configuration for pipeline template
+        const localConfig = getExecutionConfig({ id: 'pipeline', name: 'Pipeline Build' });
+
+        pipelineLogger.info('Pipeline execution config generated:', {
+          projectId: currentProjectId,
+          projectName: currentProjectName,
+          localConfig,
+        });
+
+        // Get job configuration from XDP with the local stages
+        const jobConfig = await getJobConfigFromXdp(bus, localConfig.stages);
+
+        pipelineLogger.info('Pipeline Config from XDP:', JSON.stringify(jobConfig, null, 2));
+
+        // Create the pipeline payload based on user specification
+        const payload = {
+          dataplaneId: 27, // Hardcoded as per user requirement
+          source: {
+            type: 'MINIO',
+            config: {
+              url: `home/projects/${Number(currentProjectId)}`, // Hardcoded as per user requirement
+              additionalParams: null,
+            },
+          },
+          projectId: Number(currentProjectId),
+          image: {
+            from: {
+              url: '191579300362.dkr.ecr.us-east-1.amazonaws.com/acceldata/xdp/dp/spark-dind:1.0.0-1759124717090', // Hardcoded as per user requirement
+            },
+            to: {
+              url: currentProjectName ? `${currentProjectName}_${currentProjectId}` : `pipeline_${currentProjectId}`,
+            },
+          },
+          enabled: true,
+        };
+
+        pipelineLogger.info('Pipeline payload being sent:', JSON.stringify(payload, null, 2));
+
+        const response = await fetch('/api/pipeline-adhoc-run', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        pipelineLogger.info('Pipeline API response status:', response.status);
+
+        const outer = (await response.json()) as {
+          success?: boolean;
+          status?: number;
+          data?: any;
+          error?: string;
+          message?: string;
+        };
+
+        pipelineLogger.info('Pipeline API response data:', JSON.stringify(outer, null, 2));
+
+        if (!response.ok || !outer?.success) {
+          throw new Error(outer?.error || `Pipeline execution failed: ${response.status}`);
+        }
+
+        toast.success(outer.message || 'Pipeline adhoc run executed successfully!');
+
+        /*
+         * Extract pipeline run ID from pipeline response for log streaming
+         * Response structure: outer.data.data.id (pipeline run ID)
+         */
+        const pipelineRunId = outer.data?.data?.id;
+        const pipelineId = outer.data?.data?.pipelineId;
+        const dataplaneId = outer.data?.data?.dataplaneName || '27'; // Use dataplaneName or fallback to hardcoded value
+
+        pipelineLogger.info('Attempting to extract pipeline IDs and dataplaneId:', {
+          pipelineRunId,
+          pipelineId,
+          dataplaneId,
+          fullResponseData: outer.data,
+          nestedData: outer.data?.data,
+        });
+
+        if (pipelineRunId !== undefined && pipelineRunId !== null) {
+          pipelineLogger.info('✅ Found pipeline run ID, opening log viewer for pipeline logs:', {
+            dataplaneId,
+            pipelineRunId,
+            pipelineId,
+            responseData: outer.data?.data,
+          });
+
+          /*
+           * Open log viewer for pipeline logs using the pipeline log stream endpoint
+           * Note: We need to determine what ID the pipeline log endpoint expects
+           */
+          workbenchStore.toggleLogViewer(true, {
+            dataplaneId: String(dataplaneId),
+            runId: String(pipelineRunId), // Use pipeline run ID for the log viewer
+            isPipeline: true, // Flag to indicate this is a pipeline log stream
+          });
+
+          pipelineLogger.info('✅ Log viewer toggle called with config:', {
+            dataplaneId: String(dataplaneId),
+            runId: String(pipelineRunId),
+            isPipeline: true,
+          });
+        } else {
+          pipelineLogger.error(
+            '❌ No pipeline run ID found in pipeline response, cannot open log viewer. Full response:',
+            {
+              outer,
+              dataPath: outer.data,
+              nestedDataPath: outer.data?.data,
+            },
+          );
+        }
+      } catch (error) {
+        pipelineLogger.error('Execute pipeline adhoc run error:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to execute pipeline adhoc run');
+      } finally {
+        setIsExecuting(false);
+      }
+    },
+    [bus],
+  );
+
+  return {
+    isExecuting,
+    executePipelineAdhocRun,
+  };
+}
