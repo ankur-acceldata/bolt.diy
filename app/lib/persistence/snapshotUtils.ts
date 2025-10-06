@@ -121,7 +121,7 @@ export async function hasFilesChanged(db: IDBDatabase, chatId: string, currentFi
   const lastSnapshot = await getLatestVersionedSnapshot(db, chatId);
 
   if (!lastSnapshot) {
-    console.log('DEBUG: hasFilesChanged - No previous snapshot exists, allowing change');
+    logger.debug(': hasFilesChanged - No previous snapshot exists, allowing change');
     return true; // No previous snapshot, so files have "changed"
   }
 
@@ -130,7 +130,7 @@ export async function hasFilesChanged(db: IDBDatabase, chatId: string, currentFi
 
   const changes = calculateChangedFiles(lastFiles, currentFiles);
 
-  console.log('DEBUG: hasFilesChanged - Change detection:', {
+  logger.debug('DEBUG: hasFilesChanged - Change detection:', {
     lastFilesCount: Object.keys(lastFiles).length,
     currentFilesCount: Object.keys(currentFiles).length,
     changesDetected: changes.length,
@@ -139,7 +139,7 @@ export async function hasFilesChanged(db: IDBDatabase, chatId: string, currentFi
 
   // Additional check: if we detect changes but current files is empty, something is wrong
   if (changes.length > 0 && Object.keys(currentFiles).length === 0) {
-    console.log('DEBUG: hasFilesChanged - Detected changes but current files empty, blocking snapshot');
+    logger.debug(': hasFilesChanged - Detected changes but current files empty, blocking snapshot');
     return false;
   }
 
@@ -175,13 +175,13 @@ export async function createVersionedSnapshot(
   changeType: ChangeType,
   summary?: string,
 ): Promise<VersionedSnapshot> {
-  console.log('DEBUG: createVersionedSnapshot called with:', {
+  logger.debug('DEBUG: createVersionedSnapshot called with:', {
     chatId,
     filesCount: Object.keys(files).length,
     changeType,
   });
 
-  console.log('DEBUG: Will calculate modified files against first snapshot (v1) instead of latest');
+  logger.debug(': Will calculate modified files against first snapshot (v1) instead of latest');
 
   const versionIndex = await getSnapshotVersions(db, chatId);
   const version = versionIndex ? versionIndex.latestVersion + 1 : 1;
@@ -202,7 +202,7 @@ export async function createVersionedSnapshot(
   const previousSnapshotId =
     versionIndex && versionIndex.versions.length > 0 ? `${chatId}-${versionIndex.latestVersion}` : undefined;
 
-  console.log('DEBUG: Creating full snapshot with', Object.keys(files).length, 'files');
+  logger.debug(': Creating full snapshot with', Object.keys(files).length, 'files');
 
   return {
     chatIndex,
@@ -272,7 +272,7 @@ export function triggerSnapshot(
   summary?: string,
   debounceMs: number = 2000,
 ): void {
-  console.log('DEBUG: triggerSnapshot called with:', {
+  logger.debug('DEBUG: triggerSnapshot called with:', {
     chatId,
     filesCount: Object.keys(files).length,
     changeType,
@@ -304,7 +304,7 @@ export function triggerSnapshot(
       if (!hasSnapshots) {
         // If no snapshots exist and we have files, this is likely an import or upload
         if (Object.keys(files).length > 0) {
-          console.log('DEBUG: Creating initial snapshot with files:', Object.keys(files).length);
+          logger.debug(': Creating initial snapshot with files:', Object.keys(files).length);
 
           // Create initial snapshot with imported/uploaded files
           const initialSnapshot = await createVersionedSnapshot(
@@ -321,7 +321,7 @@ export function triggerSnapshot(
 
           logger.info(`Created initial snapshot with ${Object.keys(files).length} files for chat ${effectiveChatId}`);
         } else {
-          console.log('DEBUG: Creating initial empty snapshot');
+          logger.debug(': Creating initial empty snapshot');
 
           // Create empty initial snapshot
           await createInitialSnapshot(db, effectiveChatId, effectiveChatIndex, summary);
@@ -334,7 +334,7 @@ export function triggerSnapshot(
       const filesChanged = await hasFilesChanged(db, effectiveChatId, files);
 
       if (!filesChanged) {
-        console.log('DEBUG: No file changes detected, skipping snapshot');
+        logger.debug(': No file changes detected, skipping snapshot');
         logger.info(`No file changes detected for chat ${effectiveChatId}, skipping snapshot`);
 
         return;
@@ -342,11 +342,11 @@ export function triggerSnapshot(
 
       // Additional check: Don't create snapshots if we have 0 files
       if (Object.keys(files).length === 0) {
-        console.log('DEBUG: Skipping snapshot creation - no files to snapshot');
+        logger.debug(': Skipping snapshot creation - no files to snapshot');
         return;
       }
 
-      console.log('DEBUG: Files changed, creating snapshot with', Object.keys(files).length, 'files');
+      logger.debug(': Files changed, creating snapshot with', Object.keys(files).length, 'files');
 
       // Create and store the versioned snapshot
       const versionedSnapshot = await createVersionedSnapshot(
@@ -358,7 +358,7 @@ export function triggerSnapshot(
         summary,
       );
 
-      console.log('DEBUG: Created versioned snapshot:', {
+      logger.debug('DEBUG: Created versioned snapshot:', {
         version: versionedSnapshot.version,
         filesCount: Object.keys(versionedSnapshot.files).length,
       });
@@ -373,7 +373,7 @@ export function triggerSnapshot(
       );
     } catch (error) {
       logger.error('Failed to create triggered snapshot:', error);
-      console.error('DEBUG: triggerSnapshot error:', error);
+      logger.error('DEBUG: triggerSnapshot error:', error);
     }
 
     // Remove the timeout from the map using the original chatId

@@ -1,4 +1,7 @@
 import { LanguageDescription } from '@codemirror/language';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Languages');
 
 export const supportedLanguages = [
   LanguageDescription.of({
@@ -143,7 +146,7 @@ export async function getLanguage(fileName: string) {
     try {
       return await languageDescription.load();
     } catch (error) {
-      console.warn(`Failed to load language for ${fileName}:`, error);
+      logger.warn(`Failed to load language for ${fileName}:`, error);
     }
   }
 

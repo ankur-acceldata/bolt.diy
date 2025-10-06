@@ -66,7 +66,7 @@ function cleanoutMarkdownSyntax(content: string) {
   const codeBlockRegex = /^\s*```\w*\n([\s\S]*?)\n\s*```\s*$/;
   const match = content.match(codeBlockRegex);
 
-  // console.log('matching', !!match, content);
+  // logger.debug('matching', !!match, content);
 
   if (match) {
     return match[1]; // Remove common leading 4-space indent
@@ -109,7 +109,7 @@ export class StreamingMessageParser {
 
     while (i < input.length) {
       if (input.startsWith(BOLT_QUICK_ACTIONS_OPEN, i)) {
-        console.log('input:', input.slice(i));
+        logger.debug('input:', input.slice(i));
 
         const actionsBlockEnd = input.indexOf(BOLT_QUICK_ACTIONS_CLOSE, i);
 
@@ -371,13 +371,13 @@ export class StreamingMessageParser {
 
       (actionAttributes as FileAction).filePath = filePath;
     } else if (actionType === 'workbench-action') {
-      console.log('🎬 MESSAGE PARSER: Found workbench-action in LLM response!');
+      logger.debug('🎬 MESSAGE PARSER: Found workbench-action in LLM response!');
 
       const action = this.#extractAttribute(actionTag, 'action');
-      console.log('🎯 Extracted action attribute:', action);
+      logger.debug('🎯 Extracted action attribute:', action);
 
       if (!action) {
-        console.log('❌ No action attribute found in workbench-action tag');
+        logger.error(' No action attribute found in workbench-action tag');
         logger.warn('Workbench action requires an action attribute');
         throw new Error('Workbench action requires an action attribute');
       }
@@ -385,23 +385,23 @@ export class StreamingMessageParser {
       const validActions = ['run', 'build', 'sync', 'deploy', 'test', 'preview', 'terminal'];
 
       if (!validActions.includes(action)) {
-        console.log('❌ Invalid workbench action:', action, 'Valid actions:', validActions);
+        logger.error(' Invalid workbench action:', action, 'Valid actions:', validActions);
         logger.warn(`Invalid workbench action: ${action}`);
         throw new Error(`Invalid workbench action: ${action}. Valid actions: ${validActions.join(', ')}`);
       }
 
-      console.log('✅ Valid workbench action:', action);
+      logger.info(' Valid workbench action:', action);
 
       let parameters: Record<string, any> = {};
       const parametersStr = this.#extractAttribute(actionTag, 'parameters');
-      console.log('🔧 Extracted parameters string:', parametersStr);
+      logger.debug(' Extracted parameters string:', parametersStr);
 
       if (parametersStr) {
         try {
           parameters = JSON.parse(parametersStr);
-          console.log('✅ Parsed parameters:', parameters);
+          logger.info(' Parsed parameters:', parameters);
         } catch {
-          console.log('❌ Failed to parse parameters JSON');
+          logger.error(' Failed to parse parameters JSON');
           logger.warn('Invalid JSON in parameters attribute');
           throw new Error('Invalid JSON in parameters attribute');
         }
@@ -409,11 +409,11 @@ export class StreamingMessageParser {
 
       (actionAttributes as WorkbenchAction).action = action as WorkbenchAction['action'];
       (actionAttributes as WorkbenchAction).parameters = parameters;
-      console.log('🎉 Workbench action parsed successfully:', { action, parameters });
+      logger.info(' Workbench action parsed successfully:', { action, parameters });
 
       // Only trigger auto-execution for run actions during streaming (not on page load)
       if (action === 'run' && this.#isStreaming) {
-        console.log('🚀 MESSAGE PARSER: Triggering auto-execution for run action during streaming!');
+        logger.debug('🚀 MESSAGE PARSER: Triggering auto-execution for run action during streaming!');
 
         // Dispatch a custom event that the Workbench component can listen to
         window.dispatchEvent(
@@ -426,7 +426,7 @@ export class StreamingMessageParser {
           }),
         );
       } else if (action === 'run' && !this.#isStreaming) {
-        console.log('📖 MESSAGE PARSER: Skipping auto-execution for run action (not streaming - likely page load)');
+        logger.debug('📖 MESSAGE PARSER: Skipping auto-execution for run action (not streaming - likely page load)');
       }
     } else if (!['shell', 'start'].includes(actionType)) {
       logger.warn(`Unknown action type '${actionType}'`);
@@ -463,7 +463,7 @@ function createQuickActionElement(props: Record<string, string>, label: string) 
     ...Object.entries(props).map(([key, value]) => `data-${camelToDashCase(key)}=${JSON.stringify(value)}`),
   ];
 
-  console.log('elementProps', `<button ${elementProps.join(' ')}>${label}</button>`);
+  logger.debug('Props', `<button ${elementProps.join(' ')}>${label}</button>`);
 
   return `<button ${elementProps.join(' ')}>${label}</button>`;
 }

@@ -5,7 +5,7 @@ import { AcceldataService } from '~/lib/services/acceldataService';
 const logger = createScopedLogger('api.pipeline-adhoc-run');
 
 export async function action({ request }: ActionFunctionArgs) {
-  logger.info('🔧 Pipeline adhoc run API called');
+  logger.debug('🔧 Pipeline adhoc run API called');
 
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, { status: 405 });
@@ -17,11 +17,11 @@ export async function action({ request }: ActionFunctionArgs) {
 
     try {
       const bodyText = await request.text();
-      logger.info('🔧 Received request body:', bodyText);
+      logger.debug('🔧 Received request body:', bodyText);
 
       if (bodyText && bodyText.trim()) {
         pipelineConfig = JSON.parse(bodyText);
-        logger.info('🔧 Parsed pipeline adhoc run configuration:', pipelineConfig);
+        logger.debug('🔧 Parsed pipeline adhoc run configuration:', pipelineConfig);
       }
     } catch (parseError) {
       logger.warn('Failed to parse request body:', parseError);
@@ -38,11 +38,11 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     // Use centralized service with request for dynamic base URL
-    logger.info('🔧 Calling AcceldataService.executePipelineAdhocRun');
+    logger.debug('🔧 Calling AcceldataService.executePipelineAdhocRun');
 
     const result = await AcceldataService.executePipelineAdhocRun(pipelineConfig, request);
 
-    logger.info('🔧 AcceldataService result:', JSON.stringify(result, null, 2));
+    logger.debug('🔧 AcceldataService result:', JSON.stringify(result, null, 2));
 
     return json(result, { status: result.status });
   } catch (error) {

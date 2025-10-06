@@ -3,6 +3,9 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Google');
 
 export default class GoogleProvider extends BaseProvider {
   name = 'Google';
@@ -91,7 +94,7 @@ export default class GoogleProvider extends BaseProvider {
      * consider using stable models like gemini-1.5-pro or gemini-1.5-flash instead.
      */
     if (model.includes('preview')) {
-      console.warn(
+      logger.warn(
         `Warning: Using preview model ${model} which may have compatibility issues with AI SDK. Consider using gemini-1.5-pro or gemini-1.5-flash for better stability.`,
       );
     }

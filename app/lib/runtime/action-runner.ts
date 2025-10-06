@@ -149,7 +149,7 @@ export class ActionRunner {
         return this.#executeAction(actionId, isStreaming);
       })
       .catch((error) => {
-        console.error('Action failed:', error);
+        logger.error('Action failed:', error);
       });
 
     await this.#currentExecutionPromise;
@@ -199,14 +199,14 @@ export class ActionRunner {
           return;
         }
         case 'workbench-action': {
-          console.log('🚀 WORKBENCH ACTION DETECTED:', JSON.stringify(action, null, 2));
-          console.log('🎯 Action Runner executing workbench action:', (action as WorkbenchAction).action);
+          logger.debug('🚀 WORKBENCH ACTION DETECTED:', JSON.stringify(action, null, 2));
+          logger.debug('🎯 Action Runner executing workbench action:', (action as WorkbenchAction).action);
 
           try {
             await this.handleWorkbenchAction(action as WorkbenchAction);
-            console.log('✅ WORKBENCH ACTION COMPLETED SUCCESSFULLY');
+            logger.info(' WORKBENCH ACTION COMPLETED SUCCESSFULLY');
           } catch (error: any) {
-            console.log('❌ WORKBENCH ACTION FAILED:', error.message);
+            logger.error(' WORKBENCH ACTION FAILED:', error.message);
 
             // Update action status
             this.#updateAction(actionId, {
@@ -307,11 +307,11 @@ export class ActionRunner {
 
     const webcontainer = await this.#webcontainer;
 
-    // console.log('DEBUG: WebContainer obtained, workdir:', webcontainer.workdir);
+    // logger.debug(': WebContainer obtained, workdir:', webcontainer.workdir);
 
     const relativePath = nodePath.relative(webcontainer.workdir, action.filePath);
 
-    // console.log('DEBUG: Calculated relative path:', relativePath);
+    // logger.debug(': Calculated relative path:', relativePath);
 
     let folder = nodePath.dirname(relativePath);
 
@@ -508,24 +508,24 @@ export class ActionRunner {
 
   async handleWorkbenchAction(action: WorkbenchAction) {
     const { action: workbenchAction, parameters = {} } = action;
-    console.log('🔥 HANDLE WORKBENCH ACTION CALLED - Action:', workbenchAction, 'Parameters:', parameters);
+    logger.debug('🔥 HANDLE WORKBENCH ACTION CALLED - Action:', workbenchAction, 'Parameters:', parameters);
     logger.debug('[Workbench Action]:', { workbenchAction, parameters });
 
     try {
       const internalActionsService = InternalActionsService.getInstance();
-      console.log('🛠️ Got InternalActionsService instance');
+      logger.debug('🛠️ Got InternalActionsService instance');
 
       // Map workbench actions to internal tool names
       const toolName = `workbench.${workbenchAction}`;
-      console.log('🎯 Mapped to internal tool:', toolName);
+      logger.debug('🎯 Mapped to internal tool:', toolName);
 
       if (!internalActionsService.isValidToolName(toolName)) {
-        console.log('❌ Tool validation failed - tool does not exist:', toolName);
+        logger.error(' Tool validation failed - tool does not exist:', toolName);
         throw new Error(`Workbench action '${workbenchAction}' is not available`);
       }
 
       // Execute the internal tool
-      console.log('⚡ About to execute internal tool...');
+      logger.debug('⚡ About to execute internal tool...');
 
       const result = await internalActionsService.executeTool(toolName, parameters);
 
@@ -533,7 +533,7 @@ export class ActionRunner {
 
       return { success: true, result };
     } catch (error) {
-      console.log('💥 Workbench action execution error:', error);
+      logger.error('💥 Workbench action execution :', error);
       logger.error('Workbench action failed:', error);
       throw error;
     }

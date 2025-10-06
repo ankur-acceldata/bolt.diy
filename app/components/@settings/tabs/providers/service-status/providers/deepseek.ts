@@ -1,5 +1,8 @@
 import { BaseProviderChecker } from '~/components/@settings/tabs/providers/service-status/base-provider';
 import type { StatusCheckResult } from '~/components/@settings/tabs/providers/service-status/types';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Deepseek');
 
 export class DeepseekStatusChecker extends BaseProviderChecker {
   async checkStatus(): Promise<StatusCheckResult> {
@@ -28,7 +31,7 @@ export class DeepseekStatusChecker extends BaseProviderChecker {
         incidents: [], // No public incident tracking available yet
       };
     } catch (error) {
-      console.error('Error checking Deepseek status:', error);
+      logger.error('Error checking Deepseek status:', error);
 
       return {
         status: 'degraded',

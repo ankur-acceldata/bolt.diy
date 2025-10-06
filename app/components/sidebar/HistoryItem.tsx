@@ -6,6 +6,9 @@ import { useEditChatDescription } from '~/lib/hooks';
 import { forwardRef, type ForwardedRef, useCallback } from 'react';
 import { Checkbox } from '~/components/ui/Checkbox';
 import { createChatUrl } from '~/utils/api';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Historyitem');
 
 interface HistoryItemProps {
   item: ChatHistoryItem;
@@ -46,7 +49,7 @@ export function HistoryItem({
       if (selectionMode) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('Item clicked in selection mode:', item.id);
+        logger.debug('Item clicked in selection mode:', item.id);
         onToggleSelection?.(item.id);
       }
     },
@@ -54,7 +57,7 @@ export function HistoryItem({
   );
 
   const handleCheckboxChange = useCallback(() => {
-    console.log('Checkbox changed for item:', item.id);
+    logger.debug('Checkbox changed for item:', item.id);
     onToggleSelection?.(item.id);
   }, [item.id, onToggleSelection]);
 
@@ -62,7 +65,7 @@ export function HistoryItem({
     (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
       event.preventDefault();
       event.stopPropagation();
-      console.log('Delete button clicked for item:', item.id);
+      logger.debug('Delete button clicked for item:', item.id);
 
       if (onDelete) {
         onDelete(event as unknown as React.UIEvent);

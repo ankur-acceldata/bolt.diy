@@ -90,7 +90,7 @@ export default class OllamaProvider extends BaseProvider {
     const response = await fetch(`${baseUrl}/api/tags`);
     const data = (await response.json()) as OllamaApiResponse;
 
-    // console.log({ ollamamodels: data.models });
+    // logger.debug({ ollamamodels: data.models });
 
     return data.models.map((model: OllamaModel) => ({
       name: model.name,

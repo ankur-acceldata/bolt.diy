@@ -21,6 +21,9 @@ import { Button } from '~/components/ui/Button';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '~/components/ui/Collapsible';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '~/components/ui/Badge';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Netlifyconnection');
 
 // Add the Netlify logo SVG component at the top of the file
 const NetlifyLogo = () => (
@@ -192,7 +195,7 @@ export default function NetlifyConnection() {
       // Fetch stats after successful connection
       fetchNetlifyStats(tokenInput);
     } catch (error) {
-      console.error('Error connecting to Netlify:', error);
+      logger.error('Error connecting to Netlify:', error);
       toast.error(`Failed to connect to Netlify: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsConnecting(false);
@@ -283,7 +286,7 @@ export default function NetlifyConnection() {
 
       toast.success('Netlify stats updated');
     } catch (error) {
-      console.error('Error fetching Netlify stats:', error);
+      logger.error('Error fetching Netlify stats:', error);
       toast.error(`Failed to fetch Netlify stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setFetchingStats(false);

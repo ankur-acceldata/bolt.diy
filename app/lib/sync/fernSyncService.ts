@@ -7,6 +7,9 @@ import { logStore } from '~/lib/stores/logs';
 import { fernApiService, type SyncResult } from '~/lib/services/fernApiService';
 import type { WorkbenchStore } from '~/lib/stores/workbench';
 import { getBasePath } from '~/lib/config';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Fernsyncservice');
 
 export interface FernSyncOptions {
   workbenchStore: WorkbenchStore;
@@ -265,7 +268,7 @@ export class FernSyncService {
         try {
           callback(data);
         } catch (error) {
-          console.error('Error in sync event callback:', error);
+          logger.error('Error in sync event callback:', error);
         }
       });
     }

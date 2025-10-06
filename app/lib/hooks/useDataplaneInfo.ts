@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { ProjectService } from '~/lib/services/projectService';
 import type { DataplaneInfoPayload } from '~/types/communicationBus';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Usedataplaneinfo');
 
 /**
  * React hook to get dataplane information from parent iframe
@@ -11,8 +14,8 @@ import type { DataplaneInfoPayload } from '~/types/communicationBus';
  * ```typescript
  * const dataplaneInfo = useDataplaneInfo();
  * if (dataplaneInfo) {
- *   console.log('Dataplane ID:', dataplaneInfo.dataplaneId);
- *   console.log('Dataplane Name:', dataplaneInfo.dataplaneName);
+ *   logger.debug('Dataplane ID:', dataplaneInfo.dataplaneId);
+ *   logger.debug('Dataplane Name:', dataplaneInfo.dataplaneName);
  * }
  * ```
  */
@@ -24,12 +27,20 @@ export function useDataplaneInfo(): DataplaneInfoPayload | undefined {
 
     async function fetchDataplaneInfo() {
       try {
+        logger.debug('Fetching dataplane info...');
+
         const info = await ProjectService.getDataplaneInfo();
 
         if (isMounted) {
           setDataplaneInfo(info);
+          logger.info('Dataplane info loaded:', {
+            dataplaneId: info?.dataplaneId,
+            dataplaneName: info?.dataplaneName,
+          });
         }
-      } catch {
+      } catch (error) {
+        logger.error('Failed to fetch dataplane info:', error);
+
         if (isMounted) {
           setDataplaneInfo(undefined);
         }
@@ -72,14 +83,20 @@ export function useDataplaneInfoWithState() {
       try {
         setIsLoading(true);
         setError(undefined);
+        logger.debug('Fetching dataplane info with state...');
 
         const info = await ProjectService.getDataplaneInfo();
 
         if (isMounted) {
           setDataplaneInfo(info);
+          logger.info('Dataplane info loaded successfully:', {
+            dataplaneId: info?.dataplaneId,
+            dataplaneName: info?.dataplaneName,
+          });
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to fetch dataplane info';
+        logger.error('Failed to fetch dataplane info:', err);
 
         if (isMounted) {
           setError(errorMessage);

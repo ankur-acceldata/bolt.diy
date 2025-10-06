@@ -4,6 +4,9 @@ import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import Cookies from 'js-cookie';
 import type { GitHubUserResponse } from '~/types/GitHub';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Githubauthdialog');
 
 interface GitHubAuthDialogProps {
   isOpen: boolean;
@@ -65,7 +68,7 @@ export function GitHubAuthDialog({ isOpen, onClose }: GitHubAuthDialogProps) {
         }
       }
     } catch (error) {
-      console.error('Error connecting to GitHub:', error);
+      logger.error('Error connecting to GitHub:', error);
       toast.error('Failed to connect to GitHub. Please try again.');
     } finally {
       setIsSubmitting(false);

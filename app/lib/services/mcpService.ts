@@ -153,16 +153,16 @@ export class MCPService {
           mcpServerUrl,
         });
 
-        console.log('🔧 MCP SERVICE - Auto-initializing with XDP config, mcpServerUrl:', mcpServerUrl);
+        logger.debug(' MCP SERVICE - Auto-initializing with XDP config, mcpServerUrl:', mcpServerUrl);
 
         try {
           const serverTools = await this.updateConfig(xdpConfig);
-          console.log('✅ MCP SERVICE - Auto-initialization complete, server tools:', serverTools);
+          logger.info(' MCP SERVICE - Auto-initialization complete, server tools:', serverTools);
         } catch (error) {
-          console.warn('❌ MCP SERVICE - Failed to auto-initialize:', error);
+          logger.warn('❌ MCP SERVICE - Failed to auto-initialize:', error);
         }
       } catch (error) {
-        console.warn('Failed to load XDP config for auto-initialization:', error);
+        logger.warn('Failed to load XDP config for auto-initialization:', error);
       }
     }
   }
@@ -216,7 +216,7 @@ export class MCPService {
 
     if (xdpServer && 'url' in xdpServer) {
       logger.debug('XDP SERVER URL BEING SET:', xdpServer.url);
-      console.log('🔍 MCP SERVICE - XDP URL being set:', xdpServer.url);
+      logger.debug(' MCP SERVICE - XDP URL being set:', xdpServer.url);
     }
 
     this._config = config;
@@ -226,7 +226,7 @@ export class MCPService {
   }
 
   getCurrentConfig(): MCPConfig {
-    console.log('🔍 MCP SERVICE - getCurrentConfig called, returning:', this._config);
+    logger.debug(' MCP SERVICE - getCurrentConfig called, returning:', this._config);
     return this._config;
   }
 
@@ -388,7 +388,7 @@ export class MCPService {
 
     await Promise.allSettled(checkPromises);
 
-    console.log('🔍 MCP SERVICE - checkServersAvailabilities returning:', this._mcpToolsPerServer);
+    logger.debug(' MCP SERVICE - checkServersAvailabilities returning:', this._mcpToolsPerServer);
 
     return this._mcpToolsPerServer;
   }

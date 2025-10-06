@@ -1,5 +1,8 @@
 import { BaseProviderChecker } from '~/components/@settings/tabs/providers/service-status/base-provider';
 import type { StatusCheckResult } from '~/components/@settings/tabs/providers/service-status/types';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Openai');
 
 export class OpenAIStatusChecker extends BaseProviderChecker {
   async checkStatus(): Promise<StatusCheckResult> {
@@ -82,7 +85,7 @@ export class OpenAIStatusChecker extends BaseProviderChecker {
         incidents,
       };
     } catch (error) {
-      console.error('Error checking OpenAI status:', error);
+      logger.error('Error checking OpenAI status:', error);
 
       // Fallback to basic endpoint check
       const endpointStatus = await this.checkEndpoint('https://status.openai.com/');

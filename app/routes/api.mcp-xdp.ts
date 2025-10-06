@@ -6,6 +6,9 @@ import {
   XDP_CONFIG_EXAMPLES,
   type XDPMCPConfig,
 } from '~/lib/xdp-mcp-config';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('ApiMcpXdp');
 
 export async function loader() {
   return json({
@@ -82,7 +85,7 @@ export async function action({ request }: ActionFunctionArgs) {
         });
     }
   } catch (error) {
-    console.error('XDP MCP API error:', error);
+    logger.error('XDP MCP API error:', error);
     return json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',

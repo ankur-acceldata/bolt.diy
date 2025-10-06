@@ -223,7 +223,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           } satisfies ProgressAnnotation);
 
           // Create a summary of the chat
-          console.log(`Messages count: ${processedMessages.length}`);
+          logger.debug(`Messages count: ${processedMessages.length}`);
 
           summary = await createSummary({
             messages: [...processedMessages],
@@ -269,7 +269,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           } satisfies ProgressAnnotation);
 
           // Select context files
-          console.log(`Messages count: ${processedMessages.length}`);
+          logger.debug(`Messages count: ${processedMessages.length}`);
           filteredFiles = await selectContext({
             messages: [...processedMessages],
             env: context.cloudflare?.env,
@@ -533,10 +533,13 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           );
 
           // Log the full response to check for workbench-action elements
-          console.log('🔍 FULL LLM RESPONSE LENGTH:', fullContent.length);
-          console.log('🎯 LLM RESPONSE CONTAINS workbench-action:', fullContent.includes('workbench-action'));
-          console.log('🔍 First 1000 chars of response:', fullContent.substring(0, 1000));
-          console.log('🔍 Last 1000 chars of response:', fullContent.substring(Math.max(0, fullContent.length - 1000)));
+          logger.debug('🔍 FULL LLM RESPONSE LENGTH:', fullContent.length);
+          logger.debug('🎯 LLM RESPONSE CONTAINS workbench-action:', fullContent.includes('workbench-action'));
+          logger.debug('🔍 First 1000 chars of response:', fullContent.substring(0, 1000));
+          logger.debug(
+            '🔍 Last 1000 chars of response:',
+            fullContent.substring(Math.max(0, fullContent.length - 1000)),
+          );
         })();
         result.mergeIntoDataStream(dataStream);
         logger.debug('Data stream execution completed');

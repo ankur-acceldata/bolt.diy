@@ -78,7 +78,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         },
       });
     } catch (error: unknown) {
-      console.log(error);
+      logger.error();
 
       if (error instanceof Error && error.message?.includes('API key')) {
         throw new Response('Invalid or missing API key', {
@@ -137,7 +137,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         },
       });
     } catch (error: unknown) {
-      console.log(error);
+      logger.error();
 
       const errorResponse = {
         error: true,

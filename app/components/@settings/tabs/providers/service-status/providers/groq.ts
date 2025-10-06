@@ -1,5 +1,8 @@
 import { BaseProviderChecker } from '~/components/@settings/tabs/providers/service-status/base-provider';
 import type { StatusCheckResult } from '~/components/@settings/tabs/providers/service-status/types';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Groq');
 
 export class GroqStatusChecker extends BaseProviderChecker {
   async checkStatus(): Promise<StatusCheckResult> {
@@ -55,7 +58,7 @@ export class GroqStatusChecker extends BaseProviderChecker {
         incidents: incidents.slice(0, 5),
       };
     } catch (error) {
-      console.error('Error checking Groq status:', error);
+      logger.error('Error checking Groq status:', error);
 
       // Fallback to basic endpoint check
       const endpointStatus = await this.checkEndpoint('https://groqstatus.com/');

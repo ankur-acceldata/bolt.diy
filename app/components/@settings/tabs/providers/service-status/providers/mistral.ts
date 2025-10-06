@@ -1,5 +1,8 @@
 import { BaseProviderChecker } from '~/components/@settings/tabs/providers/service-status/base-provider';
 import type { StatusCheckResult } from '~/components/@settings/tabs/providers/service-status/types';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Mistral');
 
 export class MistralStatusChecker extends BaseProviderChecker {
   async checkStatus(): Promise<StatusCheckResult> {
@@ -59,7 +62,7 @@ export class MistralStatusChecker extends BaseProviderChecker {
         incidents,
       };
     } catch (error) {
-      console.error('Error checking Mistral status:', error);
+      logger.error('Error checking Mistral status:', error);
 
       // Fallback to basic endpoint check
       const endpointStatus = await this.checkEndpoint('https://status.mistral.ai/');

@@ -17,6 +17,9 @@ import { getBasePath } from '~/utils/api';
 
 // UI Components
 import { Badge, EmptyState, StatusIndicator, SearchInput } from '~/components/ui';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Pushtogithubdialog');
 
 interface PushToGitHubDialogProps {
   isOpen: boolean;
@@ -103,7 +106,7 @@ export function PushToGitHubDialog({ isOpen, onClose, onPush }: PushToGitHubDial
 
     try {
       setIsFetchingRepos(true);
-      console.log('Fetching GitHub repositories with token:', token.substring(0, 5) + '...');
+      logger.debug('Fetching GitHub repositories with token:', token.substring(0, 5) + '...');
 
       // Fetch ALL repos by paginating through all pages
       let allRepos: GitHubRepo[] = [];
@@ -124,10 +127,10 @@ export function PushToGitHubDialog({ isOpen, onClose, onPush }: PushToGitHubDial
 
           try {
             errorData = await response.json();
-            console.error('Error response data:', errorData);
+            logger.error('Error response data:', errorData);
           } catch (e) {
             errorData = { message: 'Could not parse error response' };
-            console.error('Could not parse error response:', e);
+            logger.error('Could not parse error response:', e);
           }
 
           if (response.status === 401) {
@@ -167,7 +170,7 @@ export function PushToGitHubDialog({ isOpen, onClose, onPush }: PushToGitHubDial
             page += 1;
           }
         } catch (parseError) {
-          console.error('Error parsing JSON response:', parseError);
+          logger.error('Error parsing JSON response:', parseError);
           logStore.logError('Failed to parse GitHub repositories response', { parseError });
           toast.error('Failed to parse repository data');
           setRecentRepos([]);
@@ -177,7 +180,7 @@ export function PushToGitHubDialog({ isOpen, onClose, onPush }: PushToGitHubDial
       }
       setRecentRepos(allRepos);
     } catch (error) {
-      console.error('Exception while fetching GitHub repositories:', error);
+      logger.error('Exception while fetching GitHub repositories:', error);
       logStore.logError('Failed to fetch GitHub repositories', { error });
       toast.error('Failed to fetch recent repositories');
     } finally {
@@ -252,7 +255,7 @@ export function PushToGitHubDialog({ isOpen, onClose, onPush }: PushToGitHubDial
       setPushedFiles(filesList);
       setShowSuccessDialog(true);
     } catch (error) {
-      console.error('Error pushing to GitHub:', error);
+      logger.error('Error pushing to GitHub:', error);
       toast.error('Failed to push to GitHub. Please check your repository name and try again.');
     } finally {
       setIsLoading(false);

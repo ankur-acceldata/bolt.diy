@@ -8,6 +8,9 @@ import { SyncManager } from '@fern-fs/adapter/core/sync-manager';
 import { UniversalFileNode } from '@fern-fs/adapter/core/interfaces';
 import { openDatabase, getSnapshot, setSnapshot } from '~/lib/persistence/db';
 import type { FilesStore } from '~/lib/stores/files';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('BoltSyncAdapter');
 
 export interface BoltSyncIntegrationOptions {
   filesStore: FilesStore;
@@ -77,9 +80,9 @@ export class BoltSyncIntegration {
       await this._syncManager.startSync();
 
       this._isInitialized = true;
-      console.log('Bolt sync integration initialized');
+      logger.debug('Bolt sync integration initialized');
     } catch (error) {
-      console.error('Failed to initialize Bolt sync integration:', error);
+      logger.error('Failed to initialize Bolt sync integration:', error);
       throw error;
     }
   }
@@ -109,12 +112,12 @@ export class BoltSyncIntegration {
       const result = await this._syncManager.forcSync();
 
       if (!result.success) {
-        console.error('Force sync failed:', result.errors);
+        logger.error('Force sync failed:', result.errors);
       }
 
       return result;
     } catch (error) {
-      console.error('Force sync error:', error);
+      logger.error('Force sync error:', error);
       throw error;
     }
   }
@@ -219,7 +222,7 @@ export class BoltSyncIntegration {
       await this._syncManager.setBackend(backend);
       await backend.connect();
     } catch (error) {
-      console.error('Failed to setup remote sync:', error);
+      logger.error('Failed to setup remote sync:', error);
     }
   }
 
@@ -294,7 +297,7 @@ export class BoltSyncIntegration {
       // Let the adapter handle the change through its change detector
       await this._adapter.writeFile(node);
     } catch (error) {
-      console.error('Error handling file update:', error);
+      logger.error('Error handling file update:', error);
     }
   }
 
@@ -312,7 +315,7 @@ export class BoltSyncIntegration {
     try {
       await this._adapter.deleteFile(filePath);
     } catch (error) {
-      console.error('Error handling file delete:', error);
+      logger.error('Error handling file delete:', error);
     }
   }
 }

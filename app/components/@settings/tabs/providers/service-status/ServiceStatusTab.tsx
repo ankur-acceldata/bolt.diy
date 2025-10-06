@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import type { ServiceStatus } from './types';
 import { ProviderStatusCheckerFactory } from './provider-factory';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Servicestatustab');
 
 export default function ServiceStatusTab() {
   const [serviceStatuses, setServiceStatuses] = useState<ServiceStatus[]>([]);
@@ -27,7 +30,7 @@ export default function ServiceStatusTab() {
               lastChecked: new Date().toISOString(),
             });
           } catch (err) {
-            console.error(`Error checking ${provider} status:`, err);
+            logger.error(`Error checking ${provider} status:`, err);
             statuses.push({
               provider,
               status: 'degraded',
@@ -40,7 +43,7 @@ export default function ServiceStatusTab() {
 
         setServiceStatuses(statuses);
       } catch (err) {
-        console.error('Error checking provider statuses:', err);
+        logger.error('Error checking provider statuses:', err);
         setError('Failed to check service statuses');
       } finally {
         setLoading(false);

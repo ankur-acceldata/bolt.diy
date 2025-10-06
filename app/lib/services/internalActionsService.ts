@@ -73,25 +73,25 @@ export class InternalActionsService {
           },
         },
         execute: async (parameters: { isEditAndRun?: boolean } = {}) => {
-          console.log('🏃 WORKBENCH.RUN TOOL EXECUTING with parameters:', parameters);
+          logger.debug('🏃 WORKBENCH.RUN TOOL EXECUTING with parameters:', parameters);
           logger.info('Executing workbench.run with parameters:', parameters);
 
           if (!executeAdhocRunRef) {
-            console.log('❌ Execute adhoc run function not initialized');
+            logger.error(' Execute adhoc run function not initialized');
             throw new Error('Execute adhoc run function not initialized - workbench not ready');
           }
 
-          console.log('✅ Execute adhoc run function is available');
+          logger.info(' Execute adhoc run function is available');
 
           try {
             const { isEditAndRun = false } = parameters;
 
             // Call the actual executeAdhocRun function
-            console.log(`🚀 TRIGGERING RUN ACTION with isEditAndRun: ${isEditAndRun}`);
+            logger.debug(`🚀 TRIGGERING RUN ACTION with isEditAndRun: ${isEditAndRun}`);
             logger.info(`Triggering run action with isEditAndRun: ${isEditAndRun}`);
             await executeAdhocRunRef(isEditAndRun);
 
-            console.log('🎯 RUN ACTION COMPLETED SUCCESSFULLY');
+            logger.debug('🎯 RUN ACTION COMPLETED SUCCESSFULLY');
 
             return {
               success: true,
@@ -100,7 +100,7 @@ export class InternalActionsService {
               timestamp: new Date().toISOString(),
             };
           } catch (error) {
-            console.log('💥 RUN ACTION FAILED:', error);
+            logger.error('💥 RUN ACTION ED:', error);
             logger.error('Failed to execute run action:', error);
             throw new Error(
               `Failed to execute run action: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -209,7 +209,7 @@ export class InternalActionsService {
       const result = await tool.execute(parameters);
       return result;
     } catch (error) {
-      console.log('💥 Internal tool execution failed:', error);
+      logger.error('💥 Internal tool execution ed:', error);
       logger.error(`Failed to execute internal tool '${toolName}':`, error);
       throw error;
     }

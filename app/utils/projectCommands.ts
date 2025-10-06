@@ -1,5 +1,8 @@
 import type { Message } from 'ai';
 import { generateId } from './fileUtils';
+import { createScopedLogger } from './logger';
+
+const logger = createScopedLogger('ProjectCommands');
 
 export interface ProjectCommands {
   type: string;
@@ -47,7 +50,7 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
           'Would you like me to inspect package.json to determine the available scripts for running this project?',
       };
     } catch (error) {
-      console.error('Error parsing package.json:', error);
+      logger.error('Error parsing package.json:', error);
       return { type: '', setupCommand: '', followupMessage: '' };
     }
   }

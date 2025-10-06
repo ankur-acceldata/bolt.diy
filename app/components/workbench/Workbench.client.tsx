@@ -213,7 +213,7 @@ export const Workbench = memo(
     useEffect(() => {
       const handleWorkbenchActionEvent = (event: CustomEvent) => {
         const { action, parameters, timestamp } = event.detail;
-        console.log('🎯 WORKBENCH: Received workbench-action event!', { action, parameters, timestamp });
+        logger.info('🎯 WORKBENCH: Received workbench-action event!', { action, parameters, timestamp });
 
         if (action === 'run') {
           const now = Date.now();
@@ -221,8 +221,8 @@ export const Workbench = memo(
 
           // Enhanced debounce: Check both time-based and execution state
           if (timeSinceLastRun > 10000 && !isExecutingRef.current) {
-            console.log('🚀 WORKBENCH: Auto-executing run action from AI message!');
-            console.log('📁 WORKBENCH: Current files count:', Object.keys(files || {}).length);
+            logger.info('🚀 WORKBENCH: Auto-executing run action from AI message!');
+            logger.debug('📁 WORKBENCH: Current files count:', Object.keys(files || {}).length);
 
             // Set execution state immediately to prevent concurrent executions
             lastExecutedAtRef.current = now;
@@ -234,7 +234,7 @@ export const Workbench = memo(
             }
 
             executionTimeoutRef.current = setTimeout(() => {
-              console.log('⚠️ WORKBENCH: Execution timeout - resetting execution state');
+              logger.warn('⚠️ WORKBENCH: Execution timeout - resetting execution state');
               isExecutingRef.current = false;
             }, 30000);
 
@@ -260,17 +260,17 @@ export const Workbench = memo(
 
               if (messagesContainer) {
                 messagesContainer.appendChild(runIndicator);
-                console.log('📢 WORKBENCH: Added visual run indicator to chat');
+                logger.debug('📢 WORKBENCH: Added visual run indicator to chat');
               }
 
               // Delay to ensure files are fully written
-              console.log('⏳ WORKBENCH: Waiting 3 seconds for files to be written...');
+              logger.debug('⏳ WORKBENCH: Waiting 3 seconds for files to be written...');
               setTimeout(async () => {
-                console.log('⚡ WORKBENCH: Executing handleExecuteAdhocRun now!');
+                logger.info('⚡ WORKBENCH: Executing handleExecuteAdhocRun now!');
 
                 try {
                   await handleExecuteAdhocRun(false);
-                  console.log('✅ WORKBENCH: Auto-run triggered successfully!');
+                  logger.info('✅ WORKBENCH: Auto-run triggered successfully!');
 
                   // Update the indicator to show completion
                   if (runIndicator && runIndicator.parentNode) {
@@ -292,7 +292,7 @@ export const Workbench = memo(
                     }, 5000);
                   }
                 } catch (error) {
-                  console.error('❌ WORKBENCH: Auto-run failed:', error);
+                  logger.error('❌ WORKBENCH: Auto-run failed:', error);
 
                   // Update indicator to show error
                   if (runIndicator && runIndicator.parentNode) {
@@ -313,11 +313,11 @@ export const Workbench = memo(
                     executionTimeoutRef.current = null;
                   }
 
-                  console.log('🔓 WORKBENCH: Execution state reset, ready for next run');
+                  logger.debug('🔓 WORKBENCH: Execution state reset, ready for next run');
                 }
               }, 3000);
             } catch (error) {
-              console.error('❌ WORKBENCH: Auto-run setup failed:', error);
+              logger.error('❌ WORKBENCH: Auto-run setup failed:', error);
               isExecutingRef.current = false; // Reset on setup failure
 
               if (executionTimeoutRef.current) {
@@ -328,16 +328,16 @@ export const Workbench = memo(
           } else {
             const timeElapsedSeconds = Math.round(timeSinceLastRun / 1000);
             const executionStatus = isExecutingRef.current ? ' - another execution in progress' : '';
-            console.log(
+            logger.debug(
               `⏭️ WORKBENCH: Skipping duplicate execution (only ${timeElapsedSeconds}s since last run${executionStatus})`,
             );
           }
         } else if (action === 'sync') {
-          console.log('🔄 WORKBENCH: Sync action detected - would trigger sync');
+          logger.info('🔄 WORKBENCH: Sync action detected - would trigger sync');
 
           // Could add handleSyncFiles() here if needed
         } else if (action === 'build') {
-          console.log('🔨 WORKBENCH: Build action detected - would trigger build');
+          logger.info('🔨 WORKBENCH: Build action detected - would trigger build');
 
           // Could add build logic here if needed
         }

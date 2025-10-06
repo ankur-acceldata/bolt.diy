@@ -73,7 +73,7 @@ export function useLogStream({
         dataplaneId,
       )}&${idParam}=${encodeURIComponent(runId)}&tailLines=${tailLines}`;
 
-      console.log('🔧 useLogStream connecting with:', { isPipeline, endpoint, idParam, url });
+      logger.debug('🔧 useLogStream connecting with:', { isPipeline, endpoint, idParam, url });
       logger.info('🔗 Connecting to log stream:', url);
 
       const eventSource = new EventSource(url);

@@ -23,7 +23,7 @@ export const loader: LoaderFunction = async ({ context }: LoaderFunctionArgs & {
     const serverTools = await mcpService.checkServersAvailabilities();
     const mcpConfig = mcpService.getCurrentConfig();
 
-    console.log('🔍 MCP-CHECK API - Returning data:', {
+    logger.debug('🔍 MCP-CHECK API - Returning data:', {
       serverTools,
       mcpConfig,
       mcpServerUrl,

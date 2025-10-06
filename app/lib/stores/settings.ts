@@ -5,6 +5,9 @@ import type { TabVisibilityConfig, TabWindowConfig, UserTabConfig } from '~/comp
 import { DEFAULT_TAB_CONFIG } from '~/components/@settings/core/constants';
 import { toggleTheme } from './theme';
 import { create } from 'zustand';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Settings');
 
 export interface Shortcut {
   key: string;
@@ -84,7 +87,7 @@ const getInitialProviderSettings = (): ProviderSetting => {
           }
         });
       } catch (error) {
-        console.error('Error parsing saved provider settings:', error);
+        logger.error('Error parsing saved provider settings:', error);
       }
     }
   }
@@ -289,12 +292,12 @@ const getInitialTabConfiguration = (): TabWindowConfig => {
       userTabs: parsed.userTabs.filter((tab: TabVisibilityConfig): tab is UserTabConfig => tab.window === 'user'),
     };
   } catch (error) {
-    console.warn('Failed to parse tab configuration:', error);
+    logger.warn('Failed to parse tab configuration:', error);
     return defaultConfig;
   }
 };
 
-// console.log('Initial tab configuration:', getInitialTabConfiguration());
+// logger.debug('Initial tab configuration:', getInitialTabConfiguration());
 
 export const tabConfigurationStore = map<TabWindowConfig>(getInitialTabConfiguration());
 

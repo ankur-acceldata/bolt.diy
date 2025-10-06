@@ -1,5 +1,8 @@
 import { BaseProviderChecker } from '~/components/@settings/tabs/providers/service-status/base-provider';
 import type { StatusCheckResult } from '~/components/@settings/tabs/providers/service-status/types';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Anthropic');
 
 export class AnthropicStatusChecker extends BaseProviderChecker {
   async checkStatus(): Promise<StatusCheckResult> {
@@ -63,7 +66,7 @@ export class AnthropicStatusChecker extends BaseProviderChecker {
         incidents,
       };
     } catch (error) {
-      console.error('Error checking Anthropic status:', error);
+      logger.error('Error checking Anthropic status:', error);
 
       // Fallback to basic endpoint check
       const endpointStatus = await this.checkEndpoint('https://status.anthropic.com/');

@@ -4,6 +4,9 @@ import { Dialog, DialogRoot, DialogClose, DialogTitle, DialogButton } from '~/co
 import { IconButton } from '~/components/ui/IconButton';
 import { useMCPStore } from '~/lib/stores/mcp';
 import McpServerList from '~/components/@settings/tabs/mcp/McpServerList';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('MCPTools');
 
 export function McpTools() {
   const isInitialized = useMCPStore((state) => state.isInitialized);
@@ -17,15 +20,15 @@ export function McpTools() {
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
 
   const checkServerAvailability = useCallback(async () => {
-    console.log('🔍 MCPTools - Starting server availability check');
+    logger.debug(' MCPTools - Starting server availability check');
     setIsCheckingServers(true);
     setError(null);
 
     try {
       await checkServersAvailabilities();
-      console.log('🔍 MCPTools - Server availability check completed');
+      logger.debug('🔍 MCPTools - Server availability check d');
     } catch (e) {
-      console.error('🔍 MCPTools - Server availability check failed:', e);
+      logger.error('🔍 MCPTools - Server availability check failed:', e);
       setError(`Failed to check server availability: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setIsCheckingServers(false);
@@ -41,7 +44,7 @@ export function McpTools() {
   // Auto-check server availability when dialog opens
   useEffect(() => {
     if (isDialogOpen && isInitialized && Object.keys(serverTools).length === 0) {
-      console.log('🔍 MCPTools - Dialog opened with no tools, auto-checking availability');
+      logger.debug(' MCPTools - Dialog opened with no tools, auto-checking availability');
       checkServerAvailability();
     }
   }, [isDialogOpen, isInitialized, serverTools, checkServerAvailability]);
@@ -56,8 +59,8 @@ export function McpTools() {
 
   const serverEntries = useMemo(() => {
     const entries = Object.entries(serverTools);
-    console.log('🔍 MCPTools - serverTools updated:', serverTools);
-    console.log('🔍 MCPTools - serverEntries:', entries);
+    logger.debug(' MCPTools - serverTools updated:', serverTools);
+    logger.debug(' MCPTools - serverEntries:', entries);
 
     return entries;
   }, [serverTools]);

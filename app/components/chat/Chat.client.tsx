@@ -167,7 +167,7 @@ export const ChatImpl = memo(
 
     // Debug selectedTemplate changes
     useEffect(() => {
-      console.log('selectedTemplate changed:', selectedTemplate);
+      logger.debug('selectedTemplate changed:', selectedTemplate);
     }, [selectedTemplate]);
 
     const mcpSettings = useMCPStore((state) => state.settings);
@@ -178,7 +178,7 @@ export const ChatImpl = memo(
     // Update local state when chatId changes
     useEffect(() => {
       const unsubscribe = chatId.subscribe((newChatId) => {
-        logger.info('🔄 ChatID subscription update:', { old: currentChatId, new: newChatId });
+        logger.debug('🔄 ChatID subscription update:', { old: currentChatId, new: newChatId });
         setCurrentChatId(newChatId);
       });
       return unsubscribe;
@@ -201,7 +201,7 @@ export const ChatImpl = memo(
     } = useChat({
       api: import.meta.env.BASE_URL ? `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/chat` : '/api/chat',
       body: useMemo(() => {
-        logger.info('🌐 useChat body configuration - chatId:', currentChatId);
+        logger.debug('🌐 useChat body configuration - chatId:', currentChatId);
         return {
           apiKeys,
           files,
@@ -260,7 +260,7 @@ export const ChatImpl = memo(
         setData(undefined);
 
         if (usage) {
-          console.log('Token usage:', usage);
+          logger.info('Token usage:', usage);
           logStore.logProvider('Chat response completed', {
             component: 'Chat',
             action: 'response',
@@ -276,7 +276,7 @@ export const ChatImpl = memo(
         // Clear user upload state if it was set (for imports/uploads)
         if (workbenchStore.isUserUploadInProgress()) {
           workbenchStore.setUserUploadInProgress(false);
-          console.log('DEBUG: onFinish - Clearing user upload state after AI response completion');
+          logger.debug('DEBUG: onFinish - Clearing user upload state after AI response completion');
         }
       },
       initialMessages,
@@ -285,7 +285,7 @@ export const ChatImpl = memo(
     useEffect(() => {
       const prompt = searchParams.get('prompt');
 
-      // console.log(prompt, searchParams, model, provider);
+      // logger.debug(prompt, searchParams, model, provider);
 
       if (prompt) {
         setSearchParams({});
@@ -302,19 +302,19 @@ export const ChatImpl = memo(
       async (messageOrFunc: any, options?: any) => {
         const currentChatId = chatId.get();
 
-        logger.info('🔥 ensureChatIdAndSend called with chatId:', currentChatId);
+        logger.debug('🔥 ensureChatIdAndSend called with chatId:', currentChatId);
 
         // If no chatId exists, create a new chat project first
         if (!currentChatId || currentChatId === 'default') {
           try {
-            logger.info('🔥 Creating new chat project before sending first message...');
+            logger.debug('🔥 Creating new chat project before sending first message...');
             await createNewChatProject();
 
             // Get the newly created chatId
             const newChatId = chatId.get();
 
             logger.info('✅ New chat project created:', newChatId);
-            logger.info('🔍 Verifying chatId is set before API call...');
+            logger.debug('🔍 Verifying chatId is set before API call...');
 
             // Verify chatId is properly set
             if (!newChatId || newChatId === 'default') {
@@ -369,7 +369,7 @@ export const ChatImpl = memo(
 
         // Final verification before API call
         const finalChatId = chatId.get();
-        logger.info('🎯 Final chatId check before append:', finalChatId);
+        logger.debug('🎯 Final chatId check before append:', finalChatId);
 
         if (!finalChatId || finalChatId === 'default') {
           logger.error('❌ ABORT: Final chatId check failed!', finalChatId);
@@ -520,10 +520,10 @@ export const ChatImpl = memo(
     }, [input, textareaRef]);
 
     const runAnimation = async () => {
-      console.log('runAnimation called, chatStarted:', chatStarted);
+      logger.debug('runAnimation called, chatStarted:', chatStarted);
 
       if (chatStarted) {
-        console.log('Animation skipped - chat already started');
+        logger.debug('Animation skipped - chat already started');
         return;
       }
 
@@ -531,7 +531,7 @@ export const ChatImpl = memo(
       const examplesEl = document.getElementById('examples');
       const introEl = document.getElementById('intro');
 
-      console.log('Elements found:', { examplesEl, introEl });
+      logger.debug('Elements found:', { examplesEl, introEl });
 
       const animations = [];
 
@@ -539,28 +539,28 @@ export const ChatImpl = memo(
       if (examplesEl) {
         animations.push(animate('#examples', { opacity: 0, display: 'none' }, { duration: 0.1 }));
       } else {
-        console.log('Skipping #examples animation - element not found');
+        logger.debug('Skipping #examples animation - element not found');
       }
 
       // Only animate #intro if it exists
       if (introEl) {
         animations.push(animate('#intro', { opacity: 0, flex: 1 }, { duration: 0.2, ease: cubicEasingFn }));
       } else {
-        console.log('Skipping #intro animation - element not found');
+        logger.debug('Skipping #intro animation - element not found');
       }
 
       // If no elements to animate, just proceed with setting the state
       if (animations.length > 0) {
-        console.log('Running animations for', animations.length, 'elements');
+        logger.debug('Running animations for', animations.length, 'elements');
         await Promise.all(animations);
       } else {
-        console.log('No elements to animate, proceeding to set chat started');
+        logger.debug('No elements to animate, proceeding to set chat started');
       }
 
       chatStore.setKey('started', true);
       setChatStarted(true);
 
-      console.log('Animation completed, chatStarted set to true');
+      logger.debug('Animation completed, chatStarted set to true');
     };
 
     // Helper function to create message parts array from text and images
@@ -619,10 +619,10 @@ export const ChatImpl = memo(
     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
       const messageContent = messageInput || input;
 
-      logger.info('🚀 sendMessage called with:', { messageContent, messageInput, input });
+      logger.debug('🚀 sendMessage called with:', { messageContent, messageInput, input });
 
       if (!messageContent?.trim()) {
-        logger.info('❌ sendMessage: Empty message content, returning');
+        logger.debug('❌ sendMessage: Empty message content, returning');
         return;
       }
 
@@ -634,18 +634,18 @@ export const ChatImpl = memo(
       let finalMessageContent = messageContent;
 
       if (selectedElement) {
-        console.log('Selected Element:', selectedElement);
+        logger.debug('Selected Element:', selectedElement);
 
         const elementInfo = `<div class=\"__boltSelectedElement__\" data-element='${JSON.stringify(selectedElement)}'>${JSON.stringify(`${selectedElement.displayText}`)}</div>`;
         finalMessageContent = messageContent + elementInfo;
       }
 
-      console.log('About to run animation, chatStarted:', chatStarted);
+      logger.debug('About to run animation, chatStarted:', chatStarted);
 
       // Make runAnimation awaitable to ensure it completes before proceeding
       await runAnimation();
 
-      console.log('Animation completed, proceeding with message processing');
+      logger.debug('Animation completed, proceeding with message processing');
 
       if (!chatStarted) {
         setFakeLoading(true);

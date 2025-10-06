@@ -100,13 +100,13 @@ export function useChatHistory() {
       // Debug each lookup method separately
       Promise.all([
         getMessages(db, mixedId).then((result) => {
-          logger.info(`🔍 getMessages(${mixedId}) result:`, result);
+          logger.debug(`🔍 getMessages(${mixedId}) result:`, result);
           return result;
         }),
         getLatestVersionedSnapshot(db, mixedId),
       ])
         .then(async ([storedMessages, snapshot]) => {
-          logger.info(`🔍 Chat loading result for ${mixedId}:`, {
+          logger.debug(`🔍 Chat loading result for ${mixedId}:`, {
             foundMessages: !!storedMessages,
             messageCount: storedMessages?.messages?.length || 0,
             chatId: storedMessages?.id,
@@ -162,7 +162,7 @@ export function useChatHistory() {
               }
 
               setArchivedMessages(archivedMessages);
-              console.log('DEBUG: startingIdx', startingIdx);
+              logger.debug(': startingIdx', startingIdx);
 
               if (startingIdx > 0) {
                 const files = Object.entries(validSnapshot?.files || {})
@@ -177,8 +177,8 @@ export function useChatHistory() {
                     };
                   })
                   .filter((x): x is { content: string; path: string } => !!x); // Type assertion
-                console.log('DEBUG: validSnapshot', validSnapshot);
-                console.log('DEBUG: files', files);
+                logger.debug(': validSnapshot', validSnapshot);
+                logger.debug(': files', files);
 
                 const projectCommands = await detectProjectCommands(files);
 
@@ -263,7 +263,7 @@ ${value.content}
         })
         .catch((error) => {
           logger.error(`❌ ERROR loading chat ${mixedId}:`, error);
-          console.error(error);
+          logger.error(error);
 
           logStore.logError('Failed to load chat messages or snapshot', error);
           toast.error('Failed to load chat: ' + error.message);
@@ -396,7 +396,7 @@ ${value.content}
       const missingDescription = !backendProject.description || backendProject.description === '';
       const missingUrl = !backendProject.url || backendProject.url === '';
 
-      logger.info('🔍 Backend missing data check:', {
+      logger.debug('🔍 Backend missing data check:', {
         missingName,
         missingDescription,
         missingUrl,
@@ -487,9 +487,9 @@ ${value.content}
         // Store the versioned snapshot
         await triggerSnapshot(db, actualChatId, files, finalChangeType, chatIdx);
 
-        console.log(`Created ${finalChangeType} snapshot for chat ${actualChatId}`);
+        logger.info(` ${finalChangeType} snapshot for chat ${actualChatId}`);
       } catch (error) {
-        console.error('Failed to save versioned snapshot:', error);
+        logger.error('Failed to save versioned snapshot:', error);
 
         // Fallback to the old snapshot system
         const legacySnapshot: Snapshot = {
@@ -500,9 +500,9 @@ ${value.content}
 
         try {
           await setSnapshot(db, currentChatId, legacySnapshot);
-          console.log('Fallback to legacy snapshot system successful');
+          logger.info('Fallback to legacy snapshot system ful');
         } catch (fallbackError) {
-          console.error('Failed to save fallback snapshot:', fallbackError);
+          logger.error('Failed to save fallback snapshot:', fallbackError);
           toast.error('Failed to save chat snapshot.');
         }
       }
@@ -520,7 +520,7 @@ ${value.content}
       return;
     }
 
-    console.log('DEBUG: validSnapshot', validSnapshot);
+    logger.debug(': validSnapshot', validSnapshot);
 
     Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
       if (key.startsWith(container.workdir)) {
@@ -563,7 +563,7 @@ ${value.content}
         chatMetadata.set(metadata);
       } catch (error) {
         toast.error('Failed to update chat metadata');
-        console.error(error);
+        logger.error(error);
       }
     },
     storeMessageHistory: async (messages: Message[]) => {
@@ -640,7 +640,7 @@ ${value.content}
       }
 
       if (!finalChatId) {
-        console.error('Cannot save messages, chat ID is not set.');
+        logger.error('Cannot save messages, chat ID is not set.');
         toast.error('Failed to save chat messages: Chat ID missing.');
 
         return;
@@ -679,17 +679,17 @@ ${value.content}
               `chat-${actualChatId}-initial`,
               'Duplicated chat initial state',
             );
-            console.log(`Created initial empty snapshot for duplicated chat ${actualChatId}`);
+            logger.info(` initial empty snapshot for duplicated chat ${actualChatId}`);
           }
         } catch (error) {
-          console.error('Failed to create initial snapshot for duplicated chat:', error);
+          logger.error('Failed to create initial snapshot for duplicated chat:', error);
         }
 
         navigateToChat(newId);
         toast.success('Chat duplicated successfully');
       } catch (error) {
         toast.error('Failed to duplicate chat');
-        console.log(error);
+        logger.error('Failed to duplicate chat:', error);
       }
     },
     importChat: async (description: string, messages: Message[], metadata?: IChatMetadata) => {
@@ -700,7 +700,7 @@ ${value.content}
       try {
         // Set user upload state to indicate import is in progress
         workbenchStore.setUserUploadInProgress(true);
-        console.log('DEBUG: importChat - Starting user upload, setting upload state to true');
+        logger.debug(': importChat - Starting user upload, setting upload state to true');
 
         const newId = await createChatFromMessages(db, description, messages, metadata);
 
@@ -717,13 +717,13 @@ ${value.content}
         setTimeout(() => {
           if (workbenchStore.isUserUploadInProgress()) {
             workbenchStore.setUserUploadInProgress(false);
-            console.log('DEBUG: importChat - Timeout fallback: clearing upload state');
+            logger.debug(': importChat - Timeout fallback: clearing upload state');
           }
         }, 30000); // 30 second timeout
       } catch (error) {
         // Clear upload state on error
         workbenchStore.setUserUploadInProgress(false);
-        console.log('DEBUG: importChat - Error during import, clearing upload state');
+        logger.error('DEBUG: importChat -  during import, clearing upload state');
 
         if (error instanceof Error) {
           toast.error('Failed to import chat: ' + error.message);

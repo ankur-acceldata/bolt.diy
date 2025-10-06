@@ -14,6 +14,9 @@ import { providerBaseUrlEnvKeys } from '~/utils/constants';
 import { useToast } from '~/components/ui/use-toast';
 import { Progress } from '~/components/ui/Progress';
 import OllamaModelInstaller from './OllamaModelInstaller';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Localproviderstab');
 
 // Add type for provider names to ensure type safety
 type ProviderName = 'Ollama' | 'LMStudio' | 'OpenAILike';
@@ -163,7 +166,7 @@ export default function LocalProvidersTab() {
         })),
       );
     } catch (error) {
-      console.error('Error fetching Ollama models:', error);
+      logger.error('Error fetching Ollama models:', error);
     } finally {
       setIsLoadingModels(false);
     }
@@ -201,7 +204,7 @@ export default function LocalProvidersTab() {
           const rawData = JSON.parse(line);
 
           if (!isOllamaPullResponse(rawData)) {
-            console.error('Invalid response format:', rawData);
+            logger.error('Invalid response format:', rawData);
             continue;
           }
 
@@ -229,7 +232,7 @@ export default function LocalProvidersTab() {
 
       return updatedModel !== undefined;
     } catch (error) {
-      console.error(`Error updating ${modelName}:`, error);
+      logger.error(`Error updating ${modelName}:`, error);
       return false;
     }
   };
@@ -296,7 +299,7 @@ export default function LocalProvidersTab() {
       toast(`Deleted ${modelName}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      console.error(`Error deleting ${modelName}:`, errorMessage);
+      logger.error(`Error deleting ${modelName}:`, errorMessage);
       toast(`Failed to delete ${modelName}`);
     }
   };

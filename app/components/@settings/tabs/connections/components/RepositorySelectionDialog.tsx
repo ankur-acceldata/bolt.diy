@@ -15,6 +15,9 @@ import { RepositoryList } from './RepositoryList';
 import { StatsDialog } from './StatsDialog';
 import { GitHubAuthDialog } from './GitHubAuthDialog';
 import { RepositoryDialogContext } from './RepositoryDialogContext';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Repositoryselectiondialog');
 
 interface GitHubTreeResponse {
   tree: Array<{
@@ -113,7 +116,7 @@ export function RepositorySelectionDialog({ isOpen, onClose, onSelect }: Reposit
           }
         })
         .catch((error) => {
-          console.error('Failed to initialize GitHub connection from environment variables:', error);
+          logger.error('Failed to initialize GitHub connection from environment variables:', error);
         });
     }
   }, [isOpen]);
@@ -159,7 +162,7 @@ export function RepositorySelectionDialog({ isOpen, onClose, onSelect }: Reposit
         throw new Error('Invalid repository data format');
       }
     } catch (error) {
-      console.error('Error fetching repos:', error);
+      logger.error('Error fetching repos:', error);
       toast.error('Failed to fetch your repositories');
     } finally {
       setIsLoading(false);
@@ -207,7 +210,7 @@ export function RepositorySelectionDialog({ isOpen, onClose, onSelect }: Reposit
         throw new Error('Invalid search results format');
       }
     } catch (error) {
-      console.error('Error searching repos:', error);
+      logger.error('Error searching repos:', error);
       toast.error('Failed to search repositories');
     } finally {
       setIsLoading(false);
@@ -247,7 +250,7 @@ export function RepositorySelectionDialog({ isOpen, onClose, onSelect }: Reposit
         throw new Error('Invalid branch data format');
       }
     } catch (error) {
-      console.error('Error fetching branches:', error);
+      logger.error('Error fetching branches:', error);
       toast.error('Failed to fetch branches');
     } finally {
       setIsLoading(false);
@@ -419,7 +422,7 @@ export function RepositorySelectionDialog({ isOpen, onClose, onSelect }: Reposit
 
       return stats;
     } catch (error) {
-      console.error('Error verifying repository:', error);
+      logger.error('Error verifying repository:', error);
 
       // Check if it's an authentication error and show the auth dialog
       const errorMessage = error instanceof Error ? error.message : 'Failed to verify repository';
@@ -470,7 +473,7 @@ export function RepositorySelectionDialog({ isOpen, onClose, onSelect }: Reposit
       setPendingGitUrl(gitUrl);
       setShowStatsDialog(true);
     } catch (error) {
-      console.error('Error preparing repository:', error);
+      logger.error('Error preparing repository:', error);
 
       // Check if it's an authentication error
       const errorMessage = error instanceof Error ? error.message : 'Failed to prepare repository. Please try again.';

@@ -11,6 +11,9 @@ import {
   updateVercelConnection,
   fetchVercelStats,
 } from '~/lib/stores/vercel';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Vercelconnection');
 
 export default function VercelConnection() {
   const connection = useStore(vercelConnection);
@@ -52,7 +55,7 @@ export default function VercelConnection() {
       await fetchVercelStats(connection.token);
       toast.success('Successfully connected to Vercel');
     } catch (error) {
-      console.error('Auth error:', error);
+      logger.error('Auth error:', error);
       logStore.logError('Failed to authenticate with Vercel', { error });
       toast.error('Failed to connect to Vercel');
       updateVercelConnection({ user: null, token: '' });
@@ -66,7 +69,7 @@ export default function VercelConnection() {
     toast.success('Disconnected from Vercel');
   };
 
-  console.log('connection', connection);
+  logger.info('ion', connection);
 
   return (
     <motion.div

@@ -532,6 +532,9 @@ def get_app_info(spark: SparkSession) -> dict:
 def execute_trino_query_runtime(query: str) -> dict:
     """Execute Trino query in generated applications via Trino Gateway with polling."""
     import time
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('PythonPrompt');
 
     # Initial request
     response = requests.post(

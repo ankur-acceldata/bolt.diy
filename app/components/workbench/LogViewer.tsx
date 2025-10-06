@@ -4,6 +4,9 @@ import { useLogStream } from '~/lib/hooks/useLogStream';
 import { analyzeLogMessage } from '~/utils/logLevelDetection';
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { LogViewerProps } from '~/types/logStream';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('LogViewer');
 
 export function LogViewer({
   dataplaneId,
@@ -26,7 +29,7 @@ export function LogViewer({
 
   /*
    * Remove expensive console.log on every render
-   * console.log('🔧 LogViewer props:', { dataplaneId, runId, isOpen, isPipeline });
+   * logger.debug(' LogViewer props:', { dataplaneId, runId, isOpen, isPipeline });
    */
 
   const { logs, isConnected, isConnecting, isInitializing, error, connect, clearLogs } = useLogStream({
@@ -46,7 +49,7 @@ export function LogViewer({
   // Clear logs when configuration changes (new job) or when opening for the first time
   useEffect(() => {
     if (isOpen && dataplaneId && runId) {
-      console.log('LogViewer: Clearing logs for new job configuration:', { dataplaneId, runId });
+      logger.info('LogViewer: Clearing logs for new job configuration:', { dataplaneId, runId });
       clearLogs();
     }
 
@@ -261,7 +264,7 @@ export function LogViewer({
             </button>
             <button
               onClick={() => {
-                console.log('LogViewer: Manual reconnect - clearing logs and reconnecting');
+                logger.info('LogViewer: Manual reconnect - clearing logs and reconnecting');
                 clearLogs();
                 connect();
               }}

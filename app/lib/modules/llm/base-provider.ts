@@ -3,6 +3,9 @@ import type { ProviderInfo, ProviderConfig, ModelInfo } from './types';
 import type { IProviderSetting } from '~/types/model';
 import { createOpenAI } from '@ai-sdk/openai';
 import { LLMManager } from './manager';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('BaseProvider');
 
 export abstract class BaseProvider implements ProviderInfo {
   abstract name: string;
@@ -48,6 +51,12 @@ export abstract class BaseProvider implements ProviderInfo {
     const apiKey =
       apiKeys?.[this.name] || serverEnv?.[apiTokenKey] || process?.env?.[apiTokenKey] || manager.env?.[apiTokenKey];
 
+    logger.debug(`Provider ${this.name} configuration:`, {
+      hasBaseUrl: !!baseUrl,
+      hasApiKey: !!apiKey,
+      baseUrlSource: settingsBaseUrl ? 'settings' : serverEnv?.[baseUrlKey] ? 'serverEnv' : 'default',
+    });
+
     return {
       baseUrl,
       apiKey,
@@ -59,7 +68,7 @@ export abstract class BaseProvider implements ProviderInfo {
     serverEnv?: Record<string, string>;
   }): ModelInfo[] | null {
     if (!this.cachedDynamicModels) {
-      // console.log('no dynamic models',this.name);
+      logger.debug(`No cached dynamic models for ${this.name}`);
       return null;
     }
 
@@ -67,10 +76,15 @@ export abstract class BaseProvider implements ProviderInfo {
     const generatedCacheKey = this.getDynamicModelsCacheKey(options);
 
     if (cacheKey !== generatedCacheKey) {
-      // console.log('cache key mismatch',this.name,cacheKey,generatedCacheKey);
+      logger.debug(`Cache key mismatch for ${this.name}, invalidating cache`);
       this.cachedDynamicModels = undefined;
+
       return null;
     }
+
+    logger.debug(`Using cached models for ${this.name}:`, {
+      modelCount: this.cachedDynamicModels.models.length,
+    });
 
     return this.cachedDynamicModels.models;
   }
@@ -95,7 +109,7 @@ export abstract class BaseProvider implements ProviderInfo {
   ) {
     const cacheId = this.getDynamicModelsCacheKey(options);
 
-    // console.log('caching dynamic models',this.name,cacheId);
+    logger.info(`Caching ${models.length} dynamic models for ${this.name}`);
     this.cachedDynamicModels = {
       cacheId,
       models,

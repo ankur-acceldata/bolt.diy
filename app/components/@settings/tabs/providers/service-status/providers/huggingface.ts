@@ -1,5 +1,8 @@
 import { BaseProviderChecker } from '~/components/@settings/tabs/providers/service-status/base-provider';
 import type { StatusCheckResult } from '~/components/@settings/tabs/providers/service-status/types';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Huggingface');
 
 export class HuggingFaceStatusChecker extends BaseProviderChecker {
   async checkStatus(): Promise<StatusCheckResult> {
@@ -81,7 +84,7 @@ export class HuggingFaceStatusChecker extends BaseProviderChecker {
         incidents: serviceMessages,
       };
     } catch (error) {
-      console.error('Error checking HuggingFace status:', error);
+      logger.error('Error checking HuggingFace status:', error);
 
       // Fallback to basic endpoint check
       const endpointStatus = await this.checkEndpoint('https://status.huggingface.co/');

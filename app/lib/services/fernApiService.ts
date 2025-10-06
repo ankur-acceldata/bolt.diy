@@ -5,6 +5,9 @@
 
 import { logStore } from '~/lib/stores/logs';
 import { getBasePath } from '~/lib/config';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('FernApiService');
 
 export interface FernFile {
   path: string;
@@ -85,7 +88,7 @@ export class FernApiService {
     });
 
     try {
-      console.log('[FERN-DEBUG] Checking server availability at:', healthUrl);
+      logger.debug('[FERN-] Checking server availability at:', healthUrl);
 
       // Create a promise that resolves with the fetch result
       const fetchPromise = fetch(healthUrl, {
@@ -117,7 +120,7 @@ export class FernApiService {
       };
 
       logStore.logSystem('[FERN-DEBUG] Server health check response received', responseInfo);
-      console.log('[FERN-DEBUG] Server health check response:', responseInfo);
+      logger.debug('[FERN-] Server health check response:', responseInfo);
 
       if (response.ok) {
         try {

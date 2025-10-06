@@ -5,6 +5,9 @@
 
 import { toast } from 'react-toastify';
 import { logStore } from '~/lib/stores/logs';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('SyncStub');
 
 export interface SyncStubOptions {
   filesStore: any; // Using any for now to avoid type issues
@@ -132,7 +135,7 @@ export class SyncStub {
         try {
           callback(data);
         } catch (error) {
-          console.error('Error in sync event callback:', error);
+          logger.error('Error in sync event callback:', error);
         }
       });
     }

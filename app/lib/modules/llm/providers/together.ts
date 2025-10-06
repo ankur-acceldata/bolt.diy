@@ -2,6 +2,9 @@ import { BaseProvider, getOpenAILikeModel } from '~/lib/modules/llm/base-provide
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Together');
 
 export default class TogetherProvider extends BaseProvider {
   name = 'Together';
@@ -48,26 +51,42 @@ export default class TogetherProvider extends BaseProvider {
     const baseUrl = fetchBaseUrl || 'https://api.together.xyz/v1';
 
     if (!baseUrl || !apiKey) {
+      logger.warn('Together provider: Missing baseUrl or apiKey, returning empty models list');
       return [];
     }
 
-    // console.log({ baseUrl, apiKey });
+    logger.debug('Fetching dynamic models from Together API:', { baseUrl });
 
-    const response = await fetch(`${baseUrl}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    });
+    try {
+      const response = await fetch(`${baseUrl}/models`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
 
-    const res = (await response.json()) as any;
-    const data = (res || []).filter((model: any) => model.type === 'chat');
+      if (!response.ok) {
+        logger.error('Failed to fetch Together models:', {
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return [];
+      }
 
-    return data.map((m: any) => ({
-      name: m.id,
-      label: `${m.display_name} - in:$${m.pricing.input.toFixed(2)} out:$${m.pricing.output.toFixed(2)} - context ${Math.floor(m.context_length / 1000)}k`,
-      provider: this.name,
-      maxTokenAllowed: 8000,
-    }));
+      const res = (await response.json()) as any;
+      const data = (res || []).filter((model: any) => model.type === 'chat');
+
+      logger.info(`Loaded ${data.length} chat models from Together API`);
+
+      return data.map((m: any) => ({
+        name: m.id,
+        label: `${m.display_name} - in:$${m.pricing.input.toFixed(2)} out:$${m.pricing.output.toFixed(2)} - context ${Math.floor(m.context_length / 1000)}k`,
+        provider: this.name,
+        maxTokenAllowed: 8000,
+      }));
+    } catch (error) {
+      logger.error('Error fetching Together models:', error);
+      return [];
+    }
   }
 
   getModelInstance(options: {
@@ -87,8 +106,11 @@ export default class TogetherProvider extends BaseProvider {
     });
 
     if (!baseUrl || !apiKey) {
+      logger.error(`Missing configuration for ${this.name} provider`);
       throw new Error(`Missing configuration for ${this.name} provider`);
     }
+
+    logger.debug(`Creating Together model instance: ${model}`);
 
     return getOpenAILikeModel(baseUrl, apiKey, model);
   }

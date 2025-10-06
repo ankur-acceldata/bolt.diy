@@ -1,6 +1,9 @@
 import { atom } from 'nanostores';
 import type { DesignScheme } from '~/types/design-scheme';
 import { defaultDesignScheme } from '~/types/design-scheme';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Designscheme');
 
 const DESIGN_SCHEME_KEY = 'bolt_design_scheme';
 
@@ -27,7 +30,7 @@ function getInitialDesignScheme(): DesignScheme {
       };
     }
   } catch (error) {
-    console.warn('Failed to parse stored design scheme:', error);
+    logger.warn('Failed to parse stored design scheme:', error);
   }
 
   return defaultDesignScheme;
@@ -45,7 +48,7 @@ export function setDesignScheme(scheme: DesignScheme) {
       localStorage.setItem(DESIGN_SCHEME_KEY, JSON.stringify(scheme));
       applyDesignSchemeToDOM(scheme);
     } catch (error) {
-      console.error('Failed to save design scheme to localStorage:', error);
+      logger.error('Failed to save design scheme to localStorage:', error);
     }
   }
 }

@@ -11,6 +11,9 @@ import { FaCloud, FaBrain } from 'react-icons/fa';
 import type { IconType } from 'react-icons';
 import { useSettings } from '~/lib/hooks/useSettings';
 import { useToast } from '~/components/ui/use-toast';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Servicestatustab');
 
 // Types
 type ProviderName =
@@ -361,7 +364,7 @@ const ServiceStatusTab = () => {
           responseTime,
         };
       } catch (error) {
-        console.error(`Error checking API endpoint ${url}:`, error);
+        logger.error(`Error checking API endpoint ${url}:`, error);
         return {
           ok: false,
           status: error instanceof Error ? error.message : 'Unknown error',
@@ -396,7 +399,7 @@ const ServiceStatusTab = () => {
             // With no-cors, we can only know if the request succeeded
             return response.type === 'opaque' ? 'reachable' : 'unreachable';
           } catch (error) {
-            console.error(`Error checking ${url}:`, error);
+            logger.error(`Error checking ${url}:`, error);
             return 'unreachable';
           }
         };
@@ -449,7 +452,7 @@ const ServiceStatusTab = () => {
             };
         }
       } catch (error) {
-        console.error(`Error fetching status for ${provider}:`, error);
+        logger.error(`Error fetching status for ${provider}:`, error);
         return {
           status: 'degraded',
           message: 'Unable to fetch status due to CORS restrictions',
@@ -535,7 +538,7 @@ const ServiceStatusTab = () => {
             incidents: [],
           };
         } catch (error) {
-          console.error(`Error fetching status for ${provider} (attempt ${attempt}):`, error);
+          logger.error(`Error fetching status for ${provider} (attempt ${attempt}):`, error);
 
           if (attempt < MAX_RETRIES) {
             await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
@@ -575,7 +578,7 @@ const ServiceStatusTab = () => {
       setLastRefresh(new Date());
       success('Service statuses updated successfully');
     } catch (err) {
-      console.error('Error fetching all statuses:', err);
+      logger.error('Error fetching all statuses:', err);
       error('Failed to update service statuses');
     } finally {
       setLoading(false);

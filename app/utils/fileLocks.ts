@@ -216,7 +216,7 @@ export function debugProjectId(context: string): void {
   const projectId = getProjectId(chatId);
   const allProjectIds = getAllProjectIds();
 
-  console.log(`[ProjectID Debug - ${context}]`, {
+  logger.debug(`[ProjectID Debug - ${context}]`, {
     currentChatId: chatId,
     currentProjectId: projectId,
     allProjectIds,

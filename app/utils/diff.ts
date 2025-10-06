@@ -92,8 +92,8 @@ export function extractRelativePath(filePath: string) {
  * ```html
  * <bolt_file_modifications>
  * <diff path="/home/project/index.js">
- * - console.log('Hello, World!');
- * + console.log('Hello, Bolt!');
+ * - logger.debug('Hello, World!');
+ * + logger.debug('Hello, Bolt!');
  * </diff>
  * </bolt_file_modifications>
  * ```

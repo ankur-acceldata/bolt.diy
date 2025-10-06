@@ -84,7 +84,7 @@ export function extractShellCommands(): string[] {
   const artifacts = workbenchStore.artifacts.get();
   const artifactIdList = workbenchStore.artifactIdList;
 
-  logger.info('DEBUG: Starting shell command extraction:', {
+  logger.debug('DEBUG: Starting shell command extraction:', {
     artifactIdListLength: artifactIdList.length,
     artifactIds: artifactIdList,
     totalArtifacts: Object.keys(artifacts).length,

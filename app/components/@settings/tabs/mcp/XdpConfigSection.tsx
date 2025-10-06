@@ -3,6 +3,9 @@ import { toast } from 'react-toastify';
 import { classNames } from '~/utils/classNames';
 import { validateXDPConfig, XDP_CONFIG_EXAMPLES, type XDPMCPConfig, DEFAULT_XDP_CONFIG } from '~/lib/xdp-mcp-config';
 import type { MCPConfig } from '~/lib/services/mcpService';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('XdpConfigSection');
 
 interface XdpConfigSectionProps {
   onConfigGenerated: (config: MCPConfig) => void;
@@ -65,7 +68,7 @@ export default function XdpConfigSection({ onConfigGenerated }: XdpConfigSection
         toast.error(result.error || 'Failed to generate configuration');
       }
     } catch (error) {
-      console.error('Failed to generate XDP config:', error);
+      logger.error('Failed to generate XDP config:', error);
       toast.error('Failed to generate configuration');
     } finally {
       setIsGenerating(false);
@@ -97,7 +100,7 @@ export default function XdpConfigSection({ onConfigGenerated }: XdpConfigSection
         toast.error(result.error || 'Failed to load example');
       }
     } catch (error) {
-      console.error('Failed to load example:', error);
+      logger.error('Failed to load example:', error);
       toast.error('Failed to load example configuration');
     }
   };

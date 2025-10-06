@@ -1,4 +1,7 @@
 import type { MCPConfig } from './services/mcpService';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('XDPMCPConfig');
 
 /**
  * Configuration helper for XDP MCP Server integration
@@ -34,7 +37,7 @@ export function createXDPMCPConfig({
   const isBrowser = typeof window !== 'undefined';
   const callerInfo = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
 
-  console.log(`[${callId}] createXDPMCPConfig called from ${isBrowser ? 'BROWSER' : 'SERVER'}`, {
+  logger.debug(`[${callId}] createXDPMCPConfig called from ${isBrowser ? 'BROWSER' : 'SERVER'}`, {
     accessKey,
     secretKey,
     baseUrl,
@@ -48,7 +51,7 @@ export function createXDPMCPConfig({
    */
   const mcpWebSocketUrl = mcpServerUrl || process.env.MCP_SERVER_URL || DEFAULT_XDP_CONFIG.webSocketUrl;
 
-  console.log(`[${callId}] Environment debug:`, {
+  logger.debug(`[${callId}] Environment debug:`, {
     MCP_SERVER_URL: process.env.MCP_SERVER_URL,
     mcpServerUrl,
     DEFAULT_webSocketUrl: DEFAULT_XDP_CONFIG.webSocketUrl,
@@ -56,19 +59,19 @@ export function createXDPMCPConfig({
   });
 
   // Convert WebSocket URL to HTTP for streamable-http transport
-  console.log(`[${callId}] URL conversion steps:`);
-  console.log(`[${callId}]   Original mcpWebSocketUrl:`, mcpWebSocketUrl);
+  logger.debug(`[${callId}] URL conversion steps:`);
+  logger.debug(`[${callId}]   Original mcpWebSocketUrl:`, mcpWebSocketUrl);
 
   const step1 = mcpWebSocketUrl.replace('ws://', 'http://');
-  console.log(`[${callId}]   After ws->http replace:`, step1);
+  logger.debug(`[${callId}]   After ws->http replace:`, step1);
 
   const step2 = step1.replace('wss://', 'https://');
-  console.log(`[${callId}]   After wss->https replace:`, step2);
+  logger.debug(`[${callId}]   After wss->https replace:`, step2);
 
   const httpUrl = step2.replace('/ws', '/api/mcp');
-  console.log(`[${callId}]   Final httpUrl:`, httpUrl);
+  logger.debug(`[${callId}]   Final httpUrl:`, httpUrl);
 
-  console.log(`[${callId}] Using HTTP MCP connection:`, httpUrl);
+  logger.info(`[${callId}] Using HTTP MCP ion:`, httpUrl);
 
   const config = {
     mcpServers: {
@@ -85,7 +88,7 @@ export function createXDPMCPConfig({
     },
   };
 
-  console.log(`[${callId}] RETURNING CONFIG:`, JSON.stringify(config, null, 2));
+  logger.debug(`[${callId}] RETURNING CONFIG:`, JSON.stringify(config, null, 2));
 
   return config;
 }

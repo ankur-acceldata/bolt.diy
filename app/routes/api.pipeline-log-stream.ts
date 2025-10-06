@@ -10,7 +10,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const jobId = url.searchParams.get('jobId');
   const tailLines = url.searchParams.get('tailLines') || '50';
 
-  logger.info(`🔧 Pipeline log stream request - dataplaneId: ${dataplaneId}, jobId: ${jobId}, tailLines: ${tailLines}`);
+  logger.debug(
+    `🔧 Pipeline log stream request - dataplaneId: ${dataplaneId}, jobId: ${jobId}, tailLines: ${tailLines}`,
+  );
 
   if (!dataplaneId || !jobId) {
     logger.error('Missing required parameters');

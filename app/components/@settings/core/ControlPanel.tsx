@@ -26,6 +26,9 @@ import CloudProvidersTab from '~/components/@settings/tabs/providers/cloud/Cloud
 import ServiceStatusTab from '~/components/@settings/tabs/providers/status/ServiceStatusTab';
 import LocalProvidersTab from '~/components/@settings/tabs/providers/local/LocalProvidersTab';
 import McpTab from '~/components/@settings/tabs/mcp/McpTab';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Controlpanel');
 
 interface ControlPanelProps {
   open: boolean;
@@ -64,7 +67,7 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
   // Add visibleTabs logic using useMemo with optimized calculations
   const visibleTabs = useMemo(() => {
     if (!tabConfiguration?.userTabs || !Array.isArray(tabConfiguration.userTabs)) {
-      console.warn('Invalid tab configuration, resetting to defaults');
+      logger.warn('Invalid tab configuration, resetting to defaults');
       resetTabConfiguration();
 
       return [];

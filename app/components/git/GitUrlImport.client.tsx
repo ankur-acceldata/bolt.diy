@@ -11,6 +11,9 @@ import { createCommandsMessage, detectProjectCommands, escapeBoltTags } from '~/
 import { LoadingOverlay } from '~/components/ui/LoadingOverlay';
 import { toast } from 'react-toastify';
 import { navigateToHome } from '~/utils/api';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Giturlimport');
 
 const IGNORE_PATTERNS = [
   'node_modules/**',
@@ -104,7 +107,7 @@ ${escapeBoltTags(file.content)}
           await importChat(`Git Project:${repoUrl.split('/').slice(-1)[0]}`, messages, { gitUrl: repoUrl });
         }
       } catch (error) {
-        console.error('Error during import:', error);
+        logger.error('Error during import:', error);
         toast.error('Failed to import repository');
         setLoading(false);
         navigateToHome();
@@ -127,7 +130,7 @@ ${escapeBoltTags(file.content)}
     }
 
     importRepo(url).catch((error) => {
-      console.error('Error importing repo:', error);
+      logger.error('Error importing repo:', error);
       toast.error('Failed to import repository');
       setLoading(false);
       navigateToHome();

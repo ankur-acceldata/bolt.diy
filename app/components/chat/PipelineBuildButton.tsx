@@ -21,7 +21,7 @@ export const PipelineBuildButton: React.FC<PipelineBuildButtonProps> = ({ classN
   const isDisabled = isExecuting || !currentProjectId || isLogStreamActive;
 
   const handleBuildImage = async () => {
-    console.log('🔧 PipelineBuildButton clicked!', {
+    logger.debug('🔧 PipelineBuildButton clicked!', {
       currentProjectId,
       isExecuting,
       isLogStreamActive,
@@ -43,7 +43,7 @@ export const PipelineBuildButton: React.FC<PipelineBuildButtonProps> = ({ classN
      */
     const projectName = `project_${currentProjectId}`;
 
-    console.log('🔧 Calling executePipelineAdhocRun with:', { currentProjectId, projectName });
+    logger.debug(' Calling executePipelineAdhocRun with:', { currentProjectId, projectName });
     await executePipelineAdhocRun(currentProjectId, projectName);
   };
 

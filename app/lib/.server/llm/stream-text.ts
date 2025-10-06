@@ -172,12 +172,12 @@ export async function streamText(props: {
       dataplaneName,
     }) ?? getSystemPrompt();
 
-  console.log('📜 SYSTEM PROMPT LENGTH:', systemPrompt.length);
-  console.log(
+  logger.debug('📜 SYSTEM PROMPT LENGTH:', systemPrompt.length);
+  logger.debug(
     '🔍 SYSTEM PROMPT CONTAINS WORKBENCH AUTOMATION:',
     systemPrompt.includes('workbench_automation_instructions'),
   );
-  console.log('🔍 SYSTEM PROMPT CONTAINS RUN ACTION:', systemPrompt.includes('workbench-action'));
+  logger.debug(' SYSTEM PROMPT CONTAINS RUN ACTION:', systemPrompt.includes('workbench-action'));
 
   if (chatMode === 'build' && contextFiles && contextOptimization) {
     const codeContext = createFilesContext(contextFiles, true);
@@ -233,12 +233,12 @@ export async function streamText(props: {
     ---
     `;
   } else {
-    console.log('No locked files found from any source for prompt.');
+    logger.debug('No locked files found from any source for prompt.');
   }
 
   logger.info(`Sending llm call to ${provider.name} with model ${modelDetails.name}`);
 
-  // console.log(systemPrompt, processedMessages);
+  // logger.debug(systemPrompt, processedMessages);
 
   // Deep sanitization function to handle deeply nested structures
   function deepSanitizeContent(content: any): any {
@@ -446,14 +446,14 @@ export async function streamText(props: {
   }
 
   const finalSystemPrompt = chatMode === 'build' ? systemPrompt : discussPrompt();
-  console.log('🎭 FINAL SYSTEM PROMPT for LLM (first 500 chars):', finalSystemPrompt.substring(0, 500));
-  console.log(
+  logger.debug('🎭 FINAL SYSTEM PROMPT for LLM (first 500 chars):', finalSystemPrompt.substring(0, 500));
+  logger.debug(
     '🎯 CHAT MODE:',
     chatMode,
     '| Using system prompt:',
     chatMode === 'build' ? 'BUILD MODE' : 'DISCUSS MODE',
   );
-  console.log(
+  logger.debug(
     '🔍 WORKBENCH AUTOMATION in final prompt:',
     finalSystemPrompt.includes('workbench_automation_instructions'),
   );

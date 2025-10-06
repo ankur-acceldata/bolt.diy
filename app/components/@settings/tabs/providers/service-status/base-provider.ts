@@ -1,4 +1,7 @@
 import type { ProviderConfig, StatusCheckResult, ApiResponse } from './types';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('BaseProvider');
 
 export abstract class BaseProviderChecker {
   protected config: ProviderConfig;
@@ -92,7 +95,7 @@ export abstract class BaseProviderChecker {
         responseTime,
       };
     } catch (error) {
-      console.error(`Error checking API endpoint ${url}:`, error);
+      logger.error(`Error checking API endpoint ${url}:`, error);
       return {
         ok: false,
         status: error instanceof Error ? error.message : 'Unknown error',
@@ -112,7 +115,7 @@ export abstract class BaseProviderChecker {
       });
       return response.type === 'opaque' ? 'reachable' : 'unreachable';
     } catch (error) {
-      console.error(`Error checking ${url}:`, error);
+      logger.error(`Error checking ${url}:`, error);
       return 'unreachable';
     }
   }

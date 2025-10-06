@@ -10,6 +10,9 @@ import { RepositorySelectionDialog } from '~/components/@settings/tabs/connectio
 import { classNames } from '~/utils/classNames';
 import { Button } from '~/components/ui/Button';
 import type { IChatMetadata } from '~/lib/persistence/db';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('Gitclonebutton');
 
 const IGNORE_PATTERNS = [
   'node_modules/**',
@@ -145,7 +148,7 @@ ${escapeBoltTags(file.content)}
         await importChat(`Git Project:${repoUrl.split('/').slice(-1)[0]}`, messages);
       }
     } catch (error) {
-      console.error('Error during import:', error);
+      logger.error('Error during import:', error);
       toast.error('Failed to import repository');
     } finally {
       setLoading(false);
