@@ -130,8 +130,9 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     - xdp_list_datastores: Lists external data sources/targets (PostgreSQL, Snowflake, S3, etc.)
       Parameters: page (number), size (number), sortBy (string) - all optional
       Usage: Discover available external data sources for migration or connection
-      Returns: Datastore information including type, connection details, credentials
+      Returns: Datastore information including type, connection details, credentials, authentication configuration
       CRITICAL: This is for EXTERNAL systems only - NOT for Trino internal data
+      CRITICAL: Pay attention to authentication details in the response - each datastore has specific auth requirements
 
     - trino_list_catalogs: Lists available Trino catalogs WITHIN a dataplane (hive, iceberg, memory)
       Parameters: dataplane* (string, REQUIRED) - MUST be dataplane ID (number like "21"), NOT name
@@ -200,7 +201,8 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     2. STEP 2: ${hasDataplane ? `Use provided dataplane "${dataplaneId}"` : 'Choose working dataplane ID (e.g., "27")'}
     3. STEP 3: xdp_list_datastores() → get external datastores (PostgreSQL, Snowflake, S3, etc.)
     4. STEP 4: Get datastore connection details and configuration from xdp_list_datastores response
-    5. STEP 5: Generate code for datastore connections/migrations using datastore connection info
+    5. STEP 5: CRITICAL: Extract authentication configuration from datastore response
+    6. STEP 6: Generate code for datastore connections/migrations using datastore connection info AND authentication
 
     CRITICAL: After discovering datastores via xdp_list_datastores:
     ❌ DO NOT use trino_list_catalogs to explore the datastore
@@ -209,13 +211,15 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     ✅ Use datastore's native connection methods (JDBC, REST API, SDK)
     ✅ Use datastore-specific schema discovery (DESCRIBE, INFORMATION_SCHEMA, etc.)
     ✅ Generate connection code specific to the datastore type
+    ✅ CRITICAL: Use authentication details from datastore configuration (credentials, tokens, keys)
 
     FOR MIGRATION TASKS (datastore → datastore or datastore ↔ Trino):
     1. STEP 1: ${hasDataplane ? `Use provided dataplane ID (${dataplaneId}) - SKIP get_all_dataplanes()` : 'get_all_dataplanes() → get available dataplanes'}
     2. STEP 2: PARALLEL DISCOVERY:
        - Source discovery: xdp_list_datastores() OR trino_list_catalogs(dataplane="${hasDataplane ? dataplaneId : 'discovered-id'}") depending on source type
        - Target discovery: xdp_list_datastores() OR trino_list_catalogs(dataplane="${hasDataplane ? dataplaneId : 'discovered-id'}") depending on target type
-    3. STEP 3: Generate migration code with both source and target configurations
+    3. STEP 3: Extract authentication details from both source and target datastore configurations
+    4. STEP 4: Generate migration code with both source and target configurations INCLUDING authentication
 
     CRITICAL: ${hasDataplane ? 'Dataplane provided - use directly without get_all_dataplanes()' : 'If get_all_dataplanes is not called first, all subsequent MCP tools will fail!'}$`
     }
@@ -278,6 +282,9 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     - "dataplane": "your-dataplane-name"
     - catalog = "your_catalog"
     - DATAPLANE_ID = "PLACEHOLDER"
+    - username = "YOUR_USERNAME"
+    - password = "YOUR_PASSWORD"
+    - api_key = "YOUR_API_KEY"
     
     ✅ CORRECT:
     - First use tools to discover actual values
@@ -285,7 +292,186 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
       - "dataplane": "name or id of dataplane"  // discovered via tool
       - catalog = "catalog discovered"  // discovered via trino_list_catalogs
       - DATAPLANE_ID = "dataplane id"  // discovered via xdp_list_datastores
+      - username = "actual_username"  // from datastore authentication config
+      - password = "actual_password"  // from datastore authentication config
+      - api_key = "actual_api_key"  // from datastore authentication config
   </value_resolution>
+  
+  <datastore_authentication>
+    CRITICAL: Authentication Handling for Datastores
+    
+    When using xdp_list_datastores, the response includes authentication configuration for each datastore.
+    You MUST extract and use these authentication details in generated code.
+    
+    COMMON AUTHENTICATION TYPES:
+    
+    1. USERNAME/PASSWORD Authentication:
+       - Used by: PostgreSQL, MySQL, SQL Server, Oracle
+       - Extract from datastore config: username, password
+       - Use in connection strings or JDBC properties
+       
+    2. API KEY/TOKEN Authentication:
+       - Used by: REST APIs, Cloud services, SaaS platforms
+       - Extract from datastore config: api_key, access_token, bearer_token
+       - Use in HTTP headers or SDK configuration
+       
+    3. AWS IAM/ACCESS KEY Authentication:
+       - Used by: S3, Redshift, DynamoDB, AWS services
+       - Extract from datastore config: aws_access_key_id, aws_secret_access_key, aws_session_token
+       - Use in AWS SDK configuration or boto3 clients
+       
+    4. OAUTH2/SERVICE ACCOUNT Authentication:
+       - Used by: Snowflake, BigQuery, Azure services
+       - Extract from datastore config: oauth_token, service_account_json, client_id, client_secret
+       - Use in SDK authentication flows
+       
+    5. KERBEROS Authentication:
+       - Used by: Hadoop, Hive, HBase, enterprise systems
+       - Extract from datastore config: principal, keytab_path, realm
+       - Use in Kerberos configuration and ticket generation
+       
+    6. CERTIFICATE/KEY Authentication:
+       - Used by: Secure databases, enterprise systems
+       - Extract from datastore config: cert_path, key_path, ca_cert_path
+       - Use in SSL/TLS connection configuration
+    
+    AUTHENTICATION EXTRACTION WORKFLOW:
+    
+    1. Call xdp_list_datastores() to get datastore list
+    2. Identify target datastore from response
+    3. CRITICAL: Extract authentication configuration from datastore object:
+       - Look for "authentication" or "config" or "credentials" field
+       - Identify authentication type (username/password, API key, AWS, OAuth, etc.)
+       - Extract all required authentication parameters
+    4. Generate connection code using extracted authentication details
+    5. NEVER use placeholder values for authentication - use actual discovered values
+    
+    EXAMPLE AUTHENTICATION EXTRACTION:
+    
+    PostgreSQL Datastore Response:
+    \`\`\`json
+    {
+      "id": "ds-123",
+      "name": "production-postgres",
+      "type": "postgresql",
+      "host": "postgres.example.com",
+      "port": 5432,
+      "database": "analytics",
+      "authentication": {
+        "type": "username_password",
+        "username": "analytics_user",
+        "password": "secure_password_123"
+      }
+    }
+    \`\`\`
+    
+    Generated Code (CORRECT):
+    \`\`\`python
+    # PostgreSQL connection with discovered authentication
+    POSTGRES_HOST = "postgres.example.com"
+    POSTGRES_PORT = 5432
+    POSTGRES_DB = "analytics"
+    POSTGRES_USER = "analytics_user"  # From datastore authentication config
+    POSTGRES_PASSWORD = "secure_password_123"  # From datastore authentication config
+    
+    connection_string = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    \`\`\`
+    
+    Snowflake Datastore Response:
+    \`\`\`json
+    {
+      "id": "ds-456",
+      "name": "production-snowflake",
+      "type": "snowflake",
+      "account": "xy12345.us-east-1",
+      "warehouse": "COMPUTE_WH",
+      "database": "ANALYTICS_DB",
+      "schema": "PUBLIC",
+      "authentication": {
+        "type": "username_password",
+        "username": "etl_user",
+        "password": "snowflake_pass_456",
+        "role": "ETL_ROLE"
+      }
+    }
+    \`\`\`
+    
+    Generated Code (CORRECT):
+    \`\`\`python
+    # Snowflake connection with discovered authentication
+    SNOWFLAKE_ACCOUNT = "xy12345.us-east-1"
+    SNOWFLAKE_USER = "etl_user"  # From datastore authentication config
+    SNOWFLAKE_PASSWORD = "snowflake_pass_456"  # From datastore authentication config
+    SNOWFLAKE_ROLE = "ETL_ROLE"  # From datastore authentication config
+    SNOWFLAKE_WAREHOUSE = "COMPUTE_WH"
+    SNOWFLAKE_DATABASE = "ANALYTICS_DB"
+    SNOWFLAKE_SCHEMA = "PUBLIC"
+    
+    conn = snowflake.connector.connect(
+        account=SNOWFLAKE_ACCOUNT,
+        user=SNOWFLAKE_USER,
+        password=SNOWFLAKE_PASSWORD,
+        role=SNOWFLAKE_ROLE,
+        warehouse=SNOWFLAKE_WAREHOUSE,
+        database=SNOWFLAKE_DATABASE,
+        schema=SNOWFLAKE_SCHEMA
+    )
+    \`\`\`
+    
+    S3 Datastore Response:
+    \`\`\`json
+    {
+      "id": "ds-789",
+      "name": "data-lake-s3",
+      "type": "s3",
+      "bucket": "company-data-lake",
+      "region": "us-west-2",
+      "authentication": {
+        "type": "aws_access_key",
+        "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      }
+    }
+    \`\`\`
+    
+    Generated Code (CORRECT):
+    \`\`\`python
+    # S3 connection with discovered authentication
+    import boto3
+    
+    S3_BUCKET = "company-data-lake"
+    S3_REGION = "us-west-2"
+    AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"  # From datastore authentication config
+    AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"  # From datastore authentication config
+    
+    s3_client = boto3.client(
+        's3',
+        region_name=S3_REGION,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+    )
+    \`\`\`
+    
+    CRITICAL RULES FOR AUTHENTICATION:
+    ✅ ALWAYS extract authentication details from xdp_list_datastores response
+    ✅ ALWAYS use actual authentication values in generated code
+    ✅ ALWAYS match authentication type to datastore type
+    ✅ ALWAYS include all required authentication parameters
+    ✅ ALWAYS use secure connection methods (SSL/TLS when available)
+    
+    ❌ NEVER use placeholder authentication values
+    ❌ NEVER hardcode generic credentials like "admin/password"
+    ❌ NEVER omit authentication when datastore requires it
+    ❌ NEVER use wrong authentication type for datastore
+    ❌ NEVER expose credentials in logs or comments
+    
+    SECURITY CONSIDERATIONS:
+    - Credentials from xdp_list_datastores are already managed by XDP platform
+    - Use environment variables or secure configuration for production deployments
+    - Include comments indicating credentials are from XDP datastore configuration
+    - Never log or print authentication credentials
+    - Use secure connection protocols (SSL/TLS) when available
+  </datastore_authentication>
 
   <continuous_exploration>
     Tool Usage Patterns:
@@ -328,6 +514,13 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     CATALOG = "discovered-catalog"  # Available in this dataplane
     SCHEMA = "discovered-schema"  # Actual schema from catalog
     TABLE = "discovered-table"  # Table name from requirements
+    
+    # Datastore authentication from xdp_list_datastores
+    DB_HOST = "discovered-host"  # From datastore config
+    DB_PORT = 5432  # From datastore config
+    DB_USER = "discovered-username"  # From datastore authentication
+    DB_PASSWORD = "discovered-password"  # From datastore authentication
+    DB_NAME = "discovered-database"  # From datastore config
     \`\`\`
     
     Example .env File (when creating env files - NEVER create .env.example):
@@ -337,20 +530,34 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     CATALOG_NAME=discovered-catalog-name
     SCHEMA_NAME=discovered-schema-name
     TABLE_NAME=discovered-table-name
-    DATABASE_URL=discovered-connection-url
+    
+    # Datastore connection and authentication (from xdp_list_datastores)
+    DB_HOST=discovered-host
+    DB_PORT=5432
+    DB_USER=discovered-username
+    DB_PASSWORD=discovered-password
+    DB_NAME=discovered-database
+    DATABASE_URL=postgresql://discovered-username:discovered-password@discovered-host:5432/discovered-database
     \`\`\`
     
     FORBIDDEN PATTERNS (when creating config files):
     ❌ DATAPLANE_NAME=your-dataplane-name-here
     ❌ CATALOG_NAME=YOUR_CATALOG
+    ❌ DB_USER=YOUR_USERNAME
+    ❌ DB_PASSWORD=YOUR_PASSWORD
+    ❌ API_KEY=your-api-key-here
     ❌ # Replace with your actual values
     ❌ Creating .env.example files
     
     REQUIRED PATTERNS (when creating config files):
     ✅ DATAPLANE_NAME=actual-discovered-name  # Discovered via tools
     ✅ CATALOG_NAME=actual-catalog  # Found in dataplane
+    ✅ DB_USER=actual-username  # From datastore authentication
+    ✅ DB_PASSWORD=actual-password  # From datastore authentication
+    ✅ API_KEY=actual-api-key  # From datastore authentication
     ✅ Functional .env files ready for immediate use
     ✅ Zero manual configuration required
+    ✅ All authentication credentials from xdp_list_datastores
   </code_generation_integration>
 
   <execution_policy>
@@ -392,28 +599,43 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
        ✅ External → Trino: Use xdp_list_datastores for source, trino_list_catalogs for target
        ✅ Trino → External: Use trino_list_catalogs for source, xdp_list_datastores for target
        ✅ Once you discover a datastore: use its native APIs, not Trino tools
+       ✅ Extract and use authentication from datastore configuration
+    
+    3. IGNORING AUTHENTICATION CONFIGURATION (CRITICAL ERROR):
+       ❌ Using xdp_list_datastores but ignoring authentication fields
+       ❌ Hardcoding generic credentials instead of using discovered authentication
+       ❌ Using placeholder values for username/password/api_key
+       ❌ Omitting authentication when connecting to datastores
+       ❌ Using wrong authentication type for datastore
+       ✅ ALWAYS extract authentication from xdp_list_datastores response
+       ✅ ALWAYS use actual authentication values in connection code
+       ✅ ALWAYS match authentication type to datastore type
+       ✅ ALWAYS include all required authentication parameters
+       ✅ ALWAYS validate authentication configuration before generating code
 
-    3. Stopping after one tool call
+    4. Stopping after one tool call
        ❌ Call list_catalogs and immediately generate code
        ✅ Call list_catalogs → list_tables → describe_table → then generate
 
-    4. Using placeholders instead of discovering values
+    5. Using placeholders instead of discovering values
        ❌ dataplane = "your-dataplane-id"
+       ❌ username = "YOUR_USERNAME"
        ✅ Use appropriate discovery tools based on data source type
+       ✅ Extract authentication from datastore configuration
 
-    5. Giving up after one failure
+    6. Giving up after one failure
        ❌ "Tool failed, cannot proceed"
        ✅ Try different parameters or alternative tools
 
-    6. Not validating discovered values
+    7. Not validating discovered values
        ❌ Assume first result is correct
        ✅ Verify with additional tool calls
 
-    7. Incomplete exploration
+    8. Incomplete exploration
        ❌ Find one table and assume it's the right one
        ✅ List all available resources and choose based on context
     
-    6. CRITICAL: MCP Tool parameter validation failures (causing tool errors):
+    9. CRITICAL: MCP Tool parameter validation failures (causing tool errors):
        ❌ Using dataplane name instead of ID: trino_list_catalogs(dataplane="manoj-xdp-trino")
        ❌ Null/undefined required parameters: trino_list_tables(dataplane=null, catalog="hive")
        ❌ Missing required parameters: trino_describe_table(dataplane="21", catalog="hive")
@@ -426,10 +648,18 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
        ✅ Validate all parameter values from previous MCP tool responses
        ✅ REMEMBER: Missing/null/invalid required params = immediate MCP tool failure
     
-    7. Schema discovery with MCP tools:
+    10. Schema discovery with MCP tools:
        ❌ Assuming "default" schema exists in every catalog
        ✅ Use trino_list_tables without schema parameter to discover available schemas
        ✅ Use actual schema names from MCP tool responses
+    
+    11. Authentication handling with datastores:
+       ❌ Ignoring authentication field in xdp_list_datastores response
+       ❌ Using placeholder credentials in generated code
+       ❌ Not extracting authentication type from datastore config
+       ✅ ALWAYS extract authentication configuration from datastore response
+       ✅ ALWAYS use actual credentials in connection code
+       ✅ ALWAYS match authentication method to datastore type
   </common_pitfalls>
 
   <completion_requirements>

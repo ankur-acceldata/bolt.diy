@@ -25,7 +25,14 @@ export const getTrinoUsageGuidelines = () => stripIndents`
   </trino_gateway_configuration>
 
   <trino_polling_pattern>
-    CRITICAL: Trino Gateway uses asynchronous query execution with polling
+    CRITICAL: Trino Gateway uses asynchronous query execution with streaming pagination
+    
+    PAGINATION PATTERN - MUST UNDERSTAND:
+    - Results are streamed via nextUri field
+    - Data can appear in ANY response during polling (not just the last one)
+    - MUST accumulate data throughout the ENTIRE polling loop
+    - Polling ends when nextUri is ABSENT, not when state is FINISHED
+    - This is a distributed query engine pattern where results are produced incrementally
     
     IMPORTANT: Both FINISHED and FINISHING are valid success states:
     - FINISHING: Query completed successfully, finalizing results
@@ -38,7 +45,8 @@ export const getTrinoUsageGuidelines = () => stripIndents`
          -H "X-Trino-User: admin" \\
          -d 'SELECT * FROM catalog.schema.table LIMIT 10'
 
-       # Poll the nextUri from response until state is FINISHED/FAILED/CANCELED
+       # Poll the nextUri from response until nextUri is absent
+       # IMPORTANT: Collect data from EVERY response, not just the last one
        curl -X GET "http://trino-gateway:8080/v1/statement/queued/QUERY_ID/TOKEN/1" \\
          -H "X-Trino-User: admin"
        \`\`\`
@@ -65,7 +73,7 @@ export const getTrinoUsageGuidelines = () => stripIndents`
        - FAILED: Query failed, check error field
        - CANCELED: Query was canceled
 
-    4. MANDATORY POLLING LOGIC:
+    4. MANDATORY POLLING LOGIC WITH DATA ACCUMULATION:
        \`\`\`python
        import requests
        import time
@@ -86,13 +94,27 @@ export const getTrinoUsageGuidelines = () => stripIndents`
            query_id = result.get('id')
            print(f"Query submitted with ID: {query_id}")
 
-           # Poll until completion using nextUri
-           while 'nextUri' in result and result['stats']['state'] in ['QUEUED', 'RUNNING', 'FINISHING']:
+           # CRITICAL: Accumulate data from ALL responses
+           all_data = []
+           columns = None
+
+           # CRITICAL: Poll while nextUri exists (not based on state)
+           while 'nextUri' in result:
                state = result['stats']['state']
+               
+               # CRITICAL: Collect data from EVERY response
+               if 'data' in result and result['data']:
+                   all_data.extend(result['data'])
+                   print(f"Accumulated {len(result['data'])} rows (total: {len(all_data)})")
+               
+               # Capture column metadata (usually in first response with data)
+               if 'columns' in result and not columns:
+                   columns = result['columns']
+               
                print(f"Query {query_id} state: {state}, polling...")
                time.sleep(1)  # Wait 1 second between polls
 
-               # CRITICAL: Use the nextUri from previous response, NOT the gateway URL
+               # CRITICAL: Use the nextUri from previous response
                response = requests.get(
                    result['nextUri'],
                    headers={'X-Trino-User': 'admin'}
@@ -103,15 +125,21 @@ export const getTrinoUsageGuidelines = () => stripIndents`
 
                result = response.json()
 
-           # Check final state and return results
+           # CRITICAL: Collect data from final response (when nextUri is absent)
+           if 'data' in result and result['data']:
+               all_data.extend(result['data'])
+               print(f"Accumulated {len(result['data'])} rows from final response (total: {len(all_data)})")
+           
+           if 'columns' in result and not columns:
+               columns = result['columns']
+
+           # Check final state
            final_state = result['stats']['state']
            print(f"Query {query_id} final state: {final_state}")
 
            if final_state in ['FINISHED', 'FINISHING']:
-               data = result.get('data', [])
-               columns = result.get('columns', [])
-               print(f"Query completed successfully, returned {len(data)} rows")
-               return {'data': data, 'columns': columns, 'stats': result['stats']}
+               print(f"Query completed successfully, total rows: {len(all_data)}")
+               return {'data': all_data, 'columns': columns or [], 'stats': result['stats']}
            elif final_state == 'FAILED':
                error_info = result.get('error', {})
                error_msg = error_info.get('message', 'Unknown error')
@@ -234,7 +262,7 @@ export const getTrinoUsageGuidelines = () => stripIndents`
 
     IMPORTANT: Use Spark Connect compatible patterns (see python-prompt for details)
 
-    3. EXAMPLE INTEGRATION CODE:
+    3. EXAMPLE INTEGRATION CODE WITH DATA ACCUMULATION:
        \`\`\`python
        import requests
        import time
@@ -249,10 +277,25 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                data=query
            )
 
-           result = response.json()
+           if response.status_code != 200:
+               raise Exception(f"Failed to submit query: {response.status_code} {response.text}")
 
-           # Poll until completion
-           while 'nextUri' in result and result['stats']['state'] in ['QUEUED', 'RUNNING', 'FINISHING']:
+           result = response.json()
+           query_id = result.get('id')
+
+           # CRITICAL: Accumulate data from ALL responses
+           all_data = []
+           columns = None
+
+           # CRITICAL: Poll while nextUri exists (not based on state)
+           while 'nextUri' in result:
+               # CRITICAL: Collect data from EVERY response
+               if 'data' in result and result['data']:
+                   all_data.extend(result['data'])
+               
+               if 'columns' in result and not columns:
+                   columns = result['columns']
+               
                print(f"Query state: {result['stats']['state']}, polling...")
                time.sleep(1)
 
@@ -260,11 +303,22 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                    result['nextUri'],
                    headers={'X-Trino-User': 'admin'}
                )
+               
+               if response.status_code != 200:
+                   raise Exception(f"Failed to poll query: {response.status_code} {response.text}")
+               
                result = response.json()
+
+           # CRITICAL: Collect data from final response
+           if 'data' in result and result['data']:
+               all_data.extend(result['data'])
+           
+           if 'columns' in result and not columns:
+               columns = result['columns']
 
            # Return results or raise error
            if result['stats']['state'] in ['FINISHED', 'FINISHING']:
-               return result.get('data', [])
+               return all_data
            elif result['stats']['state'] == 'FAILED':
                error_msg = result.get('error', {}).get('message', 'Unknown error')
                raise Exception(f"Trino query failed: {error_msg}")
@@ -304,7 +358,7 @@ export const getTrinoUsageGuidelines = () => stripIndents`
        - Validate expected columns and data types
 
     GENERATED CODE RUNTIME:
-    In generated applications, use direct Trino Gateway with polling:
+    In generated applications, use direct Trino Gateway with polling and data accumulation:
     \`\`\`python
     # Runtime query execution in generated applications
     def execute_trino_query(query):
@@ -325,9 +379,23 @@ export const getTrinoUsageGuidelines = () => stripIndents`
         query_id = result.get('id')
         print(f"Query submitted with ID: {query_id}")
 
-        # Poll until completion
-        while 'nextUri' in result and result['stats']['state'] in ['QUEUED', 'RUNNING', 'FINISHING']:
+        # CRITICAL: Accumulate data from ALL responses
+        all_data = []
+        columns = None
+
+        # CRITICAL: Poll while nextUri exists (not based on state)
+        while 'nextUri' in result:
             state = result['stats']['state']
+            
+            # CRITICAL: Collect data from EVERY response
+            if 'data' in result and result['data']:
+                all_data.extend(result['data'])
+                print(f"Accumulated {len(result['data'])} rows (total: {len(all_data)})")
+            
+            # Capture column metadata (usually in first response with data)
+            if 'columns' in result and not columns:
+                columns = result['columns']
+            
             print(f"Query {query_id} state: {state}, polling...")
             time.sleep(1)
 
@@ -341,15 +409,21 @@ export const getTrinoUsageGuidelines = () => stripIndents`
 
             result = response.json()
 
+        # CRITICAL: Collect data from final response (when nextUri is absent)
+        if 'data' in result and result['data']:
+            all_data.extend(result['data'])
+            print(f"Accumulated {len(result['data'])} rows from final response (total: {len(all_data)})")
+        
+        if 'columns' in result and not columns:
+            columns = result['columns']
+
         # Check final state and return results
         final_state = result['stats']['state']
         print(f"Query {query_id} final state: {final_state}")
 
         if final_state in ['FINISHED', 'FINISHING']:
-            data = result.get('data', [])
-            columns = result.get('columns', [])
-            print(f"Query completed successfully, returned {len(data)} rows")
-            return {'data': data, 'columns': columns, 'stats': result['stats']}
+            print(f"Query completed successfully, total rows: {len(all_data)}")
+            return {'data': all_data, 'columns': columns or [], 'stats': result['stats']}
         elif final_state == 'FAILED':
             error_info = result.get('error', {})
             error_msg = error_info.get('message', 'Unknown error')

@@ -126,7 +126,10 @@ export function useAdhocRunClient() {
             depends: depends || { dataStores: [] },
             sparkConf: (executionConfig as any)?.sparkConfig || {},
             timeToLiveSeconds: (executionConfig as any)?.timeToLiveSeconds ?? null,
-          },
+            runConf: {
+              IS_BOLT: 'true',
+            },
+          } as AdhocRunRequestBody['executionConfig'],
         };
 
         logger.info('Final payload being sent:', JSON.stringify(payload, null, 2));

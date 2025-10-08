@@ -83,6 +83,10 @@ export interface AdhocRunRequestBody {
     };
     sparkConf: Record<string, any>;
     timeToLiveSeconds?: number | null;
+    runConf?: {
+      IS_BOLT?: string;
+      [key: string]: string | undefined;
+    };
   };
 }
 

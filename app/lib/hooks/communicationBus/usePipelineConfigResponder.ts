@@ -3,7 +3,9 @@ import { useCommunicationBusChild } from './useCommunicationBusChild';
 import { MessageType } from '~/types/communicationBus';
 import { createScopedLogger } from '~/utils/logger';
 import { description } from '~/lib/persistence';
-import { extractShellCommands } from '~/lib/utils/shellCommands';
+
+// import { extractShellCommands } from '~/lib/utils/shellCommands';
+
 import { getJobConfigFromXdp } from '~/lib/services/jobConfigService';
 import { getProjectId } from '~/utils/fileLocks';
 
@@ -33,8 +35,12 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
       try {
         logger.info('Received GET_PIPELINE_CONFIG request');
 
-        // Extract shell commands and get job config similar to adhoc run flow
-        const stages = extractShellCommands();
+        /*
+         * Extract shell commands and get job config similar to adhoc run flow
+         * const stages = extractShellCommands();
+         */
+
+        const stages = ["echo 'Hello World'"];
         const jobConfig = await getJobConfigFromXdp(bus, stages);
 
         // Build pipeline config response

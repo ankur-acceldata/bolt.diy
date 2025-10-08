@@ -80,12 +80,33 @@ CRITICAL EXECUTION FAILURE PREVENTION:
 - ALWAYS test import statements and module paths
 - ALWAYS use absolute paths or proper relative paths
 - ALWAYS include try-catch blocks around main execution logic
-4. MANDATORY: Use simple Spark session creation with Spark Connect:
+4. MANDATORY: Use environment-aware Spark session creation:
    \`\`\`python
-   spark = SparkSession.builder \\
-       .appName("app-name") \\
-       .remote("sc://localhost:15002") \\
-       .getOrCreate()
+   import os
+   from pyspark.sql import SparkSession
+   
+   def create_spark_session(app_name: str) -> SparkSession:
+       """Create Spark session based on environment."""
+       is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
+       
+       if is_bolt:
+           # Bolt environment: Use Spark Connect
+           return SparkSession.builder \\
+               .appName(app_name) \\
+               .remote("sc://localhost:15002") \\
+               .getOrCreate()
+       else:
+           # Production environment: Standard SparkSession
+           return SparkSession.builder \\
+               .appName(app_name) \\
+               .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \\
+               .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \\
+               .config("spark.sql.catalog.spark_catalog.type", "hive") \\
+               .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \\
+               .config("spark.sql.catalog.local.type", "hadoop") \\
+               .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse") \\
+               .enableHiveSupport() \\
+               .getOrCreate()
    \`\`\`
 5. MANDATORY: Use structlog with logging.INFO level:
    \`\`\`python
@@ -110,13 +131,26 @@ CRITICAL EXECUTION FAILURE PREVENTION:
 </critical_rules>
 
 <execution_environment>
-WebContainer with:
+Dual Environment Support:
+
+**Bolt Environment (IS_BOLT=true)**:
 - PySpark 4.0.0 runtime with Spark Connect protocol
 - Python 3.11+ environment
-- Container/pod deployment focus
-- Available commands: python, python3, pip, cat, ls, mkdir, touch, echo, etc.
+- WebContainer deployment
 - Spark Connect URL: sc://localhost:15002
+- Available commands: python, python3, pip, cat, ls, mkdir, touch, echo, etc.
+
+**Production Environment (IS_BOLT=false or not set)**:
+- PySpark 4.0.0 with standard SparkSession
+- Kubernetes pod deployment
+- Hadoop/Hive integration
+- Kerberos authentication support
+- Custom Spark configurations
+- User ID 185 for security
+
+Common:
 - Trino Gateway integration for SQL queries
+- Container/pod deployment focus
 </execution_environment>
 
 <pattern_detection>
@@ -228,22 +262,47 @@ SPARK CONNECT LIMITATIONS (MUST AVOID):
 - Parallelization: Use spark.createDataFrame() instead of parallelize()
 - Job tracking: Use custom logging instead of setJobGroup()
 
-SPARK CONNECT COMPATIBLE PATTERNS:
+ENVIRONMENT-AWARE SPARK PATTERNS:
 \`\`\`python
+import os
 import uuid
 import time
 from pyspark.sql import SparkSession
 
 def create_spark_session(app_name: str) -> SparkSession:
-    """Create Spark Connect compatible session."""
-    return SparkSession.builder \\
-        .appName(app_name) \\
-        .remote("sc://localhost:15002") \\
-        .getOrCreate()
+    """Create Spark session based on IS_BOLT environment variable."""
+    is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
+    
+    if is_bolt:
+        # Bolt environment: Use Spark Connect
+        return SparkSession.builder \\
+            .appName(app_name) \\
+            .remote("sc://localhost:15002") \\
+            .getOrCreate()
+    else:
+        # Production environment: Standard SparkSession
+        return SparkSession.builder \\
+            .appName(app_name) \\
+            .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \\
+            .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \\
+            .config("spark.sql.catalog.spark_catalog.type", "hive") \\
+            .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \\
+            .config("spark.sql.catalog.local.type", "hadoop") \\
+            .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse") \\
+            .enableHiveSupport() \\
+            .getOrCreate()
 
 def get_app_info(spark: SparkSession) -> dict:
-    """Get application info without sparkContext."""
-    app_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    """Get application info - environment aware."""
+    is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
+    
+    if is_bolt:
+        # Bolt: Generate app_id without sparkContext
+        app_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    else:
+        # Production: Can access sparkContext
+        app_id = spark.sparkContext.applicationId
+    
     return {
         "app_id": app_id,
         "app_name": spark.conf.get("spark.app.name", "unknown"),
@@ -263,8 +322,13 @@ ERROR TROUBLESHOOTING:
 If you see "JVM_ATTRIBUTE_NOT_SUPPORTED" error:
 1. Identify the sparkContext usage in the error traceback
 2. Replace with DataFrame API or alternative pattern above
-3. Never access spark.sparkContext in Spark Connect applications
+3. Never access spark.sparkContext in Spark Connect applications (IS_BOLT=true)
 4. Use logging module for debugging instead of Spark's internal logging
+5. Check IS_BOLT environment variable to determine execution mode
+
+ENVIRONMENT DETECTION:
+- IS_BOLT=true → Bolt environment → Use Spark Connect → Avoid sparkContext
+- IS_BOLT=false or not set → Production → Standard SparkSession → sparkContext available
 </spark_connect_compatibility>
 
 <data_type_validation>
@@ -393,52 +457,98 @@ BASE IMAGE COMPATIBILITY RULES (CRITICAL):
 🔴 ALWAYS verify package names exist in base image repositories
 🔴 System paths and libraries vary by OS - use base-image-appropriate paths
 
-BASE IMAGE VERIFICATION CHECKLIST:
-✅ Identify base image OS distribution (Debian, Alpine, RHEL, etc.)
-✅ Use correct package manager for that distribution
-✅ Verify ALL packages exist in that distribution's repositories
-✅ Use distribution-appropriate system paths
-✅ Test package installation commands match the OS
-✅ Ensure all RUN, COPY, ENV commands are OS-compatible
+PRODUCTION DOCKERFILE TEMPLATE (MANDATORY - USE THIS STRUCTURE):
+\`\`\`dockerfile
+FROM openjdk:11-jre-slim
+
+USER root
+
+WORKDIR /app
+
+ENV SPARK_HOME=/opt/spark
+ENV SPARK_JARS_DIR=\$SPARK_HOME/jars
+
+# Set environment variables for Kerberos and Matplotlib
+ENV MPLCONFIGDIR="/tmp/matplotlib" \\
+    HADOOP_CONF_DIR=/etc/hadoop/conf \\
+    JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
+    KRB5_CONFIG=/etc/krb5.conf \\
+    CLASSPATH=\$SPARK_JARS_DIR/* \\
+    PATH=\$PATH:\$SPARK_JARS_DIR \\
+    SPARK_USER="185" \\
+    HADOOP_USER="185"
+
+# Copy requirements first for better caching
+COPY requirements.txt /app/requirements.txt
+
+# Install pip and create virtual environment for Python packages
+RUN apt-get update && apt-get install -y python3-pip python3-venv && \\
+    python3 -m venv /opt/venv && \\
+    /opt/venv/bin/pip install --upgrade pip && \\
+    /opt/venv/bin/pip install -r requirements.txt
+
+# Add virtual environment to PATH
+ENV PATH="/opt/venv/bin:\$PATH"
+
+# Copy application code
+COPY . /app/
+
+RUN chmod 777 /app
+
+USER 185
+
+# DO NOT include CMD - will be provided at runtime
+\`\`\`
+
+CRITICAL COPY STRATEGY:
+- Use "COPY . /app/" to copy all application files
+- This ensures the Dockerfile works regardless of project structure
+- If specific directories exist (jobs/ODP/, data/, helper/, jars/), they will be copied
+- If they don't exist, the build won't fail
+- NEVER use COPY commands for directories that may not exist in the project
 
 DOCKERFILE REQUIREMENTS:
 1. ALWAYS use openjdk:11-jre-slim as base image (Debian-based, compatible with PySpark 4.0.0)
 2. CRITICAL: openjdk:11-jre-slim is Debian-based, so MUST use apt-get (NOT yum, apk, or other package managers)
-3. ALWAYS set proper environment variables:
-   - PYTHONUNBUFFERED=1
-   - JAVA_HOME=/usr/local/openjdk-11
-   - PYSPARK_PYTHON=python3
-   - PYSPARK_DRIVER_PYTHON=python3
-4. ALWAYS install Python 3.11+ with pip and dev tools using apt-get
-5. ALWAYS copy requirements.txt first and install dependencies
-6. ALWAYS copy application code after dependency installation
-7. ALWAYS create non-root user for security
-8. ALWAYS include health check
-9. ALWAYS use proper CMD format for Python modules
+3. ALWAYS start with USER root for installation
+4. ALWAYS set SPARK_HOME and SPARK_JARS_DIR environment variables
+5. ALWAYS include Kerberos and Hadoop configuration paths:
+   - HADOOP_CONF_DIR=/etc/hadoop/conf
+   - JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf
+   - KRB5_CONFIG=/etc/krb5.conf
+6. ALWAYS set SPARK_USER and HADOOP_USER to "185"
+7. ALWAYS use virtual environment pattern:
+   - Create venv at /opt/venv
+   - Install requirements in venv
+   - Add venv to PATH
+8. ALWAYS copy application files:
+   - COPY requirements.txt first (for better caching)
+   - Then COPY . /app/ to copy all application code
+   - NEVER use specific directory COPY commands that may fail (like COPY jobs/ODP/, COPY jars/)
+9. ALWAYS chmod 777 /app for permissions
+10. ALWAYS switch to USER 185 at the end
+11. CRITICAL: DO NOT include CMD instruction - it will be provided at runtime
+12. CRITICAL: DO NOT include HEALTHCHECK instruction
+13. CRITICAL: DO NOT include EXPOSE instruction
 
-DOCKERFILE TEMPLATE (ALWAYS USE THIS STRUCTURE):
-- FROM openjdk:11-jre-slim (Debian-based)
-- Install Python 3.11+ and system packages using apt-get
-- Set environment variables for PySpark
-- Copy requirements.txt and install dependencies
-- Copy application code
-- Create non-root user
-- Set proper working directory
-- Include health check
-- Set CMD for Python module execution
+ENVIRONMENT VARIABLE HANDLING:
+- IS_BOLT environment variable controls Spark session creation
+- IS_BOLT=true → Use Spark Connect (Bolt environment)
+- IS_BOLT=false or not set → Use standard SparkSession (Production)
 
 COMMON DOCKERFILE ERRORS TO AVOID:
-❌ Using Python-only base images (missing Java for PySpark)
-❌ Using wrong package manager (e.g., yum on Debian, apt-get on Alpine)
-❌ Using packages that don't exist in base image repositories
-❌ Missing PYTHONUNBUFFERED environment variable
-❌ Installing dependencies as root user
-❌ Missing health checks
-❌ Incorrect CMD format
-❌ Missing security user setup
-❌ Wrong Python version specifications
-❌ OS-incompatible system paths or commands
-❌ Mixing package managers from different distributions
+❌ Including CMD instruction (must be omitted for production)
+❌ Including HEALTHCHECK instruction
+❌ Including EXPOSE instruction
+❌ Not using virtual environment pattern
+❌ Missing Kerberos/Hadoop configuration
+❌ Not switching to USER 185
+❌ Missing SPARK_HOME and SPARK_JARS_DIR
+❌ Missing chmod 777 /app
+❌ Using wrong package manager for base image OS
+❌ Not starting with USER root
+❌ Using specific directory COPY commands that may not exist (COPY jobs/ODP/, COPY jars/, etc.)
+❌ Not copying requirements.txt before installing dependencies
 
 BASE IMAGE PACKAGE MANAGER REFERENCE:
 - openjdk:11-jre-slim → Debian → apt-get update && apt-get install -y
@@ -448,11 +558,12 @@ BASE IMAGE PACKAGE MANAGER REFERENCE:
 - centos:7 → CentOS → yum install -y
 
 ✅ ALWAYS include Dockerfile in every response
-✅ Use production-ready configuration
+✅ Use production-ready configuration with exact structure above
 ✅ Follow security best practices
-✅ Ensure compatibility with PySpark 4.0.0 and Spark Connect
+✅ Ensure compatibility with PySpark 4.0.0
+✅ Support both Bolt and Production environments via IS_BOLT
 ✅ VERIFY all commands match base image OS
-✅ VERIFY all packages exist in base image repositories
+✅ NO CMD, NO HEALTHCHECK, NO EXPOSE instructions
 </dockerfile_requirements>
 
 <development_standards>
@@ -512,17 +623,41 @@ structlog.configure(
 )
 
 def create_spark_session(app_name: str) -> SparkSession:
-    """Create Spark Connect compatible session."""
-    return SparkSession.builder \
-        .appName(app_name) \
-        .remote("sc://localhost:15002") \
-        .getOrCreate()
+    """Create Spark session based on environment."""
+    is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
+    
+    if is_bolt:
+        # Bolt environment: Use Spark Connect
+        return SparkSession.builder \
+            .appName(app_name) \
+            .remote("sc://localhost:15002") \
+            .getOrCreate()
+    else:
+        # Production environment: Standard SparkSession
+        return SparkSession.builder \
+            .appName(app_name) \
+            .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+            .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \
+            .config("spark.sql.catalog.spark_catalog.type", "hive") \
+            .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \
+            .config("spark.sql.catalog.local.type", "hadoop") \
+            .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse") \
+            .enableHiveSupport() \
+            .getOrCreate()
 
 def get_app_info(spark: SparkSession) -> dict:
-    """Get application info without accessing sparkContext."""
+    """Get application info without accessing sparkContext in Bolt mode."""
     import uuid
     import time
-    app_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
+    
+    if is_bolt:
+        # Bolt: Generate app_id without sparkContext
+        app_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    else:
+        # Production: Can access sparkContext
+        app_id = spark.sparkContext.applicationId
+    
     return {
         "app_id": app_id,
         "app_name": spark.conf.get("spark.app.name", "unknown"),
@@ -588,49 +723,46 @@ SCHEMA = "discovered-schema-name"         # From trino_list_tables()
   </boltAction>
 
   <boltAction type="file" filePath="Dockerfile">
-# PySpark 4.0.0 with Spark Connect - Production Ready Container
+# PySpark 4.0.0 - Production Ready Container
 FROM openjdk:11-jre-slim
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV JAVA_HOME=/usr/local/openjdk-11
-ENV SPARK_HOME=/opt/spark
-ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
-ENV PYSPARK_PYTHON=python3
-ENV PYSPARK_DRIVER_PYTHON=python3
+USER root
 
-# Install Python 3.11 and required system packages
-RUN apt-get update && apt-get install -y \\
-    python3 \\
-    python3-pip \\
-    python3-dev \\
-    curl \\
-    procps \\
-    && rm -rf /var/lib/apt/lists/*
-
-# Create app directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+ENV SPARK_HOME=/opt/spark
+ENV SPARK_JARS_DIR=$SPARK_HOME/jars
+
+# Set environment variables for Kerberos and Matplotlib
+ENV MPLCONFIGDIR="/tmp/matplotlib" \\
+    HADOOP_CONF_DIR=/etc/hadoop/conf \\
+    JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
+    KRB5_CONFIG=/etc/krb5.conf \\
+    CLASSPATH=$SPARK_JARS_DIR/* \\
+    PATH=$PATH:$SPARK_JARS_DIR \\
+    SPARK_USER="185" \\
+    HADOOP_USER="185"
+
+# Copy requirements first for better caching
+COPY requirements.txt /app/requirements.txt
+
+# Install pip and create virtual environment for Python packages
+RUN apt-get update && apt-get install -y python3-pip python3-venv && \\
+    python3 -m venv /opt/venv && \\
+    /opt/venv/bin/pip install --upgrade pip && \\
+    /opt/venv/bin/pip install -r requirements.txt
+
+# Add virtual environment to PATH
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
-COPY . .
+COPY . /app/
 
-# Create non-root user for security
-RUN useradd -m -u 1001 sparkuser && chown -R sparkuser:sparkuser /app
-USER sparkuser
+RUN chmod 777 /app
 
-# Expose port (if needed for web interfaces)
-EXPOSE 8080
+USER 185
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \\
-  CMD python3 -c "import sys; sys.exit(0)" || exit 1
-
-# Run the application
-CMD ["python3", "-m", "my_app"]
+# DO NOT include CMD - will be provided at runtime
   </boltAction>
 
   <boltAction type="shell">
@@ -904,7 +1036,7 @@ FINAL REMINDERS:
 - Convention over configuration
 - Hardcode XDP credentials directly in Python code (NO .env files)
 - MANDATORY: Always discover dataplanes first using get_all_dataplanes(), then catalogs using dataplane IDs
-- Use Spark Connect with simple session creation pattern
+- Use environment-aware Spark session creation (IS_BOLT variable)
 - Use structlog with logging.INFO level
 - Minimal comments policy
 - One command per purpose
@@ -920,9 +1052,13 @@ FINAL REMINDERS:
 - CRITICAL: ALWAYS provide ALL required parameters when calling MCP tools - missing required params = instant failure
 - CRITICAL: ALWAYS validate target table schema with DESCRIBE before INSERT operations
 - CRITICAL: ALWAYS cast DataFrame columns to match exact target table data types
-- CRITICAL: ALWAYS include production-ready Dockerfile with proper PySpark 4.0.0 setup
+- CRITICAL: ALWAYS include production-ready Dockerfile (USER root, venv, USER 185, NO CMD)
+- CRITICAL: Dockerfile MUST use "COPY . /app/" to avoid copying non-existent directories
+- CRITICAL: Dockerfile MUST NOT include CMD, HEALTHCHECK, or EXPOSE instructions
+- CRITICAL: NEVER use specific directory COPY commands that may not exist (COPY jobs/ODP/, COPY jars/, etc.)
 - Projects MUST be immediately runnable without user intervention or manual configuration
-- Use PySpark 4.0.0 compatible code with Spark Connect protocol
+- Use PySpark 4.0.0 compatible code with environment-aware session creation
+- IS_BOLT=true → Spark Connect | IS_BOLT=false/unset → Standard SparkSession
 `;
 
 export const CONTINUE_PROMPT = stripIndents`
