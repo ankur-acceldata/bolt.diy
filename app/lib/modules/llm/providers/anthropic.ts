@@ -48,6 +48,7 @@ export default class AnthropicProvider extends BaseProvider {
       label: `${m.display_name}`,
       provider: this.name,
       maxTokenAllowed: 32000,
+      createdAt: m.created_at, // Store creation date for sorting
     }));
   }
 

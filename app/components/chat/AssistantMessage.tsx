@@ -1,4 +1,4 @@
-import { memo, Fragment } from 'react';
+import { memo, Fragment, useState, useEffect, useRef } from 'react';
 import { Markdown } from './Markdown';
 import type { JSONValue } from 'ai';
 import Popover from '~/components/ui/Popover';
@@ -74,6 +74,32 @@ export const AssistantMessage = memo(
     parts,
     addToolResult,
   }: AssistantMessageProps) => {
+    /*
+     * Use requestAnimationFrame to batch content updates and prevent visual flicker
+     * during rapid streaming updates. This ensures the browser paints only once per frame.
+     */
+    const [displayContent, setDisplayContent] = useState(content);
+    const rafRef = useRef<number | null>(null);
+
+    useEffect(() => {
+      // Cancel any pending RAF
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+
+      // Schedule update for next animation frame
+      rafRef.current = requestAnimationFrame(() => {
+        setDisplayContent(content);
+        rafRef.current = null;
+      });
+
+      return () => {
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current);
+        }
+      };
+    }, [content, messageId]);
+
     const filteredAnnotations = (annotations?.filter(
       (annotation: JSONValue) =>
         annotation && typeof annotation === 'object' && Object.keys(annotation).includes('type'),
@@ -177,7 +203,7 @@ export const AssistantMessage = memo(
           </div>
         </>
         <Markdown append={append} chatMode={chatMode} setChatMode={setChatMode} model={model} provider={provider} html>
-          {content}
+          {displayContent}
         </Markdown>
         {toolInvocations && toolInvocations.length > 0 && (
           <ToolInvocations

@@ -3,9 +3,11 @@ import { ClientOnly } from 'remix-utils/client-only';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { ModelSelector } from '~/components/chat/ModelSelector';
-import { APIKeyManager } from './APIKeyManager';
-import { PipelineBuildButton } from './PipelineBuildButton';
-import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
+
+/*
+ * import { APIKeyManager } from './APIKeyManager';
+ * import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
+ */
 import FilePreview from './FilePreview';
 import { ScreenshotStateManager } from './ScreenshotStateManager';
 import { SendButton } from './SendButton.client';
@@ -137,7 +139,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 apiKeys={props.apiKeys}
                 modelLoading={props.isModelLoading}
               />
-              {(props.providerList || []).length > 0 &&
+              {/* {(props.providerList || []).length > 0 &&
                 props.provider &&
                 (!LOCAL_PROVIDERS.includes(props.provider.name) || 'OpenAILike') && (
                   <APIKeyManager
@@ -147,10 +149,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                       props.onApiKeysChange(props.provider.name, key);
                     }}
                   />
-                )}
-
-              {/* Pipeline Build Button - shown when chat is started */}
-              {props.chatStarted && <PipelineBuildButton />}
+                )} */}
             </div>
           )}
         </ClientOnly>

@@ -18,9 +18,9 @@ export interface ModelFilter {
 }
 
 /**
- * Current configuration: Both Google and Anthropic show up to 20 models with all variants
- * For Google: Shows all model variants (Ultra, Pro, Flash, Flash-Lite, Flash-8B, Nano, etc.) across versions
- * For Anthropic: Shows all model variants (Opus, Sonnet, Haiku, Thinking, etc.) across versions
+ * Current configuration: Both Google and Anthropic show up to 4 models (latest versions)
+ * For Google: Shows the latest 4 model variants (prioritizing newer versions and capabilities)
+ * For Anthropic: Shows the latest 4 model variants (prioritizing newer versions and capabilities)
  * Excludes image generation, TTS, and other non-text models for both providers
  * Uses dynamic version priority calculation to automatically handle new model versions
  */
@@ -29,7 +29,7 @@ export const PROVIDER_FILTER_CONFIG: ProviderFilterConfig = {
   maxModelsPerProvider: 4,
   providerModelLimits: {
     Google: {
-      maxModels: 20, // Allow more models to show all variants (pro, flash, flash-lite, etc.)
+      maxModels: 4, // Show only the latest 4 models
       excludeModels: [
         // Exclude truly deprecated versions
         'text-bison',
@@ -44,7 +44,7 @@ export const PROVIDER_FILTER_CONFIG: ProviderFilterConfig = {
       ],
     },
     Anthropic: {
-      maxModels: 20, // Allow more models to show all variants (sonnet, haiku, opus, thinking, etc.)
+      maxModels: 4, // Show only the latest 4 models
       excludeModels: [
         // Only exclude truly deprecated models
         'claude-instant',
@@ -214,7 +214,7 @@ function getGoogleModelScore(modelName: string): number {
 }
 
 /**
- * Sort Anthropic models by version and capability, showing all variants
+ * Sort Anthropic models by creation date (latest first)
  */
 function sortAnthropicModels(models: any[]): any[] {
   // Filter out non-text models (audio, vision, etc.)
@@ -230,79 +230,46 @@ function sortAnthropicModels(models: any[]): any[] {
     ); // Only Claude text models
   });
 
-  // Dynamic version priority calculation based on version numbers
-  const getVersionPriority = (version: string): number => {
-    if (version === '0') {
-      return 100; // Default for unrecognized versions
-    }
-
-    const [major, minor] = version.split('.').map(Number);
-
-    // Calculate priority: major * 1000 + minor * 100 (higher = newer)
-    return (major || 0) * 1000 + (minor || 0) * 100;
-  };
-
-  // Sort all models by version and capability without limiting to one per version
+  // Sort by created_at field (from API) - most recent first
   return textModels.sort((a, b) => {
-    const aVersion = extractAnthropicVersion(a.name);
-    const bVersion = extractAnthropicVersion(b.name);
+    // If both have createdAt timestamps, use those (most reliable)
+    if (a.createdAt && b.createdAt) {
+      const aDate = new Date(a.createdAt).getTime();
+      const bDate = new Date(b.createdAt).getTime();
 
-    const aPriority = getVersionPriority(aVersion);
-    const bPriority = getVersionPriority(bVersion);
-
-    // First sort by version (newer first)
-    if (aPriority !== bPriority) {
-      return bPriority - aPriority;
+      return bDate - aDate; // Newer first
     }
 
-    // If same version, sort by model capability score
-    const aScore = getAnthropicModelScore(a.name);
-    const bScore = getAnthropicModelScore(b.name);
-
-    if (aScore !== bScore) {
-      return bScore - aScore; // Higher score first
-    }
-
-    // Prefer "latest" versions
-    if (a.name.includes('latest') && !b.name.includes('latest')) {
+    // Fallback: if one has createdAt and the other doesn't, prioritize the one with createdAt
+    if (a.createdAt && !b.createdAt) {
       return -1;
     }
 
-    if (b.name.includes('latest') && !a.name.includes('latest')) {
+    if (!a.createdAt && b.createdAt) {
       return 1;
     }
 
-    // Finally, sort by date in model name (newer dates first)
+    // Fallback: Extract date from model name (format: YYYYMMDD)
+    const extractDate = (modelName: string): number => {
+      const dateMatch = modelName.match(/(\d{8})/);
+
+      if (dateMatch) {
+        return parseInt(dateMatch[1], 10);
+      }
+
+      return 0;
+    };
+
+    const aDate = extractDate(a.name);
+    const bDate = extractDate(b.name);
+
+    if (aDate !== bDate) {
+      return bDate - aDate;
+    }
+
+    // Final fallback: sort by name
     return b.name.localeCompare(a.name);
   });
-}
-
-/**
- * Get preference score for Anthropic models within same version
- * Higher scores indicate more capable/preferred models
- */
-function getAnthropicModelScore(modelName: string): number {
-  const name = modelName.toLowerCase();
-
-  // Latest and most capable models get highest scores
-  if (name.includes('opus')) {
-    return 120; // Most capable, highest cost
-  }
-
-  if (name.includes('sonnet')) {
-    return 100; // Balanced capability and speed
-  }
-
-  if (name.includes('thinking')) {
-    return 90; // Specialized reasoning models
-  }
-
-  if (name.includes('haiku')) {
-    return 80; // Fastest, lower cost
-  }
-
-  // Handle any other variants
-  return 50;
 }
 
 /**
@@ -311,35 +278,6 @@ function getAnthropicModelScore(modelName: string): number {
 function extractGoogleVersion(modelName: string): string {
   const match = modelName.match(/gemini-(\d+\.\d+)/);
   return match ? match[1] : '0';
-}
-
-/**
- * Extract version number from Anthropic model name
- * Handles formats like: claude-3-5-sonnet-20241022, claude-3-haiku-20240307, claude-4-sonnet-latest
- */
-function extractAnthropicVersion(modelName: string): string {
-  // Try modern format first: claude-3-5-sonnet or claude-4-sonnet
-  const modernMatch = modelName.match(/claude-(\d+)-(\d+)/);
-
-  if (modernMatch) {
-    return `${modernMatch[1]}.${modernMatch[2]}`;
-  }
-
-  // Try legacy format: claude-3.5-sonnet
-  const legacyMatch = modelName.match(/claude-(\d+\.\d+)/);
-
-  if (legacyMatch) {
-    return legacyMatch[1];
-  }
-
-  // Extract major version only for models like claude-4-sonnet-latest
-  const majorMatch = modelName.match(/claude-(\d+)/);
-
-  if (majorMatch) {
-    return `${majorMatch[1]}.0`;
-  }
-
-  return '0';
 }
 
 /**

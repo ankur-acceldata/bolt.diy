@@ -4,7 +4,6 @@ import {
   type Message,
   type DataStreamWriter,
   convertToCoreMessages,
-  formatDataStreamPart,
 } from 'ai';
 import { Experimental_StdioMCPTransport } from 'ai/mcp-stdio';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -499,15 +498,20 @@ export class MCPService {
   }
 
   async processToolInvocations(messages: Message[], dataStream: DataStreamWriter): Promise<Message[]> {
+    logger.debug('🔧 processToolInvocations called', dataStream);
+
     const lastMessage = messages[messages.length - 1];
     const parts = lastMessage.parts;
 
+    logger.debug(`🔧 Last message parts: ${parts ? parts.length : 'none'}`);
+
     if (!parts) {
+      logger.debug('🔧 No parts in last message, returning messages as-is');
       return messages;
     }
 
     const processedParts = await Promise.all(
-      parts.map(async (part) => {
+      parts.map(async (part, idx) => {
         // Only process tool invocations parts
         if (part.type !== 'tool-invocation') {
           return part;
@@ -516,10 +520,17 @@ export class MCPService {
         const { toolInvocation } = part;
         const { toolName, toolCallId } = toolInvocation;
 
+        logger.debug(`🔧 Part ${idx}: tool-invocation for ${toolName}, state: ${toolInvocation.state}`);
+
         // return part as-is if tool does not exist, or if it's not a tool call result
         if (!this.isValidToolName(toolName) || toolInvocation.state !== 'result') {
+          logger.debug(
+            `🔧 Part ${idx}: skipping (valid=${this.isValidToolName(toolName)}, state=${toolInvocation.state})`,
+          );
           return part;
         }
+
+        logger.debug(`🔧 Part ${idx}: processing tool invocation with result=${typeof toolInvocation.result}`);
 
         let result;
 
@@ -549,13 +560,12 @@ export class MCPService {
           return part;
         }
 
-        // Forward updated tool result to the client.
-        dataStream.write(
-          formatDataStreamPart('tool_result', {
-            toolCallId,
-            result,
-          }),
-        );
+        /*
+         * DO NOT manually write tool results to dataStream here
+         * The AI SDK's streamText with maxSteps automatically handles tool execution and streaming
+         * Writing tool results manually causes duplication in the UI
+         * The AI SDK will automatically stream tool results when tools have execute functions
+         */
 
         // Return updated toolInvocation with the actual result.
         return {
@@ -569,7 +579,10 @@ export class MCPService {
     );
 
     // Finally return the processed messages
-    return [...messages.slice(0, -1), { ...lastMessage, parts: processedParts }];
+    const result = [...messages.slice(0, -1), { ...lastMessage, parts: processedParts }];
+    logger.debug(`🔧 processToolInvocations returning ${result.length} messages`);
+
+    return result;
   }
 
   get tools() {

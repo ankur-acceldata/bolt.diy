@@ -361,6 +361,7 @@ ${enhancedPythonJavaInstructions}
         
         Available workbench actions:
         - \`run\`: Execute the current project (equivalent to clicking the Run button). Use this IMMEDIATELY after generating code to test functionality.
+        - \`edit-run\`: Open configuration dialog before running (use when external datastores are involved). Opens the Edit Config & Run dialog.
         - \`sync\`: Sync files with remote storage
         - \`build\`: Build the project
         - \`preview\`: Open the preview panel
@@ -372,12 +373,49 @@ ${enhancedPythonJavaInstructions}
         Example usage:
         \`\`\`
         <boltAction type="workbench-action" action="run" />
+        <boltAction type="workbench-action" action="edit-run" />
         <boltAction type="workbench-action" action="terminal" parameters='{"command": "npm test"}' />
         \`\`\`
         
-        CRITICAL: After generating code files, ALWAYS include a run action to automatically execute and test the code:
+        CRITICAL: Choose the appropriate action by checking ENTIRE conversation and ALL code:
+        
+        Use \`action="edit-run"\` when ANY of these are true:
+        - Called xdp_list_datastores MCP tool at ANY point in this conversation (even in previous iterations)
+        - ANY existing code file contains external datastore connections (PostgreSQL, Snowflake, S3, MongoDB, MySQL)
+        - ANY file imports datastore clients (psycopg2, boto3, snowflake.connector, pymongo, mysql.connector)
+        - Code contains JDBC URLs, connection strings, or database authentication
+        
+        Use \`action="run"\` ONLY when ALL of these are true:
+        - NEVER called xdp_list_datastores in entire conversation
+        - NO datastore connections exist anywhere in the project
+        - Code ONLY uses Trino catalogs via Trino Gateway API
+        - NO external database or storage connections
+        
+        After using \`action="edit-run"\`, MUST add a detailed message explaining:
+        - Which specific datastores are used
+        - What configuration is needed
+        - Why user input is required
+        - How to proceed
+        
+        Example with Trino catalogs only (NO external datastores):
         \`\`\`
         <boltAction type="workbench-action" action="run" />
+        
+        ✅ **Ready to Execute**: This application only uses internal Trino catalogs. 
+        The code will execute automatically.
+        \`\`\`
+        
+        Example with external datastores (xdp_list_datastores used OR datastore code exists):
+        \`\`\`
+        <boltAction type="workbench-action" action="edit-run" />
+        
+        📋 **Configuration Required**: This application connects to external datastores that need configuration.
+        
+        **Datastores Used**: PostgreSQL (production DB), Snowflake (analytics warehouse)
+        **What to Configure**: Database credentials, connection parameters, authentication settings
+        **Why Needed**: External datastores require environment-specific configuration for security
+        
+        Click **Edit Config & Run** above to review and configure these settings before execution.
         \`\`\`
 
 

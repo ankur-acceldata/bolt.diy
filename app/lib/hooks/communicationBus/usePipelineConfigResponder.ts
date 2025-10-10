@@ -18,10 +18,14 @@ interface UsePipelineConfigResponderOptions {
 export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConfigResponderOptions) {
   const bus = useCommunicationBusChild();
   const projectIdRef = useRef(currentProjectId);
+  const busRef = useRef(bus);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  // Update ref when currentProjectId changes
-  projectIdRef.current = currentProjectId;
+  // Update refs when values change - doesn't trigger re-renders
+  useEffect(() => {
+    busRef.current = bus;
+    projectIdRef.current = currentProjectId;
+  }, [bus, currentProjectId]);
 
   useEffect(() => {
     // Clean up previous listener if it exists
@@ -31,7 +35,7 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
 
     logger.info('Setting up GET_PIPELINE_CONFIG listener');
 
-    const unsubscribe = bus.on(MessageType.GET_PIPELINE_CONFIG, async (payload, message) => {
+    const unsubscribe = busRef.current.on(MessageType.GET_PIPELINE_CONFIG, async (payload, message) => {
       try {
         logger.info('Received GET_PIPELINE_CONFIG request');
 
@@ -41,7 +45,7 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
          */
 
         const stages = ["echo 'Hello World'"];
-        const jobConfig = await getJobConfigFromXdp(bus, stages);
+        const jobConfig = await getJobConfigFromXdp(busRef.current, stages);
 
         // Build pipeline config response
         const projectName = (description.get() ?? 'project').toLowerCase().split(' ').join('_');
@@ -58,8 +62,8 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
 
         logger.info('Sending GET_PIPELINE_CONFIG_RESPONSE');
 
-        // Send response back to parent
-        bus.sendMessage({
+        // Send response back to parent using ref
+        busRef.current.sendMessage({
           type: MessageType.GET_PIPELINE_CONFIG_RESPONSE,
           payload: pipelineConfig,
           responseId: message.messageId,
@@ -67,8 +71,8 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
       } catch (error) {
         logger.error('Failed to get pipeline config:', error);
 
-        // Send error response
-        bus.sendMessage({
+        // Send error response using ref
+        busRef.current.sendMessage({
           type: MessageType.ERROR,
           payload: { error: error instanceof Error ? error.message : 'Failed to get pipeline config' },
           responseId: message.messageId,
@@ -80,9 +84,10 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
 
     return () => {
       if (unsubscribeRef.current) {
+        logger.info('Cleaning up GET_PIPELINE_CONFIG listener');
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }
     };
-  }, [bus]); // Only depend on bus, use ref for currentProjectId
+  }, []); // Empty dependencies - use refs for all values
 }

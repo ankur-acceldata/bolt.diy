@@ -252,6 +252,7 @@ export default defineConfig((config) => {
         UnoCSS(),
         tsconfigPaths(),
         chrome129IssuePlugin(),
+        crossOriginIsolationPlugin(),
         basePathDevPlugin(BASE_PATH),
         config.mode === 'production' && optimizeCssModules({ apply: 'build' }),
       ],
@@ -407,6 +408,7 @@ export default defineConfig((config) => {
       UnoCSS(),
       tsconfigPaths(),
       chrome129IssuePlugin(),
+      crossOriginIsolationPlugin(),
       config.mode === 'production' && optimizeCssModules({ apply: 'build' }),
     ],
     envPrefix: [
@@ -496,6 +498,30 @@ function chrome129IssuePlugin() {
             return;
           }
         }
+
+        next();
+      });
+    },
+  };
+}
+
+function crossOriginIsolationPlugin() {
+  return {
+    name: 'cross-origin-isolation-plugin',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use((req, res, next) => {
+        /*
+         * Set cross-origin isolation headers for all responses
+         * These headers enable SharedArrayBuffer support across Chrome, Firefox, and Safari
+         */
+        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+        // Additional CORS headers for iframe embedding
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
         next();
       });

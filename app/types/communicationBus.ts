@@ -8,6 +8,11 @@ export enum MessageType {
   ERROR = 'ERROR',
   DATAPLANE_INFO = 'DATAPLANE_INFO',
 
+  // Health check messages (to prevent iframe freezing after idle)
+  HEARTBEAT = 'HEARTBEAT',
+  WAKE_UP = 'WAKE_UP',
+  WAKE_UP_RESPONSE = 'WAKE_UP_RESPONSE',
+
   // Demo/Test messages
   GET_DATA = 'GET_DATA',
   DATA_RESPONSE = 'DATA_RESPONSE',

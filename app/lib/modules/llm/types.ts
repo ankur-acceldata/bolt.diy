@@ -6,6 +6,7 @@ export interface ModelInfo {
   label: string;
   provider: string;
   maxTokenAllowed: number;
+  createdAt?: string; // ISO 8601 date string for sorting by creation date
 }
 
 export interface ProviderInfo {

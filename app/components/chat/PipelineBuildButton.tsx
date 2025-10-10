@@ -48,51 +48,31 @@ export const PipelineBuildButton: React.FC<PipelineBuildButtonProps> = ({ classN
   };
 
   return (
-    <div className={`flex items-center justify-between py-3 px-1 ${className || ''}`}>
-      {/* <div className="flex items-center gap-2 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-bolt-elements-textSecondary">Pipeline Actions:</span>
-          <div className="flex items-center gap-2">
-            <div className="i-ph:gear-six text-bolt-elements-textSecondary w-4 h-4" />
-            <span className="text-xs text-bolt-elements-textSecondary">Test and Build Image</span>
-          </div>
-        </div>
-      </div> */}
-
-      <div className="flex items-center gap-2 shrink-0">
-        <Button
-          onClick={handleBuildImage}
-          disabled={isDisabled}
-          variant="accent"
-          size="sm"
-          className="px-3 py-1.5 text-sm focus:ring-0 focus:ring-offset-0 bg-bolt-elements-item-backgroundAccent hover:bg-bolt-elements-item-backgroundAccent hover:opacity-90 border border-bolt-elements-borderColorActive shadow-sm"
-          title={
-            isDisabled
-              ? `Disabled: ${
-                  !currentProjectId
-                    ? 'No project ID'
-                    : isExecuting
-                      ? 'Pipeline build in progress'
-                      : isLogStreamActive
-                        ? 'Log stream is active'
-                        : 'Unknown reason'
-                }`
-              : 'Build and test pipeline image'
-          }
-        >
-          {isExecuting ? (
-            <>
-              <div className="i-ph:spinner-gap animate-spin w-4 h-4 mr-2" />
-              Building...
-            </>
-          ) : (
-            <>
-              <div className="i-ph:hammer w-4 h-4 mr-2" />
-              Test & Build Image
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
+    <Button
+      onClick={handleBuildImage}
+      disabled={isDisabled}
+      variant="accent"
+      size="sm"
+      className={`px-2 py-1 text-sm focus:ring-0 focus:ring-offset-0 bg-bolt-elements-item-backgroundAccent hover:bg-bolt-elements-item-backgroundAccent hover:opacity-90 border border-bolt-elements-borderColorActive shadow-sm ${className || ''}`}
+      title={
+        isDisabled
+          ? `Disabled: ${
+              !currentProjectId
+                ? 'No project ID'
+                : isExecuting
+                  ? 'Pipeline build in progress'
+                  : isLogStreamActive
+                    ? 'Log stream is active'
+                    : 'Unknown reason'
+            }`
+          : 'Build and test pipeline image'
+      }
+    >
+      {isExecuting ? (
+        <div className="i-ph:spinner-gap animate-spin text-bolt-elements-item-contentAccent" />
+      ) : (
+        <div className="i-ph:hammer text-bolt-elements-item-contentAccent" />
+      )}
+    </Button>
   );
 };

@@ -32,7 +32,7 @@ export interface SupabaseAction extends BaseAction {
 
 export interface WorkbenchAction extends BaseAction {
   type: 'workbench-action';
-  action: 'run' | 'build' | 'sync' | 'deploy' | 'test' | 'preview' | 'terminal';
+  action: 'run' | 'edit-run' | 'build' | 'sync' | 'deploy' | 'test' | 'preview' | 'terminal';
   parameters?: Record<string, any>;
 }
 

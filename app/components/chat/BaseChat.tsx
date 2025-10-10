@@ -161,6 +161,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const postMessageServiceRef = useRef<PostMessageService | null>(null);
+    const modelsFetchedRef = useRef(false);
     const lastResponseBroadcastRef = useRef<{
       state: 'idle' | 'in-progress' | 'generated' | 'error';
       message?: string;
@@ -438,7 +439,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     }, []);
 
     useEffect(() => {
-      if (typeof window !== 'undefined') {
+      // Only fetch models once on initial mount
+      if (typeof window !== 'undefined' && !modelsFetchedRef.current) {
+        modelsFetchedRef.current = true;
+
         let parsedApiKeys: Record<string, string> | undefined = {};
 
         try {
@@ -455,6 +459,18 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           .then((data) => {
             const typedData = data as { modelList: ModelInfo[] };
             setModelList(typedData.modelList);
+
+            // Auto-select the first (latest) model for the current provider if no model is currently selected
+            if (provider && setModel && !model) {
+              const currentProviderModels = typedData.modelList.filter((m) => m.provider === provider.name);
+
+              if (currentProviderModels.length > 0) {
+                const latestModel = currentProviderModels[0]; // First model is the latest due to our sorting
+                setModel(latestModel.name);
+                Cookies.set('selectedModel', latestModel.name, { expires: 30 });
+                logger.info(`Auto-selected latest model: ${latestModel.name} for provider: ${provider.name}`);
+              }
+            }
           })
           .catch((error) => {
             logger.error('Error fetching model list:', error);
@@ -463,7 +479,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             setIsModelLoading(undefined);
           });
       }
-    }, [providerList, provider]);
+    }, []);
 
     const onApiKeysChange = async (providerName: string, apiKey: string) => {
       const newApiKeys = { ...apiKeys, [providerName]: apiKey };
@@ -487,6 +503,15 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         const otherModels = prevModels.filter((model) => model.provider !== providerName);
         return [...otherModels, ...providerModels];
       });
+
+      // Auto-select the first (latest) model if this is the current provider
+      if (provider?.name === providerName && providerModels.length > 0 && setModel) {
+        const latestModel = providerModels[0]; // First model is the latest due to our sorting
+        setModel(latestModel.name);
+        Cookies.set('selectedModel', latestModel.name, { expires: 30 });
+        logger.info(`Auto-selected latest model after API key change: ${latestModel.name}`);
+      }
+
       setIsModelLoading(undefined);
     };
 

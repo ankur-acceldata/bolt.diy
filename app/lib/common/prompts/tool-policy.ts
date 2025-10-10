@@ -303,6 +303,44 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     When using xdp_list_datastores, the response includes authentication configuration for each datastore.
     You MUST extract and use these authentication details in generated code.
     
+    KUBERNETES SECRET-BASED AUTHENTICATION (HIGHEST PRIORITY):
+    
+    CRITICAL: When datastore config includes "secretName" and "secretKeys" fields with "isCredentialConfigured": true,
+    credentials are stored in Kubernetes secrets and MUST be accessed via environment variables in the pod.
+    
+    MANDATORY RULES FOR K8S SECRET-BASED CREDENTIALS:
+    ✅ ALWAYS check for "secretName" and "secretKeys" fields in datastore config
+    ✅ The "value" field in secretKeys contains the ENVIRONMENT VARIABLE NAME (not the actual credential)
+    ✅ ALWAYS use os.environ or os.getenv() to read from these environment variable names
+    ✅ NEVER hardcode credential values when secretKeys configuration is present
+    ✅ Extract environment variable names from config.secretKeys and use them to read from environment
+    
+    ❌ NEVER use hardcoded credential values when secretKeys exists
+    ❌ NEVER treat secretKeys[field].value as the actual credential value
+    ❌ NEVER ignore the isCredentialConfigured flag
+    ❌ NEVER assume credentials are directly in the config object when secretName is present
+    
+    CORRECT Pattern - K8s Secret-Based Credentials:
+    When datastore config has secretName and secretKeys, extract environment variable names and read from environment:
+    \`\`\`python
+    import os
+    
+    # Read environment variable names from config.secretKeys
+    # The secretKeys[field].value contains the ENV VAR NAME to read from
+    # Credentials are mounted in pod from Kubernetes secret
+    
+    credential_value = os.environ['ENV_VAR_NAME_FROM_SECRET_KEYS']  # Read from pod environment
+    \`\`\`
+    
+    WRONG Pattern - DO NOT DO THIS:
+    \`\`\`python
+    # ❌ WRONG: Using secretKeys value directly as credential
+    credential = "ENV_VAR_NAME_FROM_SECRET_KEYS"  # This is the env var name, not the credential!
+    
+    # ❌ WRONG: Hardcoding credentials when K8s secrets are configured
+    credential = "AKIAIOSFODNN7EXAMPLE"
+    \`\`\`
+    
     COMMON AUTHENTICATION TYPES:
     
     1. USERNAME/PASSWORD Authentication:
@@ -339,14 +377,47 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     
     1. Call xdp_list_datastores() to get datastore list
     2. Identify target datastore from response
-    3. CRITICAL: Extract authentication configuration from datastore object:
-       - Look for "authentication" or "config" or "credentials" field
-       - Identify authentication type (username/password, API key, AWS, OAuth, etc.)
-       - Extract all required authentication parameters
-    4. Generate connection code using extracted authentication details
-    5. NEVER use placeholder values for authentication - use actual discovered values
+    3. CRITICAL: Check authentication storage method (in this exact order):
+       a) Check for "secretName" and "secretKeys" fields in config
+          → If present: Extract environment variable names from secretKeys
+          → Use os.environ to read credentials from pod environment
+       b) Check for "authentication" or "config" fields with direct credential values
+          → If present: Extract direct values and use them
+       c) If neither pattern exists: Ask user for clarification
+    4. Generate connection code based on authentication pattern discovered
+    5. NEVER use placeholder values or hardcoded credentials
     
-    EXAMPLE AUTHENTICATION EXTRACTION:
+    EXAMPLE AUTHENTICATION EXTRACTION PATTERNS:
+    
+    Pattern 1: Kubernetes Secret-Based (modern XDP datastores)
+    When secretName and secretKeys are present in config:
+    \`\`\`python
+    import os
+    
+    # Extract environment variable names from secretKeys
+    # config['secretKeys']['username']['value'] = 'DB_USERNAME' (env var name)
+    # config['secretKeys']['password']['value'] = 'DB_PASSWORD' (env var name)
+    
+    # Read credentials from pod environment using the env var names
+    username = os.environ[config['secretKeys']['username']['value']]  # Reads from DB_USERNAME env var
+    password = os.environ[config['secretKeys']['password']['value']]  # Reads from DB_PASSWORD env var
+    
+    # Use in connection code
+    connection_string = f"postgresql://{username}:{password}@{host}:{port}/{database}"
+    \`\`\`
+    
+    Pattern 2: Direct Authentication Values (legacy datastores)
+    When authentication credentials are directly in the config:
+    \`\`\`python
+    # Extract values directly from authentication config
+    username = config['authentication']['username']
+    password = config['authentication']['password']
+    
+    # Use in connection code
+    connection_string = f"postgresql://{username}:{password}@{host}:{port}/{database}"
+    \`\`\`
+    
+    ADDITIONAL EXAMPLES FOR REFERENCE:
     
     PostgreSQL Datastore Response:
     \`\`\`json
@@ -453,22 +524,24 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     \`\`\`
     
     CRITICAL RULES FOR AUTHENTICATION:
-    ✅ ALWAYS extract authentication details from xdp_list_datastores response
-    ✅ ALWAYS use actual authentication values in generated code
+    ✅ ALWAYS check for secretName and secretKeys first (K8s secret-based)
+    ✅ When secretKeys exist: Extract env var names and use os.environ to read values
+    ✅ When direct auth values exist: Extract and use them directly
     ✅ ALWAYS match authentication type to datastore type
     ✅ ALWAYS include all required authentication parameters
     ✅ ALWAYS use secure connection methods (SSL/TLS when available)
     
     ❌ NEVER use placeholder authentication values
-    ❌ NEVER hardcode generic credentials like "admin/password"
+    ❌ NEVER hardcode credentials when secretKeys configuration is present
+    ❌ NEVER treat secretKeys[field].value as the actual credential (it's the env var name)
     ❌ NEVER omit authentication when datastore requires it
     ❌ NEVER use wrong authentication type for datastore
     ❌ NEVER expose credentials in logs or comments
     
     SECURITY CONSIDERATIONS:
-    - Credentials from xdp_list_datastores are already managed by XDP platform
-    - Use environment variables or secure configuration for production deployments
-    - Include comments indicating credentials are from XDP datastore configuration
+    - Credentials from xdp_list_datastores are managed by XDP platform
+    - K8s secret-based credentials are mounted as environment variables in the pod
+    - Include comments indicating where credentials come from (K8s secret or direct config)
     - Never log or print authentication credentials
     - Use secure connection protocols (SSL/TLS) when available
   </datastore_authentication>
@@ -507,8 +580,80 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     6. NEVER create .env.example or template files - always create functional .env files
     7. ALL environment variables MUST be populated with tool-discovered data
     
+    WORKBENCH ACTION SELECTION (CRITICAL):
+    MUST choose the correct workbench action based on datastore usage in the ENTIRE conversation and codebase:
+    
+    ✅ USE <boltAction type="workbench-action" action="edit-run" /> WHEN:
+    - You have called xdp_list_datastores MCP tool AT ANY POINT in this conversation (even in previous iterations)
+    - The EXISTING code (not just current changes) uses datastore connections (PostgreSQL, Snowflake, S3, MongoDB, etc.)
+    - The code contains datastore connection strings, JDBC URLs, or external data source configurations
+    - The code requires Kubernetes secret-based credentials (secretName/secretKeys in config)
+    - User needs to configure datastore authentication or connection parameters
+    - ANY file in the project imports datastore clients (psycopg2, snowflake-connector, boto3, pymongo, etc.)
+    
+    ✅ USE <boltAction type="workbench-action" action="run" /> WHEN:
+    - You have NEVER called xdp_list_datastores in this entire conversation
+    - The code ONLY uses Trino catalogs (discovered via trino_list_catalogs)
+    - NO external datastore connections exist anywhere in the project
+    - All code uses only Trino Gateway API (http://trino-gateway:8080)
+    - No datastore client libraries are imported
+    
+    CRITICAL DECISION MATRIX (Check in this order):
+    1. SCAN CONVERSATION HISTORY: Did I call xdp_list_datastores at ANY point in this conversation?
+       → YES? Use edit-run
+       → NO? Continue to step 2
+    
+    2. SCAN ENTIRE CODEBASE: Does ANY file contain datastore connections?
+       - Check for: PostgreSQL, Snowflake, S3, MongoDB, MySQL, Oracle connections
+       - Check for: JDBC URLs, connection strings, boto3, psycopg2, snowflake.connector imports
+       - Check for: AWS credentials, database passwords, datastore authentication
+       → YES? Use edit-run
+       → NO? Continue to step 3
+    
+    3. SCAN CURRENT CHANGES: Am I adding datastore code in this iteration?
+       → YES? Use edit-run
+       → NO? Use run (only Trino)
+    
+    CRITICAL: If you used xdp_list_datastores at ANY point during this conversation, you MUST:
+    1. Use action="edit-run" instead of action="run" (even if current changes don't touch datastores)
+    2. Add a user-friendly message AFTER the workbench action explaining configuration requirements
+    3. Explain WHY edit-run is needed (e.g., "this application uses PostgreSQL/Snowflake discovered earlier")
+    
+    REQUIRED MESSAGE FORMAT when using edit-run:
+    \`\`\`
+    <boltAction type="workbench-action" action="edit-run" />
+    
+    📋 **Configuration Required**: This application connects to external datastores (PostgreSQL/Snowflake/S3/etc.) 
+    that were discovered during development. Before running, you need to:
+    
+    1. **Review Datastore Connections**: Verify the connection settings for [list specific datastores used]
+    2. **Configure Credentials**: Set up authentication credentials (environment variables will be mounted from Kubernetes secrets)
+    3. **Validate Settings**: Ensure all connection parameters are correct
+    
+    Please click the **Edit Config & Run** button above to open the configuration dialog, review these settings, 
+    and then execute the application. The system will automatically populate discovered values, but you may need 
+    to adjust credentials or connection parameters based on your environment.
+    \`\`\`
+    
+    Example when only Trino catalogs are used (NO datastores anywhere):
+    \`\`\`
+    <boltAction type="workbench-action" action="run" />
+    
+    ✅ **Ready to Execute**: This application only uses internal Trino catalogs (no external datastores). 
+    The code will execute automatically with the discovered catalog and schema information.
+    \`\`\`
+    
+    WRONG PATTERNS TO AVOID:
+    ❌ Using "run" when datastores were discovered earlier in conversation
+    ❌ Using "run" when existing code has PostgreSQL/Snowflake connections (even if current changes don't touch them)
+    ❌ Generic messages like "Configuration may be needed" - be specific about WHAT needs configuration
+    ❌ Not explaining which datastores are used
+    ❌ Not explaining what the user needs to configure
+    
     Example Code:
     \`\`\`python
+    import os
+    
     # Discovered via tools - use actual discovered values
     DATAPLANE = "discovered-dataplane-name"  # Found via tool discovery
     CATALOG = "discovered-catalog"  # Available in this dataplane
@@ -518,8 +663,15 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     # Datastore authentication from xdp_list_datastores
     DB_HOST = "discovered-host"  # From datastore config
     DB_PORT = 5432  # From datastore config
-    DB_USER = "discovered-username"  # From datastore authentication
-    DB_PASSWORD = "discovered-password"  # From datastore authentication
+    
+    # If datastore has secretKeys (K8s secret-based):
+    DB_USER = os.environ['ENV_VAR_NAME_FROM_SECRETKEYS']  # Read from pod environment
+    DB_PASSWORD = os.environ['ENV_VAR_NAME_FROM_SECRETKEYS']  # Read from pod environment
+    
+    # Or if datastore has direct authentication values:
+    DB_USER = "discovered-username"  # From datastore authentication config
+    DB_PASSWORD = "discovered-password"  # From datastore authentication config
+    
     DB_NAME = "discovered-database"  # From datastore config
     \`\`\`
     
@@ -561,11 +713,7 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
   </code_generation_integration>
 
   <execution_policy>
-    CRITICAL: Bolt Action vs MCP Execution Tools
-    
-    ALWAYS PREFER:
-    - Use <boltAction type="workbench-action" action="run" /> for code execution
-    - This provides immediate feedback and auto-testing capability
+    CRITICAL: MCP Execution Tools Policy
     
     NEVER USE (deprecated):
     - execute_and_monitor: Being removed from MCP
@@ -573,9 +721,8 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     
     Execution Workflow:
     1. Generate complete code with discovered values
-    2. Add bolt workbench-action for immediate testing
-    3. Let the auto-test feature handle execution
-    4. Fix any errors based on execution feedback
+    2. Let the post-processing hook system handle workbench actions automatically
+    3. Fix any errors based on execution feedback
   </execution_policy>
 
   <common_pitfalls>
@@ -605,10 +752,13 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
        ❌ Using xdp_list_datastores but ignoring authentication fields
        ❌ Hardcoding generic credentials instead of using discovered authentication
        ❌ Using placeholder values for username/password/api_key
+       ❌ Treating secretKeys[field].value as actual credential (it's the env var name!)
+       ❌ Hardcoding credentials when secretKeys configuration exists
        ❌ Omitting authentication when connecting to datastores
        ❌ Using wrong authentication type for datastore
-       ✅ ALWAYS extract authentication from xdp_list_datastores response
-       ✅ ALWAYS use actual authentication values in connection code
+       ✅ ALWAYS check for secretName and secretKeys first
+       ✅ When secretKeys exist: Extract env var names and read from os.environ
+       ✅ When direct auth exists: Extract and use actual authentication values
        ✅ ALWAYS match authentication type to datastore type
        ✅ ALWAYS include all required authentication parameters
        ✅ ALWAYS validate authentication configuration before generating code

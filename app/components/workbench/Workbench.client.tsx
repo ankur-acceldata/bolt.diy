@@ -29,9 +29,15 @@ import { InternalActionsService } from '~/lib/services/internalActionsService';
 
 // Extracted imports
 import type { WorkspaceProps } from '~/types/jobConfig';
-import { useAdhocRunClient, usePipelineConfigResponder, useProjectIdResponder } from '~/lib/hooks/communicationBus';
+import {
+  useAdhocRunClient,
+  usePipelineConfigResponder,
+  useProjectIdResponder,
+  useHealthCheckResponder,
+} from '~/lib/hooks/communicationBus';
 import { viewTransition, sliderOptions, workbenchVariants } from './workbench.constants';
 import type { FileHistory } from '~/types/actions';
+import { PipelineBuildButton } from '~/components/chat/PipelineBuildButton';
 
 const logger = createScopedLogger('Workbench');
 
@@ -68,6 +74,12 @@ export const Workbench = memo(
     useProjectIdResponder({
       currentProjectId,
     });
+
+    /*
+     * Handle health check messages (HEARTBEAT and WAKE_UP)
+     * This prevents iframe from freezing after idle periods
+     */
+    useHealthCheckResponder();
 
     // Log the current project ID for debugging
     useEffect(() => {
@@ -215,13 +227,14 @@ export const Workbench = memo(
         const { action, parameters, timestamp } = event.detail;
         logger.info('🎯 WORKBENCH: Received workbench-action event!', { action, parameters, timestamp });
 
-        if (action === 'run') {
+        if (action === 'run' || action === 'edit-run') {
           const now = Date.now();
           const timeSinceLastRun = now - lastExecutedAtRef.current;
+          const isEditAndRun = action === 'edit-run';
 
           // Enhanced debounce: Check both time-based and execution state
           if (timeSinceLastRun > 10000 && !isExecutingRef.current) {
-            logger.info('🚀 WORKBENCH: Auto-executing run action from AI message!');
+            logger.info(`🚀 WORKBENCH: Auto-executing ${action} action from AI message!`);
             logger.debug('📁 WORKBENCH: Current files count:', Object.keys(files || {}).length);
 
             // Set execution state immediately to prevent concurrent executions
@@ -243,14 +256,26 @@ export const Workbench = memo(
               const runIndicator = document.createElement('div');
               runIndicator.className =
                 'flex items-center gap-2 p-3 mb-2 rounded-lg bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent border border-bolt-elements-borderColorActive';
-              runIndicator.innerHTML = `
-                <div class="i-ph:play-circle-fill text-xl animate-pulse"></div>
-                <div class="flex-1">
-                  <div class="font-medium">Auto-Running Application</div>
-                  <div class="text-sm opacity-90">Executing the generated code automatically...</div>
-                </div>
-                <div class="i-ph:spinner animate-spin text-xl"></div>
-              `;
+
+              if (isEditAndRun) {
+                runIndicator.innerHTML = `
+                  <div class="i-ph:gear text-xl animate-pulse"></div>
+                  <div class="flex-1">
+                    <div class="font-medium">Opening Configuration</div>
+                    <div class="text-sm opacity-90">Review and configure settings before running...</div>
+                  </div>
+                  <div class="i-ph:spinner animate-spin text-xl"></div>
+                `;
+              } else {
+                runIndicator.innerHTML = `
+                  <div class="i-ph:play-circle-fill text-xl animate-pulse"></div>
+                  <div class="flex-1">
+                    <div class="font-medium">Auto-Running Application</div>
+                    <div class="text-sm opacity-90">Executing the generated code automatically...</div>
+                  </div>
+                  <div class="i-ph:spinner animate-spin text-xl"></div>
+                `;
+              }
 
               // Find the chat messages container and append the indicator
               const messagesContainer =
@@ -260,27 +285,37 @@ export const Workbench = memo(
 
               if (messagesContainer) {
                 messagesContainer.appendChild(runIndicator);
-                logger.debug('📢 WORKBENCH: Added visual run indicator to chat');
+                logger.debug(`📢 WORKBENCH: Added visual ${action} indicator to chat`);
               }
 
               // Delay to ensure files are fully written
               logger.debug('⏳ WORKBENCH: Waiting 3 seconds for files to be written...');
               setTimeout(async () => {
-                logger.info('⚡ WORKBENCH: Executing handleExecuteAdhocRun now!');
+                logger.info(`⚡ WORKBENCH: Executing handleExecuteAdhocRun with isEditAndRun=${isEditAndRun}`);
 
                 try {
-                  await handleExecuteAdhocRun(false);
-                  logger.info('✅ WORKBENCH: Auto-run triggered successfully!');
+                  await handleExecuteAdhocRun(isEditAndRun);
+                  logger.info(`✅ WORKBENCH: Auto-${action} triggered successfully!`);
 
                   // Update the indicator to show completion
                   if (runIndicator && runIndicator.parentNode) {
-                    runIndicator.innerHTML = `
-                       <div class="i-ph:check-circle-fill text-xl text-green-500"></div>
-                       <div class="flex-1">
-                         <div class="font-medium">Application Running</div>
-                         <div class="text-sm opacity-90">Check the terminal below for output and logs</div>
-                       </div>
-                     `;
+                    if (isEditAndRun) {
+                      runIndicator.innerHTML = `
+                         <div class="i-ph:check-circle-fill text-xl text-green-500"></div>
+                         <div class="flex-1">
+                           <div class="font-medium">Configuration Dialog Opened</div>
+                           <div class="text-sm opacity-90">Please review settings and click Run to execute</div>
+                         </div>
+                       `;
+                    } else {
+                      runIndicator.innerHTML = `
+                         <div class="i-ph:check-circle-fill text-xl text-green-500"></div>
+                         <div class="flex-1">
+                           <div class="font-medium">Application Running</div>
+                           <div class="text-sm opacity-90">Check the terminal below for output and logs</div>
+                         </div>
+                       `;
+                    }
 
                     // Remove the indicator after a few seconds
                     setTimeout(() => {
@@ -292,7 +327,7 @@ export const Workbench = memo(
                     }, 5000);
                   }
                 } catch (error) {
-                  logger.error('❌ WORKBENCH: Auto-run failed:', error);
+                  logger.error(`❌ WORKBENCH: Auto-${action} failed:`, error);
 
                   // Update indicator to show error
                   if (runIndicator && runIndicator.parentNode) {
@@ -317,7 +352,7 @@ export const Workbench = memo(
                 }
               }, 3000);
             } catch (error) {
-              logger.error('❌ WORKBENCH: Auto-run setup failed:', error);
+              logger.error(`❌ WORKBENCH: Auto-${action} setup failed:`, error);
               isExecutingRef.current = false; // Reset on setup failure
 
               if (executionTimeoutRef.current) {
@@ -397,7 +432,8 @@ export const Workbench = memo(
                   <div className="ml-auto" />
                   {selectedView === 'code' && (
                     <div className="flex overflow-y-auto">
-                      <div className="flex items-center mr-1">
+                      <div className="flex items-center gap-2 mr-1">
+                        <PipelineBuildButton className="mr-0" />
                         <ButtonDropdown
                           onMainClick={() => handleExecuteAdhocRun(false)}
                           disabled={isExecuting || !currentProjectId}

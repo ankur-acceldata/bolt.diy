@@ -382,7 +382,7 @@ export class StreamingMessageParser {
         throw new Error('Workbench action requires an action attribute');
       }
 
-      const validActions = ['run', 'build', 'sync', 'deploy', 'test', 'preview', 'terminal'];
+      const validActions = ['run', 'edit-run', 'build', 'sync', 'deploy', 'test', 'preview', 'terminal'];
 
       if (!validActions.includes(action)) {
         logger.error(' Invalid workbench action:', action, 'Valid actions:', validActions);
@@ -411,9 +411,9 @@ export class StreamingMessageParser {
       (actionAttributes as WorkbenchAction).parameters = parameters;
       logger.info(' Workbench action parsed successfully:', { action, parameters });
 
-      // Only trigger auto-execution for run actions during streaming (not on page load)
-      if (action === 'run' && this.#isStreaming) {
-        logger.debug('🚀 MESSAGE PARSER: Triggering auto-execution for run action during streaming!');
+      // Trigger auto-execution for run or edit-run actions during streaming (not on page load)
+      if ((action === 'run' || action === 'edit-run') && this.#isStreaming) {
+        logger.debug(`🚀 MESSAGE PARSER: Triggering auto-execution for ${action} action during streaming!`);
 
         // Dispatch a custom event that the Workbench component can listen to
         window.dispatchEvent(
@@ -425,8 +425,10 @@ export class StreamingMessageParser {
             },
           }),
         );
-      } else if (action === 'run' && !this.#isStreaming) {
-        logger.debug('📖 MESSAGE PARSER: Skipping auto-execution for run action (not streaming - likely page load)');
+      } else if ((action === 'run' || action === 'edit-run') && !this.#isStreaming) {
+        logger.debug(
+          `📖 MESSAGE PARSER: Skipping auto-execution for ${action} action (not streaming - likely page load)`,
+        );
       }
     } else if (!['shell', 'start'].includes(actionType)) {
       logger.warn(`Unknown action type '${actionType}'`);

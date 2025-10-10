@@ -182,8 +182,27 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         let processedMessages;
 
+        logger.debug(`📥 Processing ${messages.length} incoming messages`);
+        logger.debug(`📥 Last message role: ${messages[messages.length - 1]?.role}`);
+        logger.debug(`📥 Last message has parts: ${!!messages[messages.length - 1]?.parts}`);
+
+        if (messages[messages.length - 1]?.parts) {
+          const parts = messages[messages.length - 1].parts;
+          const toolInvocationParts = parts?.filter((p: any) => p.type === 'tool-invocation');
+          logger.debug(`📥 Last message tool invocations: ${toolInvocationParts?.length || 0}`);
+
+          toolInvocationParts?.forEach((part: any, idx: number) => {
+            logger.debug(
+              `📥 Tool invocation ${idx}: ${part.toolInvocation?.toolName}, state: ${part.toolInvocation?.state}`,
+            );
+          });
+        }
+
         try {
           processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+          logger.debug(
+            `✅ processToolInvocations completed, message count unchanged: ${processedMessages.length === messages.length}`,
+          );
         } catch (error) {
           logger.error('Error in processToolInvocations, continuing with original messages:', error);
 
@@ -421,39 +440,14 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             });
             logger.debug('Continuation streamText initiated successfully');
 
+            /*
+             * Merge the continuation stream into the dataStream
+             * DO NOT consume result.fullStream separately as it can only be consumed once
+             * The async IIFE that was here was consuming the stream for logging,
+             * causing race conditions and duplication in the UI
+             */
             result.mergeIntoDataStream(dataStream);
-
-            (async () => {
-              let continuationStreamChunkCount = 0;
-              logger.debug('Starting continuation stream processing');
-
-              for await (const part of result.fullStream) {
-                continuationStreamChunkCount++;
-
-                if (part.type === 'error') {
-                  const error: any = part.error;
-                  logger.error(
-                    `Continuation stream error on chunk ${continuationStreamChunkCount}: ${JSON.stringify(error, null, 2)}`,
-                  );
-
-                  // Check if it's a tool execution error that we can recover from
-                  if (error?.message?.includes('Error executing tool') || error?.name === 'AI_ToolExecutionError') {
-                    logger.warn('Tool execution error in continuation stream detected, attempting to continue...');
-
-                    // Don't return immediately - try to continue processing
-                    continue;
-                  }
-
-                  return;
-                }
-
-                if (part.type === 'text-delta' && continuationStreamChunkCount % 10 === 0) {
-                  logger.debug(`Continuation stream in progress - processed ${continuationStreamChunkCount} chunks`);
-                }
-              }
-
-              logger.debug(`Continuation stream completed - total chunks: ${continuationStreamChunkCount}`);
-            })();
+            logger.debug('Continuation stream merged into dataStream');
 
             return;
           },
@@ -490,59 +484,20 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         });
         logger.debug('streamText initiated successfully');
 
-        (async () => {
-          let fullContent = '';
-          let streamChunkCount = 0;
-          logger.debug('Starting stream processing for fullStream');
-
-          for await (const part of result.fullStream) {
-            streamChunkCount++;
-            lastActivityTime = Date.now(); // Update activity time on each chunk
-
-            if (part.type === 'error') {
-              const error: any = part.error;
-              logger.error(`Stream error on chunk ${streamChunkCount}: ${error}`);
-
-              // Check if it's a tool execution error that we can recover from
-              if (error?.message?.includes('Error executing tool') || error?.name === 'AI_ToolExecutionError') {
-                logger.warn('Tool execution error detected, attempting to continue stream processing...');
-
-                // Don't return immediately - try to continue processing
-                continue;
-              }
-
-              return;
-            }
-
-            if (part.type === 'text-delta') {
-              fullContent += part.textDelta;
-
-              if (streamChunkCount % 10 === 0) {
-                logger.debug(
-                  `Stream in progress - processed ${streamChunkCount} chunks, content length: ${fullContent.length}`,
-                );
-
-                // Send keep-alive every 10 chunks to maintain connection
-                sendKeepAlive(dataStream);
-              }
-            }
-          }
-
-          logger.debug(
-            `Stream completed - total chunks: ${streamChunkCount}, final content length: ${fullContent.length}`,
-          );
-
-          // Log the full response to check for workbench-action elements
-          logger.debug('🔍 FULL LLM RESPONSE LENGTH:', fullContent.length);
-          logger.debug('🎯 LLM RESPONSE CONTAINS workbench-action:', fullContent.includes('workbench-action'));
-          logger.debug('🔍 First 1000 chars of response:', fullContent.substring(0, 1000));
-          logger.debug(
-            '🔍 Last 1000 chars of response:',
-            fullContent.substring(Math.max(0, fullContent.length - 1000)),
-          );
-        })();
+        /*
+         * Merge the result stream into the dataStream
+         * DO NOT consume result.fullStream separately as it can only be consumed once
+         * The previous async IIFE was consuming the stream for logging, which caused:
+         * 1. Race conditions between the logging consumer and mergeIntoDataStream
+         * 2. Stream corruption leading to duplicate content in the UI
+         * 3. Tool results appearing multiple times
+         *
+         * If debugging is needed, use logger statements in the transform stream or
+         * add event listeners, but DO NOT directly consume the fullStream
+         */
+        logger.debug(`🔄 About to merge stream into dataStream. Messages count: ${processedMessages.length}`);
         result.mergeIntoDataStream(dataStream);
-        logger.debug('Data stream execution completed');
+        logger.debug('✅ Main stream merged into dataStream');
       },
       onError: (error: any) => {
         logger.error(`Data stream error: ${error.message}`);
@@ -559,12 +514,16 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       new TransformStream({
         start: () => {
           logger.debug('Transform stream started - beginning chunk transformation');
+          logger.debug(`🚀 Stream started at: ${new Date().toISOString()}`);
         },
         transform: (chunk, controller) => {
           // Add detailed logging for each chunk transformation
           const chunkType = typeof chunk;
           const chunkSize = chunk?.length || 0;
           lastActivityTime = Date.now(); // Update activity time on each chunk
+
+          const now = new Date().toISOString();
+          logger.debug(`📦 Chunk received at: ${now}, size: ${chunkSize}`);
           logger.debug(
             `Transforming chunk: type=${chunkType}, size=${chunkSize}, preview=${String(chunk).substring(0, 100)}`,
           );
@@ -611,6 +570,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         },
         flush: () => {
           logger.debug('Transform stream completed - all chunks transformed and flushed');
+          logger.debug(`🏁 Stream completed at: ${new Date().toISOString()}`);
 
           // Clean up keep-alive interval when stream completes
           if (keepAliveInterval) {
@@ -624,31 +584,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     logger.debug('Returning streaming response to client');
 
     /*
-     * The AI SDK createDataStream outputs its own format, not SSE format
-     * Add a test to verify streaming is working by adding timestamps
-     */
-    const timestampedStream = dataStream.pipeThrough(
-      new TransformStream({
-        start() {
-          logger.debug(`🚀 Stream started at: ${new Date().toISOString()}`);
-        },
-        transform(chunk, controller) {
-          const now = new Date().toISOString();
-          logger.debug(`📦 Chunk received at: ${now}, size: ${chunk?.length || 0}`);
-          controller.enqueue(chunk);
-        },
-        flush() {
-          logger.debug(`🏁 Stream completed at: ${new Date().toISOString()}`);
-        },
-      }),
-    );
-
-    /*
      * AI SDK createDataStream outputs its own format, not SSE format
      * The useChat hook expects AI SDK streaming format, NOT SSE format
      * So we should use the AI SDK's expected content type
      */
-    return new Response(timestampedStream, {
+    return new Response(dataStream, {
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8', // AI SDK streaming format
