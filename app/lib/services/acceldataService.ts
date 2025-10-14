@@ -460,12 +460,35 @@ export class AcceldataService {
   }
 
   /**
-   * Get all projects
+   * Get all projects with pagination support
    */
   static async getAllProjects(request?: Request): Promise<AcceldataApiResponse> {
-    logger.info('Fetching all projects');
+    // Extract pagination params from request URL if available
+    let queryParams = '';
 
-    const result = await this.call('/api/projects', {
+    if (request) {
+      const url = new URL(request.url);
+      const page = url.searchParams.get('page');
+      const size = url.searchParams.get('size');
+
+      if (page !== null || size !== null) {
+        const params = new URLSearchParams();
+
+        if (page !== null) {
+          params.set('page', page);
+        }
+
+        if (size !== null) {
+          params.set('size', size);
+        }
+
+        queryParams = `?${params.toString()}`;
+      }
+    }
+
+    logger.info('Fetching all projects with params:', queryParams);
+
+    const result = await this.call(`/api/projects${queryParams}`, {
       requestHeaders: request?.headers,
       request,
     });

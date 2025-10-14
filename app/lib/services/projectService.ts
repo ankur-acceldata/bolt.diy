@@ -42,6 +42,44 @@ export interface ProjectResponse {
   [key: string]: any;
 }
 
+export interface Project {
+  id: number;
+  name: string;
+  description: string;
+  userId: string;
+  dataplaneId: number;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+  enabled: boolean;
+  globalShared: boolean;
+}
+
+export interface ProjectsMetadata {
+  size: number;
+  page: number;
+  count: number;
+}
+
+export interface ProjectsListResponse {
+  errorCode: number;
+  success: boolean;
+  message: string;
+  detailedMessage: string;
+  data: {
+    projects: Project[];
+    meta: ProjectsMetadata;
+  };
+  meta: null;
+}
+
+export interface GetProjectsOptions {
+  page?: number;
+  size?: number;
+}
+
 export class ProjectService {
   /**
    * Get dataplaneId from communication bus
@@ -471,6 +509,51 @@ export class ProjectService {
       return result.data;
     } catch (error) {
       logger.error('Project fetch failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all projects with pagination support
+   * @param options - Options for fetching projects
+   * @param options.page - Page number (0-based index, defaults to 0)
+   * @param options.size - Number of items per page (defaults to 25)
+   * @returns Promise with paginated projects list response
+   */
+  static async getAllProjects(options: GetProjectsOptions = {}): Promise<ProjectsListResponse> {
+    const { page = 0, size = 25 } = options;
+
+    try {
+      logger.info('=== ProjectService.getAllProjects CALLED ===');
+      logger.info('Options:', { page, size });
+
+      const response = await fetch(`/api/projects?page=${page}&size=${size}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Projects fetch failed: ${response.status} ${response.statusText}`);
+      }
+
+      const result: any = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Projects fetch failed');
+      }
+
+      logger.info('Successfully fetched projects:', {
+        count: result.data?.projects?.length,
+        totalCount: result.data?.meta?.count,
+        page: result.data?.meta?.page,
+        size: result.data?.meta?.size,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error('Projects fetch failed:', error);
       throw error;
     }
   }
