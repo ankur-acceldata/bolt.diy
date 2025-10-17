@@ -50,6 +50,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
                   'Cache-Control': 'no-cache',
                   'User-Agent': 'Mozilla/5.0 (compatible; LogStreamClient/1.0)',
                   Connection: 'keep-alive',
+                  'Event-Stream': 'true',
                 },
               },
             );
