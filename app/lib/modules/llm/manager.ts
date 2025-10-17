@@ -117,7 +117,7 @@ export class LLMManager {
             .then((models) => {
               logger.info(`Retrieved ${models.length} dynamic models for ${provider.name}`);
 
-              // Apply filtering to get only the latest 4 models
+              // Apply filtering to get only the latest 5 models (2 Sonnets for Anthropic)
               const filteredModels = filterModelsForProvider(provider.name, models);
               logger.info(`Filtered to ${filteredModels.length} latest models for ${provider.name}`);
 
@@ -193,7 +193,7 @@ export class LLMManager {
       .then((models) => {
         logger.info(`Got ${models.length} dynamic models for ${provider.name}`);
 
-        // Apply filtering to get only the latest 4 models
+        // Apply filtering to get only the latest 5 models (2 Sonnets for Anthropic)
         const filteredModels = filterModelsForProvider(provider.name, models);
         logger.info(`Filtered to ${filteredModels.length} latest models for ${provider.name}`);
 
