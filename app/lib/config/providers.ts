@@ -18,18 +18,19 @@ export interface ModelFilter {
 }
 
 /**
- * Current configuration: Both Google and Anthropic show up to 4 models (latest versions)
- * For Google: Shows the latest 4 model variants (prioritizing newer versions and capabilities)
- * For Anthropic: Shows the latest 4 model variants (prioritizing newer versions and capabilities)
+ * Current configuration: Both Google and Anthropic show up to 5 models (latest versions)
+ * For Google: Shows the latest 5 model variants (prioritizing newer versions and capabilities)
+ * For Anthropic: Shows the latest 5 model variants (prioritizing newer versions and capabilities)
+ * For Anthropic: Ensures the latest 2 Sonnet models are always included
  * Excludes image generation, TTS, and other non-text models for both providers
  * Uses dynamic version priority calculation to automatically handle new model versions
  */
 export const PROVIDER_FILTER_CONFIG: ProviderFilterConfig = {
   enabledProviders: ['Google', 'Anthropic'],
-  maxModelsPerProvider: 4,
+  maxModelsPerProvider: 5,
   providerModelLimits: {
     Google: {
-      maxModels: 4, // Show only the latest 4 models
+      maxModels: 5, // Show only the latest 5 models
       excludeModels: [
         // Exclude truly deprecated versions
         'text-bison',
@@ -44,7 +45,7 @@ export const PROVIDER_FILTER_CONFIG: ProviderFilterConfig = {
       ],
     },
     Anthropic: {
-      maxModels: 4, // Show only the latest 4 models
+      maxModels: 5, // Show only the latest 5 models
       excludeModels: [
         // Only exclude truly deprecated models
         'claude-instant',
@@ -215,6 +216,7 @@ function getGoogleModelScore(modelName: string): number {
 
 /**
  * Sort Anthropic models by creation date (latest first)
+ * Ensures the latest 2 Sonnet models are prioritized
  */
 function sortAnthropicModels(models: any[]): any[] {
   // Filter out non-text models (audio, vision, etc.)
@@ -230,8 +232,12 @@ function sortAnthropicModels(models: any[]): any[] {
     ); // Only Claude text models
   });
 
-  // Sort by created_at field (from API) - most recent first
-  return textModels.sort((a, b) => {
+  // Separate Sonnet models from other models
+  const sonnetModels = textModels.filter((model) => model.name.toLowerCase().includes('sonnet'));
+  const otherModels = textModels.filter((model) => !model.name.toLowerCase().includes('sonnet'));
+
+  // Sort function for models by creation date
+  const sortByDate = (a: any, b: any) => {
     // If both have createdAt timestamps, use those (most reliable)
     if (a.createdAt && b.createdAt) {
       const aDate = new Date(a.createdAt).getTime();
@@ -269,7 +275,20 @@ function sortAnthropicModels(models: any[]): any[] {
 
     // Final fallback: sort by name
     return b.name.localeCompare(a.name);
-  });
+  };
+
+  // Sort both arrays by date
+  const sortedSonnetModels = sonnetModels.sort(sortByDate);
+  const sortedOtherModels = otherModels.sort(sortByDate);
+
+  // Get the latest 2 Sonnet models
+  const latestSonnetModels = sortedSonnetModels.slice(0, 2);
+
+  /*
+   * Combine: latest 2 Sonnet models first, then other models
+   * The filterModelsForProvider function will apply the maxModels limit
+   */
+  return [...latestSonnetModels, ...sortedOtherModels];
 }
 
 /**

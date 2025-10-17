@@ -2,7 +2,8 @@
  * LLM Provider Registry
  *
  * This registry is configured to only load Google and Anthropic providers
- * with their latest 4 model versions each, as per the current requirements.
+ * with their latest 5 model versions each, as per the current requirements.
+ * For Anthropic, ensures the latest 2 Sonnet models are always included.
  *
  * To enable other providers, add them back to the imports and exports below.
  */
