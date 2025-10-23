@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react';
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
@@ -23,9 +23,10 @@ import { FileTree } from './FileTree';
 import { DEFAULT_TERMINAL_SIZE } from './terminal/TerminalTabs';
 import { LogViewer } from './LogViewer';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { Search } from './Search'; // <-- Ensure Search is imported
-import { classNames } from '~/utils/classNames'; // <-- Import classNames if not already present
-import { LockManager } from './LockManager'; // <-- Import LockManager
+import { Search } from './Search';
+import { classNames } from '~/utils/classNames';
+import { LockManager } from './LockManager';
+import { EditorTabs } from './EditorTabs';
 
 interface EditorPanelProps {
   files?: FileMap;
@@ -74,6 +75,23 @@ export const EditorPanel = memo(
     const showTerminal = useStore(workbenchStore.showTerminal);
     const showLogViewer = useStore(workbenchStore.showLogViewer);
     const logViewerConfig = useStore(workbenchStore.logViewerConfig);
+    const openTabs = useStore(workbenchStore.openTabs);
+
+    // Track user interactions to prevent auto-switching during streaming
+    const userInteractingRef = useRef(false);
+    const lastUserInteractionRef = useRef(0);
+
+    // Mark user interaction when they manually select a file
+    const handleFileSelect = (filePath: string) => {
+      userInteractingRef.current = true;
+      lastUserInteractionRef.current = Date.now();
+      onFileSelect?.(filePath);
+
+      // Reset interaction flag after a delay
+      setTimeout(() => {
+        userInteractingRef.current = false;
+      }, 1000);
+    };
 
     const activeFileSegments = useMemo(() => {
       if (!editorDocument) {
@@ -139,7 +157,7 @@ export const EditorPanel = memo(
                       fileHistory={fileHistory}
                       rootFolder={WORK_DIR}
                       selectedFile={selectedFile}
-                      onFileSelect={onFileSelect}
+                      onFileSelect={handleFileSelect}
                     />
                   </Tabs.Content>
 
@@ -156,10 +174,17 @@ export const EditorPanel = memo(
 
             <PanelResizeHandle />
             <Panel className="flex flex-col" defaultSize={80} minSize={20}>
+              {/* Editor Tabs */}
+              <EditorTabs
+                openTabs={openTabs}
+                selectedFile={selectedFile}
+                unsavedFiles={unsavedFiles || new Set()}
+                onFileSelect={handleFileSelect}
+              />
               <PanelHeader className="overflow-x-auto">
                 {activeFileSegments?.length && (
                   <div className="flex items-center flex-1 text-sm">
-                    <FileBreadcrumb pathSegments={activeFileSegments} files={files} onFileSelect={onFileSelect} />
+                    <FileBreadcrumb pathSegments={activeFileSegments} files={files} onFileSelect={handleFileSelect} />
                     {activeFileUnsaved && (
                       <div className="flex gap-1 ml-auto -mr-1.5">
                         <PanelHeaderButton onClick={onFileSave}>

@@ -152,6 +152,7 @@ export const CodeMirrorEditor = memo(
     const onScrollRef = useRef(onScroll);
     const onChangeRef = useRef(onChange);
     const onSaveRef = useRef(onSave);
+    const prevFilePathRef = useRef<string>();
 
     /**
      * This effect is used to avoid side effects directly in the render function
@@ -278,6 +279,7 @@ export const CodeMirrorEditor = memo(
       }
 
       let state = editorStates.get(doc.filePath);
+      const isNewFile = !state;
 
       if (!state) {
         state = newEditorState(doc.value, theme, settings, onScrollRef, debounceScroll, onSaveRef, [
@@ -288,7 +290,14 @@ export const CodeMirrorEditor = memo(
         editorStates.set(doc.filePath, state);
       }
 
-      view.setState(state);
+      // Track file switching to prevent unnecessary state resets
+      const isFileSwitching = prevFilePathRef.current !== doc.filePath;
+      prevFilePathRef.current = doc.filePath;
+
+      // Only reset state when switching files, not on content updates
+      if (isNewFile || isFileSwitching) {
+        view.setState(state);
+      }
 
       setEditorDocument(
         view,
@@ -297,6 +306,7 @@ export const CodeMirrorEditor = memo(
         languageCompartment,
         autoFocusOnDocumentChange,
         doc as TextEditorDocument,
+        isFileSwitching,
       );
 
       // Check if the file is locked and update the editor state accordingly
@@ -437,16 +447,28 @@ function setEditorDocument(
   languageCompartment: Compartment,
   autoFocus: boolean,
   doc: TextEditorDocument,
+  isFileSwitching: boolean = false,
 ) {
   if (doc.value !== view.state.doc.toString()) {
+    // Capture current state BEFORE making changes
+    const currentScrollTop = view.scrollDOM.scrollTop;
+    const currentScrollLeft = view.scrollDOM.scrollLeft;
+    const currentSelection = view.state.selection;
+
     view.dispatch({
-      selection: { anchor: 0 },
+      // Preserve selection when updating same file, reset when switching
+      selection: isFileSwitching ? { anchor: 0 } : currentSelection,
       changes: {
         from: 0,
         to: view.state.doc.length,
         insert: doc.value,
       },
     });
+
+    // Restore scroll immediately if not switching files
+    if (!isFileSwitching) {
+      view.scrollDOM.scrollTo(currentScrollLeft, currentScrollTop);
+    }
   }
 
   // Check if the file is locked
@@ -467,56 +489,59 @@ function setEditorDocument(
       effects: [languageCompartment.reconfigure([languageSupport]), reconfigureTheme(theme)],
     });
 
-    requestAnimationFrame(() => {
-      const currentLeft = view.scrollDOM.scrollLeft;
-      const currentTop = view.scrollDOM.scrollTop;
-      const newLeft = doc.scroll?.left ?? 0;
-      const newTop = doc.scroll?.top ?? 0;
+    // Only apply scroll restoration logic when switching files
+    if (isFileSwitching) {
+      requestAnimationFrame(() => {
+        const currentLeft = view.scrollDOM.scrollLeft;
+        const currentTop = view.scrollDOM.scrollTop;
+        const newLeft = doc.scroll?.left ?? 0;
+        const newTop = doc.scroll?.top ?? 0;
 
-      if (typeof doc.scroll?.line === 'number') {
-        const line = doc.scroll.line;
-        const column = doc.scroll.column ?? 0;
+        if (typeof doc.scroll?.line === 'number') {
+          const line = doc.scroll.line;
+          const column = doc.scroll.column ?? 0;
 
-        try {
-          // Check if the line number is valid for the current document
-          const totalLines = view.state.doc.lines;
+          try {
+            // Check if the line number is valid for the current document
+            const totalLines = view.state.doc.lines;
 
-          // Only proceed if the line number is within the document's range
-          if (line < totalLines) {
-            const linePos = view.state.doc.line(line + 1).from + column;
-            view.dispatch({
-              selection: { anchor: linePos },
-              scrollIntoView: true,
-            });
-            view.focus();
-          } else {
-            logger.warn(`Invalid line number ${line + 1} in ${totalLines}-line document`);
-          }
-        } catch (error) {
-          logger.error('Error scrolling to line:', error);
-        }
-
-        return;
-      }
-
-      const needsScrolling = currentLeft !== newLeft || currentTop !== newTop;
-
-      if (autoFocus && editable) {
-        if (needsScrolling) {
-          view.scrollDOM.addEventListener(
-            'scroll',
-            () => {
+            // Only proceed if the line number is within the document's range
+            if (line < totalLines) {
+              const linePos = view.state.doc.line(line + 1).from + column;
+              view.dispatch({
+                selection: { anchor: linePos },
+                scrollIntoView: true,
+              });
               view.focus();
-            },
-            { once: true },
-          );
-        } else {
-          view.focus();
-        }
-      }
+            } else {
+              logger.warn(`Invalid line number ${line + 1} in ${totalLines}-line document`);
+            }
+          } catch (error) {
+            logger.error('Error scrolling to line:', error);
+          }
 
-      view.scrollDOM.scrollTo(newLeft, newTop);
-    });
+          return;
+        }
+
+        const needsScrolling = currentLeft !== newLeft || currentTop !== newTop;
+
+        if (autoFocus && editable) {
+          if (needsScrolling) {
+            view.scrollDOM.addEventListener(
+              'scroll',
+              () => {
+                view.focus();
+              },
+              { once: true },
+            );
+          } else {
+            view.focus();
+          }
+        }
+
+        view.scrollDOM.scrollTo(newLeft, newTop);
+      });
+    }
   });
 }
 

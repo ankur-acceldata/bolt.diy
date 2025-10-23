@@ -116,6 +116,10 @@ export class WorkbenchStore {
     return this.#editorStore.selectedFile;
   }
 
+  get openTabs(): ReadableAtom<string[]> {
+    return this.#editorStore.openTabs;
+  }
+
   get firstArtifact(): ArtifactState | undefined {
     return this.#getArtifact(this.artifactIdList[0]);
   }
@@ -254,6 +258,18 @@ export class WorkbenchStore {
 
   setSelectedFile(filePath: string | undefined) {
     this.#editorStore.setSelectedFile(filePath);
+  }
+
+  closeTab(filePath: string) {
+    this.#editorStore.closeTab(filePath);
+  }
+
+  closeAllTabs() {
+    this.#editorStore.closeAllTabs();
+  }
+
+  closeOtherTabs(filePath: string) {
+    this.#editorStore.closeOtherTabs(filePath);
   }
 
   async saveFile(filePath: string, skipSnapshot: boolean = false) {
@@ -713,7 +729,15 @@ export class WorkbenchStore {
        * This is a more complex feature that would be implemented in a future update
        */
 
-      if (this.selectedFile.value !== fullPath) {
+      /*
+       * Only auto-switch to the file being written if:
+       * 1. No file is currently selected, OR
+       * 2. We're not streaming (batch operations should still switch)
+       */
+      const currentlySelectedFile = this.selectedFile.value;
+      const shouldAutoSwitch = !currentlySelectedFile || !isStreaming;
+
+      if (shouldAutoSwitch && this.selectedFile.value !== fullPath) {
         this.setSelectedFile(fullPath);
       }
 
