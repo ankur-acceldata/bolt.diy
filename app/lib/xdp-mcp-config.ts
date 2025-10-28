@@ -15,13 +15,13 @@ export interface XDPMCPConfig {
 }
 
 /**
- * Default XDP MCP server configuration
+ * Default XDP MCP server configuration to load from env
  */
 export const DEFAULT_XDP_CONFIG = {
-  baseUrl: 'https://demo.xdp-dev.acceldata.tech/xdp-cp-service/api',
+  baseUrl:  (process.env.XDP_CP_SERVICE_URL || 'https://demo.xdp-dev.acceldata.tech/xdp-cp-service') + '/api',
+  accessKey: process.env.API_ACCESS_KEY || '9N2J4ZX6UPB8SP5',
+  secretKey: process.env.API_SECRET_KEY || 'KDBL51QO8OJSBH9EZ7X7TUN3DEV9WI',
   webSocketUrl: 'ws://localhost:9099/ws', // Default to container WebSocket
-  accessKey: '9N2J4ZX6UPB8SP5',
-  secretKey: 'KDBL51QO8OJSBH9EZ7X7TUN3DEV9WI',
 };
 
 /**

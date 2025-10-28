@@ -77,8 +77,8 @@ export class AcceldataService {
     };
 
     // Add access keys if available (optional)
-    const accessKey = process.env.ACCELDATA_ACCESS_KEY;
-    const secretKey = process.env.ACCELDATA_SECRET_KEY;
+    const accessKey = process.env.API_ACCESS_KEY;
+    const secretKey = process.env.API_SECRET_KEY;
 
     if (accessKey) {
       headers.accessKey = accessKey;
