@@ -26,14 +26,14 @@ export const getTrinoUsageGuidelines = () => stripIndents`
 
   <trino_polling_pattern>
     CRITICAL: Trino Gateway uses asynchronous query execution with streaming pagination
-    
+
     PAGINATION PATTERN - MUST UNDERSTAND:
     - Results are streamed via nextUri field
     - Data can appear in ANY response during polling (not just the last one)
     - MUST accumulate data throughout the ENTIRE polling loop
     - Polling ends when nextUri is ABSENT, not when state is FINISHED
     - This is a distributed query engine pattern where results are produced incrementally
-    
+
     IMPORTANT: Both FINISHED and FINISHING are valid success states:
     - FINISHING: Query completed successfully, finalizing results
     - FINISHED: Query completed successfully, results available
@@ -101,16 +101,16 @@ export const getTrinoUsageGuidelines = () => stripIndents`
            # CRITICAL: Poll while nextUri exists (not based on state)
            while 'nextUri' in result:
                state = result['stats']['state']
-               
+
                # CRITICAL: Collect data from EVERY response
                if 'data' in result and result['data']:
                    all_data.extend(result['data'])
                    print(f"Accumulated {len(result['data'])} rows (total: {len(all_data)})")
-               
+
                # Capture column metadata (usually in first response with data)
                if 'columns' in result and not columns:
                    columns = result['columns']
-               
+
                print(f"Query {query_id} state: {state}, polling...")
                time.sleep(1)  # Wait 1 second between polls
 
@@ -129,7 +129,7 @@ export const getTrinoUsageGuidelines = () => stripIndents`
            if 'data' in result and result['data']:
                all_data.extend(result['data'])
                print(f"Accumulated {len(result['data'])} rows from final response (total: {len(all_data)})")
-           
+
            if 'columns' in result and not columns:
                columns = result['columns']
 
@@ -292,10 +292,10 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                # CRITICAL: Collect data from EVERY response
                if 'data' in result and result['data']:
                    all_data.extend(result['data'])
-               
+
                if 'columns' in result and not columns:
                    columns = result['columns']
-               
+
                print(f"Query state: {result['stats']['state']}, polling...")
                time.sleep(1)
 
@@ -303,16 +303,16 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                    result['nextUri'],
                    headers={'X-Trino-User': 'admin'}
                )
-               
+
                if response.status_code != 200:
                    raise Exception(f"Failed to poll query: {response.status_code} {response.text}")
-               
+
                result = response.json()
 
            # CRITICAL: Collect data from final response
            if 'data' in result and result['data']:
                all_data.extend(result['data'])
-           
+
            if 'columns' in result and not columns:
                columns = result['columns']
 
@@ -386,16 +386,16 @@ export const getTrinoUsageGuidelines = () => stripIndents`
         # CRITICAL: Poll while nextUri exists (not based on state)
         while 'nextUri' in result:
             state = result['stats']['state']
-            
+
             # CRITICAL: Collect data from EVERY response
             if 'data' in result and result['data']:
                 all_data.extend(result['data'])
                 print(f"Accumulated {len(result['data'])} rows (total: {len(all_data)})")
-            
+
             # Capture column metadata (usually in first response with data)
             if 'columns' in result and not columns:
                 columns = result['columns']
-            
+
             print(f"Query {query_id} state: {state}, polling...")
             time.sleep(1)
 
@@ -413,7 +413,7 @@ export const getTrinoUsageGuidelines = () => stripIndents`
         if 'data' in result and result['data']:
             all_data.extend(result['data'])
             print(f"Accumulated {len(result['data'])} rows from final response (total: {len(all_data)})")
-        
+
         if 'columns' in result and not columns:
             columns = result['columns']
 
@@ -494,8 +494,8 @@ export const getTrinoUsageGuidelines = () => stripIndents`
     SECURITY GUIDELINES:
 
     1. CREDENTIAL MANAGEMENT:
-       - Access keys are hardcoded as specified (9N2J4ZX6UPB8SP5)
-       - Secret keys are hardcoded as specified (KDBL51QO8OJSBH9EZ7X7TUN3DEV9WI)
+       - Access keys are hardcoded as specified (ABCD)
+       - Secret keys are hardcoded as specified (ABCDEF)
        - Never log sensitive query results
        - Use HTTPS for all API calls
 
