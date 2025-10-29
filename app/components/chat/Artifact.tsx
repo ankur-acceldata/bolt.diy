@@ -194,13 +194,17 @@ export function openArtifactInWorkbench(filePath: any) {
   workbenchStore.setSelectedFile(`${WORK_DIR}/${filePath}`);
 }
 
-const ActionList = memo(({ actions, messageId, artifact }: ActionListProps) => {
+const ActionList = memo(({ actions, messageId: _messageId, artifact: _artifact }: ActionListProps) => {
+  // Separate shell and non-shell actions
+  const nonShellActions = actions.filter((action) => action.type !== 'shell');
+  const shellActions = actions.filter((action) => action.type === 'shell');
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
       <ul className="list-none space-y-2.5">
-        {actions.map((action, index) => {
+        {nonShellActions.map((action, index) => {
           const { status, type, content } = action;
-          const isLast = index === actions.length - 1;
+          const isLast = index === nonShellActions.length - 1 && shellActions.length === 0;
 
           return (
             <motion.li
@@ -241,22 +245,6 @@ const ActionList = memo(({ actions, messageId, artifact }: ActionListProps) => {
                       {action.filePath}
                     </code>
                   </div>
-                ) : type === 'shell' ? (
-                  <div
-                    className="flex items-center w-full min-h-[28px] cursor-pointer hover:text-bolt-elements-item-contentAccent"
-                    onClick={() => {
-                      // The actions are indexed by actionId in the workbenchStore, so we need to find it
-                      const actionEntries = Object.entries(artifact.runner.actions.get());
-                      const actionEntry = actionEntries.find(([_, a]) => a === action);
-
-                      if (actionEntry) {
-                        const [actionId] = actionEntry;
-                        workbenchStore.executeUserAction(messageId, actionId);
-                      }
-                    }}
-                  >
-                    <span className="flex-1">Run command</span>
-                  </div>
                 ) : type === 'start' ? (
                   <a
                     onClick={(e) => {
@@ -269,7 +257,7 @@ const ActionList = memo(({ actions, messageId, artifact }: ActionListProps) => {
                   </a>
                 ) : null}
               </div>
-              {(type === 'shell' || type === 'start') && (
+              {type === 'start' && (
                 <ShellCodeBlock
                   classsName={classNames('mt-1', {
                     'mb-3.5': !isLast,
@@ -280,6 +268,29 @@ const ActionList = memo(({ actions, messageId, artifact }: ActionListProps) => {
             </motion.li>
           );
         })}
+
+        {shellActions.length > 0 && (
+          <motion.li
+            variants={actionVariants}
+            initial="hidden"
+            animate="visible"
+            transition={{
+              duration: 0.2,
+              ease: cubicEasingFn,
+            }}
+            className="mt-4"
+          >
+            <div className="flex items-center gap-1.5 text-sm mb-3">
+              <div className="i-ph:terminal-window text-lg text-bolt-elements-textSecondary"></div>
+              <span className="text-bolt-elements-textSecondary font-medium">Setup Commands</span>
+            </div>
+            <div className="space-y-2.5">
+              {shellActions.map((action, index) => {
+                return <ShellCodeBlock key={index} code={action.content} />;
+              })}
+            </div>
+          </motion.li>
+        )}
       </ul>
     </motion.div>
   );

@@ -657,12 +657,37 @@ export async function getLatestVersionedSnapshot(
   const versionIndex = await getSnapshotVersions(db, chatId);
 
   if (!versionIndex || versionIndex.versions.length === 0) {
+    logger.info('📦 No version index found for chat:', chatId);
     return undefined;
   }
 
   const latestVersion = versionIndex.latestVersion;
 
-  return getVersionedSnapshot(db, chatId, latestVersion);
+  logger.info(
+    '📦 getLatestVersionedSnapshot for chat:',
+    chatId,
+    'latestVersion:',
+    latestVersion,
+    'total versions:',
+    versionIndex.versions.length,
+  );
+
+  const snapshot = await getVersionedSnapshot(db, chatId, latestVersion);
+
+  if (snapshot) {
+    logger.info(
+      '📦 Loaded snapshot version',
+      snapshot.version,
+      'with',
+      Object.keys(snapshot.files || {}).length,
+      'files, changeType:',
+      snapshot.changeType,
+    );
+  } else {
+    logger.warn('📦 Failed to load snapshot version', latestVersion);
+  }
+
+  return snapshot;
 }
 
 export async function deleteVersionedSnapshots(db: IDBDatabase, chatId: string): Promise<void> {

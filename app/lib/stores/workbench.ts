@@ -9,6 +9,7 @@ import { EditorStore } from './editor';
 import { FilesStore, type FileMap } from './files';
 import { PreviewsStore } from './previews';
 import { TerminalStore } from './terminal';
+import { LogViewerStore } from './logViewer';
 import JSZip from 'jszip';
 import fileSaver from 'file-saver';
 import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
@@ -46,6 +47,7 @@ export class WorkbenchStore {
   #filesStore = new FilesStore(webcontainer);
   #editorStore = new EditorStore(this.#filesStore);
   #terminalStore = new TerminalStore(webcontainer);
+  #logViewerStore = new LogViewerStore();
 
   #reloadedMessages = new Set<string>();
 
@@ -116,6 +118,10 @@ export class WorkbenchStore {
     return this.#editorStore.selectedFile;
   }
 
+  get openTabs(): ReadableAtom<string[]> {
+    return this.#editorStore.openTabs;
+  }
+
   get firstArtifact(): ArtifactState | undefined {
     return this.#getArtifact(this.artifactIdList[0]);
   }
@@ -153,16 +159,98 @@ export class WorkbenchStore {
     this.deployAlert.set(undefined);
   }
 
-  toggleLogViewer(value?: boolean, config?: { dataplaneId?: string; runId?: string; isPipeline?: boolean } | null) {
-    logger.debug('🔧 WorkbenchStore.toggleLogViewer called with:', { value, config });
+  // Log Viewer Store Getters
+  get showLogViewerPanel() {
+    return this.#logViewerStore.showLogViewerPanel;
+  }
 
+  get logViewerInstances() {
+    return this.#logViewerStore.logViewerInstances;
+  }
+
+  get activeLogViewerId() {
+    return this.#logViewerStore.activeLogViewerId;
+  }
+
+  get logViewerAutoSendEnabled() {
+    return this.#logViewerStore.autoSendEnabled;
+  }
+
+  /**
+   * @deprecated Use createLogViewerInstance instead
+   * Legacy method for backward compatibility
+   */
+  toggleLogViewer(value?: boolean, config?: { dataplaneId?: string; runId?: string; isPipeline?: boolean } | null) {
+    logger.debug('🔧 WorkbenchStore.toggleLogViewer (legacy) called with:', { value, config });
+
+    // If config is provided with required fields, create a new instance
+    if (config && config.dataplaneId && config.runId) {
+      this.createLogViewerInstance({
+        dataplaneId: config.dataplaneId,
+        runId: config.runId,
+        isPipeline: config.isPipeline,
+      });
+    } else if (value === false) {
+      // If explicitly closing, minimize the panel
+      this.#logViewerStore.toggleLogViewerPanel(false);
+    } else {
+      // Toggle the panel
+      this.#logViewerStore.toggleLogViewerPanel(value);
+    }
+
+    // Update legacy atoms for backward compatibility
     this.showLogViewer.set(value !== undefined ? value : !this.showLogViewer.get());
-    logger.debug('🔧 showLogViewer set to:', this.showLogViewer.get());
 
     if (config !== undefined) {
       this.logViewerConfig.set(config);
-      logger.debug('🔧 logViewerConfig set to:', config);
     }
+  }
+
+  /**
+   * Create a new log viewer instance
+   */
+  createLogViewerInstance(config: {
+    dataplaneId: string;
+    runId: string;
+    isPipeline?: boolean;
+    title?: string;
+  }): string {
+    return this.#logViewerStore.createLogViewerInstance(config);
+  }
+
+  /**
+   * Close a specific log viewer instance
+   */
+  closeLogViewerInstance(id: string) {
+    this.#logViewerStore.closeLogViewerInstance(id);
+  }
+
+  /**
+   * Set the active log viewer instance
+   */
+  setActiveLogViewerInstance(id: string) {
+    this.#logViewerStore.setActiveLogViewerInstance(id);
+  }
+
+  /**
+   * Toggle the log viewer panel visibility
+   */
+  toggleLogViewerPanel(value?: boolean) {
+    this.#logViewerStore.toggleLogViewerPanel(value);
+  }
+
+  /**
+   * Toggle auto-send mode for all log viewers
+   */
+  toggleLogViewerAutoSend() {
+    this.#logViewerStore.toggleAutoSend();
+  }
+
+  /**
+   * Set auto-send mode for all log viewers
+   */
+  setLogViewerAutoSend(enabled: boolean) {
+    this.#logViewerStore.setAutoSend(enabled);
   }
 
   setLogStreamActive(active: boolean) {
@@ -256,13 +344,28 @@ export class WorkbenchStore {
     this.#editorStore.setSelectedFile(filePath);
   }
 
+  closeTab(filePath: string) {
+    this.#editorStore.closeTab(filePath);
+  }
+
+  closeAllTabs() {
+    this.#editorStore.closeAllTabs();
+  }
+
+  closeOtherTabs(filePath: string) {
+    this.#editorStore.closeOtherTabs(filePath);
+  }
+
   async saveFile(filePath: string, skipSnapshot: boolean = false) {
     const documents = this.#editorStore.documents.get();
     const document = documents[filePath];
 
     if (document === undefined) {
+      logger.warn('saveFile: document is undefined for', filePath);
       return;
     }
+
+    logger.info('💾 saveFile called for:', filePath, 'skipSnapshot:', skipSnapshot);
 
     /*
      * For scoped locks, we would need to implement diff checking here
@@ -277,21 +380,27 @@ export class WorkbenchStore {
 
     this.unsavedFiles.set(newUnsavedFiles);
 
+    logger.info('💾 File saved to WebContainer:', filePath);
+
     // Trigger a snapshot for user edits - skip for batch imports
     if (db && !skipSnapshot) {
       try {
         const mixedChatId = getCurrentChatId();
         const actualChatId = await resolveActualChatId(mixedChatId);
 
+        logger.info('💾 Chat IDs - mixed:', mixedChatId, 'actual:', actualChatId);
+
         // Wait for file watcher to pick up the files (100ms buffer + small safety margin)
         await new Promise((resolve) => setTimeout(resolve, 200));
 
         const files = this.files.get();
 
+        logger.info('💾 Files in store:', Object.keys(files).length, 'files');
+
         // Only create snapshot if there are actually files to snapshot OR if user upload is in progress
         if (Object.keys(files).length > 0 || this.isUserUploadInProgress()) {
-          logger.debug(
-            'DEBUG: saveFile - triggering user-edit snapshot with',
+          logger.info(
+            '💾 TRIGGERING USER-EDIT SNAPSHOT with',
             Object.keys(files).length,
             'files',
             this.isUserUploadInProgress() ? '(user upload in progress)' : '',
@@ -299,12 +408,24 @@ export class WorkbenchStore {
 
           const lastMessageId = await this.getLastMessageId(db);
 
+          logger.info('💾 Last message ID:', lastMessageId);
+
           triggerSnapshot(db, actualChatId, files, 'user-edit', lastMessageId);
+
+          logger.info('💾 triggerSnapshot called successfully');
         } else {
-          logger.debug('DEBUG: saveFile - Skipping user-edit snapshot creation - no files to snapshot');
+          logger.warn('💾 Skipping user-edit snapshot creation - no files to snapshot');
         }
       } catch (error) {
-        logger.error('Failed to trigger snapshot after file save:', error);
+        logger.error('💾 Failed to trigger snapshot after file save:', error);
+      }
+    } else {
+      if (!db) {
+        logger.warn('💾 No db available, skipping snapshot');
+      }
+
+      if (skipSnapshot) {
+        logger.info('💾 skipSnapshot=true, skipping snapshot');
       }
     }
   }
@@ -713,7 +834,15 @@ export class WorkbenchStore {
        * This is a more complex feature that would be implemented in a future update
        */
 
-      if (this.selectedFile.value !== fullPath) {
+      /*
+       * Only auto-switch to the file being written if:
+       * 1. No file is currently selected, OR
+       * 2. We're not streaming (batch operations should still switch)
+       */
+      const currentlySelectedFile = this.selectedFile.value;
+      const shouldAutoSwitch = !currentlySelectedFile || !isStreaming;
+
+      if (shouldAutoSwitch && this.selectedFile.value !== fullPath) {
         this.setSelectedFile(fullPath);
       }
 

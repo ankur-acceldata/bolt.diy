@@ -129,6 +129,4 @@ export interface WorkspaceProps {
   };
   onSendMessage?: (message: string) => void;
   onSetChatInput?: (message: string) => void;
-  model?: string;
-  provider?: string;
 }

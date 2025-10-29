@@ -68,6 +68,46 @@ export interface LogStreamState {
 }
 
 /**
+ * Represents a single log viewer instance
+ */
+export interface LogViewerInstance {
+  /** Unique identifier for this log viewer instance */
+  id: string;
+
+  /** The dataplane ID to stream logs from */
+  dataplaneId: string;
+
+  /** The specific run id to monitor */
+  runId: string;
+
+  /** Whether this is a pipeline log stream */
+  isPipeline?: boolean;
+
+  /** Display title for the log viewer tab */
+  title: string;
+
+  /** Timestamp when this instance was created */
+  timestamp: number;
+}
+
+/**
+ * Configuration for creating a new log viewer instance
+ */
+export interface CreateLogViewerInstanceConfig {
+  /** The dataplane ID to stream logs from */
+  dataplaneId: string;
+
+  /** The specific run id to monitor */
+  runId: string;
+
+  /** Whether this is a pipeline log stream */
+  isPipeline?: boolean;
+
+  /** Optional custom title for the log viewer tab */
+  title?: string;
+}
+
+/**
  * Props for the LogViewer component
  */
 export interface LogViewerProps {
@@ -80,6 +120,9 @@ export interface LogViewerProps {
   /** Whether the log viewer is open/visible */
   isOpen: boolean;
 
+  /** Whether this is the latest/newest log viewer instance (for auto-send) */
+  isLatest?: boolean;
+
   /** Callback when the viewer is closed */
   onClose: () => void;
 
@@ -88,12 +131,6 @@ export interface LogViewerProps {
 
   /** Callback to set input text in chat box (manual mode) */
   onSetChatInput?: (message: string) => void;
-
-  /** Current model for proper message formatting */
-  model?: string;
-
-  /** Current provider for proper message formatting */
-  provider?: string;
 
   /** Whether this is a pipeline log stream (uses different endpoint) */
   isPipeline?: boolean;

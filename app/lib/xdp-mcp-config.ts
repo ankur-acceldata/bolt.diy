@@ -8,8 +8,8 @@ const logger = createScopedLogger('XDPMCPConfig');
  */
 
 export interface XDPMCPConfig {
-  accessKey: string;
-  secretKey: string;
+  accessKey?: string;
+  secretKey?: string;
   baseUrl?: string;
   mcpServerUrl?: string;
 }
@@ -73,17 +73,29 @@ export function createXDPMCPConfig({
 
   logger.info(`[${callId}] Using HTTP MCP ion:`, httpUrl);
 
+  // Build headers object, filtering out undefined values
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (accessKey) {
+    headers['X-XDP-Access-Key'] = accessKey;
+  }
+
+  if (secretKey) {
+    headers['X-XDP-Secret-Key'] = secretKey;
+  }
+
+  if (baseUrl) {
+    headers['X-XDP-Base-URL'] = baseUrl;
+  }
+
   const config = {
     mcpServers: {
       'xdp-server': {
         type: 'streamable-http' as const,
         url: httpUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-XDP-Access-Key': accessKey,
-          'X-XDP-Secret-Key': secretKey,
-          'X-XDP-Base-URL': baseUrl,
-        },
+        headers,
       },
     },
   };

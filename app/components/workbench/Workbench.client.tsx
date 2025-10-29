@@ -50,8 +50,6 @@ export const Workbench = memo(
     selectedTemplate,
     onSendMessage,
     onSetChatInput,
-    model,
-    provider,
   }: WorkspaceProps) => {
     renderLogger.trace('Workbench');
 
@@ -101,9 +99,14 @@ export const Workbench = memo(
     const selectedView = useStore(workbenchStore.currentView);
 
     const { showChat } = useStore(chatStore);
-    const canHideChat = showWorkbench || !showChat;
-
     const isSmallViewport = useViewport(1024);
+
+    /*
+     * In panel mode (chatStarted && !isSmallViewport), we can always toggle chat
+     * In fixed mode, we can only hide chat if workbench is shown or chat is already hidden
+     */
+    const isInPanel = chatStarted && !isSmallViewport;
+    const canHideChat = isInPanel || showWorkbench || !showChat;
 
     const setSelectedView = (view: any) => {
       workbenchStore.currentView.set(view);
@@ -397,6 +400,160 @@ export const Workbench = memo(
       workbenchStore.currentView.set('diff');
     }, []);
 
+    const workbenchContent = (
+      <>
+        <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
+          <button
+            className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
+            disabled={!canHideChat || isSmallViewport}
+            onClick={() => {
+              if (canHideChat) {
+                chatStore.setKey('showChat', !showChat);
+              }
+            }}
+          />
+          <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
+          <div className="ml-auto" />
+          {selectedView === 'code' && (
+            <div className="flex overflow-y-auto">
+              <div className="flex items-center gap-2 mr-1">
+                <PipelineBuildButton className="mr-0" />
+                <ButtonDropdown
+                  onMainClick={() => handleExecuteAdhocRun(false)}
+                  disabled={isExecuting || !currentProjectId}
+                  variant="accent"
+                  size="sm"
+                  className="px-2 py-1 text-sm focus:ring-0 focus:ring-offset-0 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive shadow-sm"
+                  dropdownTriggerClassName="px-2 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive"
+                  options={[
+                    {
+                      label: 'Edit Config & Run',
+                      value: 'edit-config',
+                      icon: 'i-ph:gear text-bolt-elements-item-contentAccent',
+                      onClick: () => handleExecuteAdhocRun(true),
+                    },
+                  ]}
+                  align="end"
+                  showArrow={true}
+                >
+                  {isExecuting ? (
+                    <div className="i-ph:spinner animate-spin text-bolt-elements-item-contentAccent" />
+                  ) : (
+                    <div className="i-ph:play text-bolt-elements-item-contentAccent" />
+                  )}
+                </ButtonDropdown>
+              </div>
+              <div className="flex items-center gap-2">
+                <PanelHeaderButton
+                  className="mr-1 text-sm bg-bolt-elements-bg-depth-3 border border-bolt-elements-borderColor text-bolt-elements-textSecondary hover:bg-bolt-elements-bg-depth-4 hover:text-bolt-elements-textPrimary shadow-sm"
+                  onClick={handleSyncFiles}
+                  disabled={isSyncing || !syncInitialized}
+                >
+                  {isSyncing ? (
+                    <div className="i-ph:spinner animate-spin text-bolt-elements-item-contentAccent" />
+                  ) : (
+                    <div className="i-ph:cloud-arrow-up text-bolt-elements-item-contentAccent" />
+                  )}
+                  Sync
+                </PanelHeaderButton>
+                <StatusIndicator
+                  status={
+                    !syncInitialized
+                      ? 'offline'
+                      : !syncStatus.connected
+                        ? 'warning'
+                        : syncStatus.isRunning
+                          ? 'loading'
+                          : syncStatus.pendingChanges > 0
+                            ? 'warning'
+                            : 'success'
+                  }
+                  pulse={syncStatus.isRunning}
+                  size="sm"
+                />
+              </div>
+            </div>
+          )}
+
+          {selectedView === 'diff' && (
+            <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleDiffFileSelect} />
+          )}
+          <IconButton
+            icon="i-ph:x-circle"
+            className="-mr-1"
+            size="xl"
+            onClick={() => {
+              workbenchStore.showWorkbench.set(false);
+            }}
+          />
+        </div>
+        <div className="relative flex-1 overflow-hidden">
+          <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
+            <EditorPanel
+              editorDocument={currentDocument}
+              isStreaming={isStreaming}
+              selectedFile={selectedFile}
+              files={files}
+              unsavedFiles={unsavedFiles}
+              fileHistory={fileHistory}
+              onFileSelect={onFileSelect}
+              onEditorScroll={onEditorScroll}
+              onEditorChange={onEditorChange}
+              onFileSave={onFileSave}
+              onFileReset={onFileReset}
+              onSendMessage={onSendMessage}
+              onSetChatInput={onSetChatInput}
+            />
+          </View>
+          <View
+            initial={{ x: '100%' }}
+            animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
+          >
+            <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
+          </View>
+        </div>
+      </>
+    );
+
+    // When in panel mode (chat started on desktop), render simple container
+    if (isInPanel) {
+      return (
+        <>
+          <div className="h-full w-full px-2 lg:px-4">
+            <div className="h-full flex flex-col bg-bolt-elements-bg-depth-1 border border-bolt-elements-borderColor shadow-sm rounded-lg overflow-hidden">
+              {workbenchContent}
+            </div>
+          </div>
+          <PushToGitHubDialog
+            isOpen={isPushDialogOpen}
+            onClose={() => setIsPushDialogOpen(false)}
+            onPush={async (repoName, username, token, isPrivate) => {
+              try {
+                logger.info('Dialog onPush called with isPrivate =', isPrivate);
+
+                const commitMessage = prompt('Please enter a commit message:', 'Initial commit') || 'Initial commit';
+                const repoUrl = await workbenchStore.pushToGitHub(repoName, commitMessage, username, token, isPrivate);
+
+                if (updateChatMestaData && !metadata?.gitUrl) {
+                  updateChatMestaData({
+                    ...(metadata || {}),
+                    gitUrl: repoUrl,
+                  });
+                }
+
+                return repoUrl;
+              } catch (error) {
+                logger.error('Error pushing to GitHub:', error);
+                toast.error('Failed to push to GitHub');
+                throw error;
+              }
+            }}
+          />
+        </>
+      );
+    }
+
+    // Fixed positioning mode (when chat not started or on mobile)
     return (
       chatStarted && (
         <motion.div
@@ -418,130 +575,7 @@ export const Workbench = memo(
           >
             <div className="absolute inset-0 px-2 lg:px-4">
               <div className="h-full flex flex-col bg-bolt-elements-bg-depth-1 border border-bolt-elements-borderColor shadow-sm rounded-lg overflow-hidden">
-                <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
-                  <button
-                    className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
-                    disabled={!canHideChat || isSmallViewport}
-                    onClick={() => {
-                      if (canHideChat) {
-                        chatStore.setKey('showChat', !showChat);
-                      }
-                    }}
-                  />
-                  <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
-                  <div className="ml-auto" />
-                  {selectedView === 'code' && (
-                    <div className="flex overflow-y-auto">
-                      <div className="flex items-center gap-2 mr-1">
-                        <PipelineBuildButton className="mr-0" />
-                        <ButtonDropdown
-                          onMainClick={() => handleExecuteAdhocRun(false)}
-                          disabled={isExecuting || !currentProjectId}
-                          variant="accent"
-                          size="sm"
-                          className="px-2 py-1 text-sm focus:ring-0 focus:ring-offset-0 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive shadow-sm"
-                          dropdownTriggerClassName="px-2 !bg-bolt-elements-item-backgroundAccent hover:!bg-bolt-elements-item-backgroundAccent hover:opacity-90 !border-bolt-elements-borderColorActive"
-                          options={[
-                            {
-                              label: 'Edit Config & Run',
-                              value: 'edit-config',
-                              icon: 'i-ph:gear text-bolt-elements-item-contentAccent',
-                              onClick: () => handleExecuteAdhocRun(true),
-                            },
-                          ]}
-                          align="end"
-                          showArrow={true}
-                        >
-                          {isExecuting ? (
-                            <div className="i-ph:spinner animate-spin text-bolt-elements-item-contentAccent" />
-                          ) : (
-                            <div className="i-ph:play text-bolt-elements-item-contentAccent" />
-                          )}
-                        </ButtonDropdown>
-                      </div>
-                      {/* <PanelHeaderButton
-                      className="mr-1 text-sm"
-                      onClick={() => {
-                        workbenchStore.toggleTerminal(!workbenchStore.showTerminal.get());
-                      }}
-                    >
-                      <div className="i-ph:terminal" />
-                      Toggle Terminal
-                    </PanelHeaderButton> */}
-                      <div className="flex items-center gap-2">
-                        <PanelHeaderButton
-                          className="mr-1 text-sm bg-bolt-elements-bg-depth-3 border border-bolt-elements-borderColor text-bolt-elements-textSecondary hover:bg-bolt-elements-bg-depth-4 hover:text-bolt-elements-textPrimary shadow-sm"
-                          onClick={handleSyncFiles}
-                          disabled={isSyncing || !syncInitialized}
-                        >
-                          {isSyncing ? (
-                            <div className="i-ph:spinner animate-spin text-bolt-elements-item-contentAccent" />
-                          ) : (
-                            <div className="i-ph:cloud-arrow-up text-bolt-elements-item-contentAccent" />
-                          )}
-                          Sync
-                        </PanelHeaderButton>
-                        <StatusIndicator
-                          status={
-                            !syncInitialized
-                              ? 'offline'
-                              : !syncStatus.connected
-                                ? 'warning'
-                                : syncStatus.isRunning
-                                  ? 'loading'
-                                  : syncStatus.pendingChanges > 0
-                                    ? 'warning'
-                                    : 'success'
-                          }
-                          pulse={syncStatus.isRunning}
-                          size="sm"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedView === 'diff' && (
-                    <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleDiffFileSelect} />
-                  )}
-                  <IconButton
-                    icon="i-ph:x-circle"
-                    className="-mr-1"
-                    size="xl"
-                    onClick={() => {
-                      workbenchStore.showWorkbench.set(false);
-                    }}
-                  />
-                </div>
-                <div className="relative flex-1 overflow-hidden">
-                  <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
-                    <EditorPanel
-                      editorDocument={currentDocument}
-                      isStreaming={isStreaming}
-                      selectedFile={selectedFile}
-                      files={files}
-                      unsavedFiles={unsavedFiles}
-                      fileHistory={fileHistory}
-                      onFileSelect={onFileSelect}
-                      onEditorScroll={onEditorScroll}
-                      onEditorChange={onEditorChange}
-                      onFileSave={onFileSave}
-                      onFileReset={onFileReset}
-                      onSendMessage={onSendMessage}
-                      onSetChatInput={onSetChatInput}
-                      model={model}
-                      provider={provider}
-                    />
-                  </View>
-                  <View
-                    initial={{ x: '100%' }}
-                    animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
-                  >
-                    <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
-                  </View>
-                  {/* <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
-                    <Preview setSelectedElement={setSelectedElement} />
-                  </View> */}
-                </div>
+                {workbenchContent}
               </div>
             </div>
           </div>

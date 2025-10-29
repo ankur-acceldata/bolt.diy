@@ -161,9 +161,12 @@ export function useAdhocRunClient() {
             responseData: backend.data,
           });
 
-          workbenchStore.toggleLogViewer(true, {
+          // Create a new log viewer instance for this adhoc run
+          workbenchStore.createLogViewerInstance({
             dataplaneId: String(dataplaneId),
             runId: String(runId),
+            isPipeline: false,
+            title: `Adhoc Run - ${String(runId).substring(0, 8)}`,
           });
         }
       } catch (error) {
@@ -290,10 +293,12 @@ export function usePipelineAdhocRunClient() {
            * Open log viewer for pipeline logs using the pipeline log stream endpoint
            * Note: We need to determine what ID the pipeline log endpoint expects
            */
-          workbenchStore.toggleLogViewer(true, {
+          // Create a new log viewer instance for this pipeline build
+          workbenchStore.createLogViewerInstance({
             dataplaneId: String(dataplaneId),
-            runId: String(pipelineRunId), // Use pipeline run ID for the log viewer
-            isPipeline: true, // Flag to indicate this is a pipeline log stream
+            runId: String(pipelineRunId),
+            isPipeline: true,
+            title: `Pipeline Build - ${String(pipelineRunId).substring(0, 8)}`,
           });
 
           pipelineLogger.info('✅ Log viewer toggle called with config:', {

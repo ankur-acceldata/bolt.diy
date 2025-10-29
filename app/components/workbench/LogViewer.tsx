@@ -1,10 +1,12 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { useStore } from '@nanostores/react';
 import { classNames } from '~/utils/classNames';
 import { useLogStream } from '~/lib/hooks/useLogStream';
 import { analyzeLogMessage } from '~/utils/logLevelDetection';
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { LogViewerProps } from '~/types/logStream';
 import { createScopedLogger } from '~/utils/logger';
+import { TextSelectionContextMenu } from '~/components/ui/TextSelectionContextMenu';
 
 const logger = createScopedLogger('LogViewer');
 
@@ -12,11 +14,10 @@ export function LogViewer({
   dataplaneId,
   runId,
   isOpen,
+  isLatest = false,
   onClose,
   onSendMessage,
   onSetChatInput,
-  model,
-  provider,
   isPipeline = false,
 }: LogViewerProps) {
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -25,17 +26,34 @@ export function LogViewer({
   const autoSendCountRef = useRef<number>(0);
   const lastLogCountRef = useRef<number>(0);
 
-  const [autoSendEnabled, setAutoSendEnabled] = useState(false);
+  // Use shared auto-send state from store
+  const autoSendEnabled = useStore(workbenchStore.logViewerAutoSendEnabled);
 
   /*
    * Remove expensive console.log on every render
    * logger.debug(' LogViewer props:', { dataplaneId, runId, isOpen, isPipeline });
    */
 
+  // Handler for text selection popup
+  const handleSendSelectionToChat = useCallback(
+    (selectedText: string) => {
+      if (!selectedText.trim()) {
+        return;
+      }
+
+      const message = `Please analyze this log excerpt and help me debug:\n\n\`\`\`\n${selectedText}\n\`\`\`\n\nAnalyze what's happening, identify any errors or issues, and fix them if required. Provide a clear explanation and any necessary code changes.`;
+
+      if (onSetChatInput) {
+        onSetChatInput(message);
+      }
+    },
+    [onSetChatInput],
+  );
+
   const { logs, isConnected, isConnecting, isInitializing, error, connect, clearLogs } = useLogStream({
     dataplaneId,
     runId,
-    enabled: isOpen,
+    enabled: true, // Always enabled since instances are kept mounted
     tailLines: 100,
     isPipeline,
   });
@@ -46,15 +64,24 @@ export function LogViewer({
     workbenchStore.setLogStreamActive(isStreamActive);
   }, [isConnecting, isInitializing]);
 
-  // Clear logs when configuration changes (new job) or when opening for the first time
+  // Track if this is the first time opening with this configuration
+  const configKeyRef = useRef<string>('');
+  const hasInitializedRef = useRef<boolean>(false);
+
+  // Clear logs only when configuration changes (new job), not when toggling visibility
   useEffect(() => {
-    if (isOpen && dataplaneId && runId) {
-      logger.info('LogViewer: Clearing logs for new job configuration:', { dataplaneId, runId });
+    const currentConfigKey = `${dataplaneId}-${runId}`;
+
+    // Only clear logs if the configuration actually changed (different job)
+    if (dataplaneId && runId && configKeyRef.current !== currentConfigKey) {
+      logger.info('LogViewer: New job configuration detected, clearing logs:', { dataplaneId, runId });
       clearLogs();
+      configKeyRef.current = currentConfigKey;
+      hasInitializedRef.current = true;
     }
 
     // clearLogs is stable (empty deps in useLogStream), safe to omit
-  }, [isOpen, dataplaneId, runId]);
+  }, [dataplaneId, runId, clearLogs]);
 
   const scrollToBottom = useCallback(() => {
     if (logsEndRef.current) {
@@ -79,11 +106,10 @@ export function LogViewer({
         .join('\n');
 
       // Format the message properly with model/provider prefix for AI to understand
-      const logContent = `I need help analyzing these execution logs from my application:\n\n**Run ID:** ${runId}\n**Dataplane:** ${dataplaneId}\n\n\`\`\`\n${logMessages}\n\`\`\`\n\nPlease help me understand what's happening and suggest any fixes if there are errors.`;
+      const logContent = `Please analyze these execution logs from my application:\n\n**Run ID:** ${runId}\n**Dataplane:** ${dataplaneId}\n\n\`\`\`\n${logMessages}\n\`\`\`\n\nAnalyze what's happening, identify any errors or issues, and fix them if required. Provide a clear explanation and any necessary code changes.`;
 
       // Include model and provider context if available
-      const messageContent =
-        model && provider ? `[Model: ${model}]\n\n[Provider: ${provider}]\n\n${logContent}` : logContent;
+      const messageContent = logContent;
 
       // Determine which mode to use
       const isAutoSendMode = forceAutoSend || autoSendEnabled;
@@ -101,12 +127,13 @@ export function LogViewer({
         onSetChatInput(messageContent);
       }
     },
-    [onSendMessage, onSetChatInput, logs, runId, dataplaneId, autoSendEnabled, model, provider],
+    [onSendMessage, onSetChatInput, logs, runId, dataplaneId, autoSendEnabled],
   );
 
-  // Auto-send logic
+  // Auto-send logic - only for the latest log viewer instance
   const scheduleAutoSend = useCallback(() => {
-    if (!autoSendEnabled || !onSendMessage || logs.length === 0 || autoSendCountRef.current >= 5) {
+    // Only auto-send if this is the latest instance
+    if (!isLatest || !autoSendEnabled || !onSendMessage || logs.length === 0 || autoSendCountRef.current >= 5) {
       return;
     }
 
@@ -119,34 +146,34 @@ export function LogViewer({
     autoSendTimeoutRef.current = setTimeout(() => {
       sendLogsToChat(true); // Force auto-send mode
     }, 4500); // 4.5 seconds
-  }, [autoSendEnabled, onSendMessage, logs.length, sendLogsToChat]);
+  }, [isLatest, autoSendEnabled, onSendMessage, logs.length, sendLogsToChat]);
 
   // Reset auto-send count when auto-send is toggled or logs are cleared
   const toggleAutoSend = useCallback(() => {
-    setAutoSendEnabled(!autoSendEnabled);
+    workbenchStore.toggleLogViewerAutoSend();
     autoSendCountRef.current = 0;
 
     if (autoSendTimeoutRef.current) {
       clearTimeout(autoSendTimeoutRef.current);
       autoSendTimeoutRef.current = null;
     }
-  }, [autoSendEnabled]);
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
   }, [logs, scrollToBottom]);
 
-  // Handle auto-send when logs change
+  // Handle auto-send when logs change - only for the latest instance
   useEffect(() => {
     const currentLogCount = logs.length;
 
-    // If logs have increased and auto-send is enabled
-    if (currentLogCount > lastLogCountRef.current && autoSendEnabled && autoSendCountRef.current < 5) {
+    // If logs have increased and auto-send is enabled and this is the latest instance
+    if (isLatest && currentLogCount > lastLogCountRef.current && autoSendEnabled && autoSendCountRef.current < 5) {
       scheduleAutoSend();
     }
 
     lastLogCountRef.current = currentLogCount;
-  }, [logs.length, autoSendEnabled, scheduleAutoSend]);
+  }, [isLatest, logs.length, autoSendEnabled, scheduleAutoSend]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -299,84 +326,86 @@ export function LogViewer({
               </div>
             </div>
           ) : (
-            <div
-              ref={logContainerRef}
-              className="h-full overflow-y-auto p-2 font-mono text-xs bg-bolt-elements-background-depth-1"
-            >
-              {isInitializing ? (
-                <div className="relative text-center mt-8 overflow-hidden">
-                  {/* Main Loading Animation */}
-                  <div className="relative inline-block mb-6 z-10">
-                    {/* Outer rotating ring */}
-                    <div className="w-16 h-16 border-4 border-blue-500/20 rounded-full animate-spin">
-                      <div className="w-full h-full border-4 border-transparent border-t-blue-500 rounded-full animate-pulse"></div>
-                    </div>
-                    {/* Inner pulsing dot */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-4 h-4 bg-blue-500 rounded-full animate-ping"></div>
-                      <div className="absolute w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                    </div>
-                  </div>
-
-                  {/* Animated Text */}
-                  <div className="space-y-3 relative z-10">
-                    <div className="font-medium text-blue-400 text-lg animate-pulse">🏗️ Initializing Log Stream</div>
-                    <div className="text-bolt-elements-textSecondary animate-pulse opacity-70">
-                      Preparing backend connection...
+            <TextSelectionContextMenu onSendToChat={handleSendSelectionToChat} enabled={!!onSetChatInput}>
+              <div
+                ref={logContainerRef}
+                className="h-full overflow-y-auto p-2 font-mono text-xs bg-bolt-elements-background-depth-1"
+              >
+                {isInitializing ? (
+                  <div className="relative text-center mt-8 overflow-hidden">
+                    {/* Main Loading Animation */}
+                    <div className="relative inline-block mb-6 z-10">
+                      {/* Outer rotating ring */}
+                      <div className="w-16 h-16 border-4 border-blue-500/20 rounded-full animate-spin">
+                        <div className="w-full h-full border-4 border-transparent border-t-blue-500 rounded-full animate-pulse"></div>
+                      </div>
+                      {/* Inner pulsing dot */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-4 h-4 bg-blue-500 rounded-full animate-ping"></div>
+                        <div className="absolute w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                      </div>
                     </div>
 
-                    {/* Animated dots */}
-                    <div className="flex justify-center items-center gap-1 mt-4">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                    </div>
-                  </div>
+                    {/* Animated Text */}
+                    <div className="space-y-3 relative z-10">
+                      <div className="font-medium text-blue-400 text-lg animate-pulse">🏗️ Initializing Log Stream</div>
+                      <div className="text-bolt-elements-textSecondary animate-pulse opacity-70">
+                        Preparing backend connection...
+                      </div>
 
-                  {/* Background animated elements - contained within this div */}
-                  <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
-                    <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-blue-500/5 rounded-full animate-pulse [animation-duration:3s]"></div>
-                    <div className="absolute bottom-1/4 right-1/4 w-24 h-24 bg-blue-400/5 rounded-full animate-pulse [animation-duration:4s] [animation-delay:1s]"></div>
-                  </div>
-                </div>
-              ) : isConnecting && logs.length <= 1 ? (
-                <div className="text-center mt-8">
-                  <div className="relative inline-block mb-6">
-                    <div className="w-12 h-12 border-4 border-yellow-500/30 rounded-full animate-spin">
-                      <div className="w-full h-full border-4 border-transparent border-t-yellow-500 rounded-full"></div>
+                      {/* Animated dots */}
+                      <div className="flex justify-center items-center gap-1 mt-4">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                      </div>
                     </div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
-                    </div>
-                  </div>
-                  <div className="font-medium text-yellow-400 animate-pulse">🔗 Connecting to Log Stream</div>
-                  <div className="text-bolt-elements-textSecondary text-sm mt-2 opacity-70">
-                    Establishing connection...
-                  </div>
-                </div>
-              ) : logs.length === 0 ? (
-                <div className="text-bolt-elements-textSecondary text-center mt-8">
-                  No logs available. Click "Reconnect" to start streaming.
-                </div>
-              ) : (
-                logs.map((entry, index) => {
-                  const logText = entry.error || entry.log || '';
-                  const { className } = entry.error
-                    ? {
-                        className:
-                          'bg-red-500/10 dark:bg-red-500/20 text-red-700 dark:text-red-400 border-l-2 border-red-500',
-                      }
-                    : analyzeLogMessage(logText);
 
-                  return (
-                    <div key={index} className={classNames('mb-1 leading-relaxed px-2 py-1 rounded', className)}>
-                      <span className="whitespace-pre-wrap text-bolt-elements-textPrimary">{logText}</span>
+                    {/* Background animated elements - contained within this div */}
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+                      <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-blue-500/5 rounded-full animate-pulse [animation-duration:3s]"></div>
+                      <div className="absolute bottom-1/4 right-1/4 w-24 h-24 bg-blue-400/5 rounded-full animate-pulse [animation-duration:4s] [animation-delay:1s]"></div>
                     </div>
-                  );
-                })
-              )}
-              <div ref={logsEndRef} />
-            </div>
+                  </div>
+                ) : isConnecting && logs.length <= 1 ? (
+                  <div className="text-center mt-8">
+                    <div className="relative inline-block mb-6">
+                      <div className="w-12 h-12 border-4 border-yellow-500/30 rounded-full animate-spin">
+                        <div className="w-full h-full border-4 border-transparent border-t-yellow-500 rounded-full"></div>
+                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
+                      </div>
+                    </div>
+                    <div className="font-medium text-yellow-400 animate-pulse">🔗 Connecting to Log Stream</div>
+                    <div className="text-bolt-elements-textSecondary text-sm mt-2 opacity-70">
+                      Establishing connection...
+                    </div>
+                  </div>
+                ) : logs.length === 0 ? (
+                  <div className="text-bolt-elements-textSecondary text-center mt-8">
+                    No logs available. Click "Reconnect" to start streaming.
+                  </div>
+                ) : (
+                  logs.map((entry, index) => {
+                    const logText = entry.error || entry.log || '';
+                    const { className } = entry.error
+                      ? {
+                          className:
+                            'bg-red-500/10 dark:bg-red-500/20 text-red-700 dark:text-red-400 border-l-2 border-red-500',
+                        }
+                      : analyzeLogMessage(logText);
+
+                    return (
+                      <div key={index} className={classNames('mb-1 leading-relaxed px-2 py-1 rounded', className)}>
+                        <span className="whitespace-pre-wrap text-bolt-elements-textPrimary">{logText}</span>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={logsEndRef} />
+              </div>
+            </TextSelectionContextMenu>
           )}
         </div>
       </div>

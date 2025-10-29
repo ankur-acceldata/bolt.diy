@@ -5,7 +5,7 @@ import { useAnimate } from 'framer-motion';
 import { memo, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
 import { useMessageParser, usePromptEnhancer, useShortcuts, useSync, useDataplaneInfo } from '~/lib/hooks';
-import { description, useChatHistory, chatId } from '~/lib/persistence';
+import { description, useChatHistory, chatId, db } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
@@ -25,12 +25,13 @@ import { filesToArtifacts } from '~/utils/fileUtils';
 import { supabaseConnection } from '~/lib/stores/supabase';
 import { defaultDesignScheme, type DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
-import { debugProjectId } from '~/utils/fileLocks';
+import { debugProjectId, resolveActualChatId, getCurrentChatId } from '~/utils/fileLocks';
 import { getFernSyncService } from '~/lib/sync/fernSyncService';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
 import { TIMEOUT_CONSTANTS } from '~/lib/constants/timeout';
+import { triggerSnapshot } from '~/lib/persistence/snapshotUtils';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -158,6 +159,7 @@ export const ChatImpl = memo(
       return (PROVIDER_LIST.find((p) => p.name === savedProvider) || DEFAULT_PROVIDER) as ProviderInfo;
     });
     const { showChat } = useStore(chatStore);
+    const showWorkbench = useStore(workbenchStore.showWorkbench);
     const dataplaneInfo = useDataplaneInfo();
     const [animationScope, animate] = useAnimate();
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
@@ -277,6 +279,35 @@ export const ChatImpl = memo(
         if (workbenchStore.isUserUploadInProgress()) {
           workbenchStore.setUserUploadInProgress(false);
           logger.debug('DEBUG: onFinish - Clearing user upload state after AI response completion');
+        }
+
+        /*
+         * Trigger snapshot after AI response completes
+         * This ensures file changes from AI are persisted to IndexedDB
+         */
+        if (db) {
+          try {
+            const mixedChatId = getCurrentChatId();
+            const actualChatId = await resolveActualChatId(mixedChatId);
+
+            // Wait for file watcher to pick up all file changes
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            const files = workbenchStore.files.get();
+
+            if (Object.keys(files).length > 0) {
+              logger.debug(
+                'DEBUG: onFinish - Triggering ai-response snapshot with',
+                Object.keys(files).length,
+                'files',
+              );
+              triggerSnapshot(db, actualChatId, files, 'ai-response', message.id);
+            } else {
+              logger.debug('DEBUG: onFinish - Skipping snapshot - no files to snapshot');
+            }
+          } catch (error) {
+            logger.error('Failed to trigger snapshot after AI response:', error);
+          }
         }
       },
       initialMessages,
@@ -852,6 +883,7 @@ export const ChatImpl = memo(
         input={input}
         setInput={setInput}
         showChat={showChat}
+        showWorkbench={showWorkbench}
         chatStarted={chatStarted}
         isStreaming={isLoading || fakeLoading}
         onStreamingChange={(streaming) => {

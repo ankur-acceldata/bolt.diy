@@ -8,147 +8,23 @@ import { stripIndents } from '~/utils/stripIndent';
  */
 export const getTrinoUsageGuidelines = () => stripIndents`
 <trino_usage_guidelines>
-  <trino_gateway_configuration>
-    MANDATORY: All Trino queries MUST use the direct Trino Gateway endpoint:
-    URL: http://trino-gateway:8080/v1/statement
-
-    Required Headers:
-    - X-Trino-User: admin
-    - Content-Type: application/json (optional)
-
-    Request Format:
-    - Method: POST
-    - Body: Raw SQL query string (not JSON)
-    - Example: POST http://trino-gateway:8080/v1/statement -H "X-Trino-User: admin" -d 'SELECT * FROM catalog.schema.table LIMIT 10'
-
-    IMPORTANT: This is the direct Trino Gateway endpoint for query execution
-  </trino_gateway_configuration>
-
-  <trino_polling_pattern>
-    CRITICAL: Trino Gateway uses asynchronous query execution with streaming pagination
-
-    PAGINATION PATTERN - MUST UNDERSTAND:
-    - Results are streamed via nextUri field
-    - Data can appear in ANY response during polling (not just the last one)
-    - MUST accumulate data throughout the ENTIRE polling loop
-    - Polling ends when nextUri is ABSENT, not when state is FINISHED
-    - This is a distributed query engine pattern where results are produced incrementally
-
-    IMPORTANT: Both FINISHED and FINISHING are valid success states:
-    - FINISHING: Query completed successfully, finalizing results
-    - FINISHED: Query completed successfully, results available
-
-    1. CURL EXAMPLE:
-       \`\`\`bash
-       # Initial request
-       curl -X POST http://trino-gateway:8080/v1/statement \\
-         -H "X-Trino-User: admin" \\
-         -d 'SELECT * FROM catalog.schema.table LIMIT 10'
-
-       # Poll the nextUri from response until nextUri is absent
-       # IMPORTANT: Collect data from EVERY response, not just the last one
-       curl -X GET "http://trino-gateway:8080/v1/statement/queued/QUERY_ID/TOKEN/1" \\
-         -H "X-Trino-User: admin"
-       \`\`\`
-
-    2. INITIAL RESPONSE STRUCTURE:
-       {
-         "id": "20250925_151440_00030_fdtir",
-         "infoUri": "http://trino-gateway:8080/ui/query.html?20250925_151440_00030_fdtir",
-         "nextUri": "http://trino-gateway:8080/v1/statement/queued/20250925_151440_00030_fdtir/y062d61393b87ba31ca271b22c65a7f29cad49c88/1",
-         "stats": {
-           "state": "QUEUED",
-           "queued": true,
-           "scheduled": false,
-           ...
-         },
-         "warnings": []
-       }
-
-    3. POLLING STATES:
-       - QUEUED: Query is waiting to be executed
-       - RUNNING: Query is currently executing
-       - FINISHING: Query completed successfully, finalizing results (success state)
-       - FINISHED: Query completed successfully, results available (success state)
-       - FAILED: Query failed, check error field
-       - CANCELED: Query was canceled
-
-    4. MANDATORY POLLING LOGIC WITH DATA ACCUMULATION:
-       \`\`\`python
-       import requests
-       import time
-       import json
-
-       def execute_trino_query_with_polling(query):
-           # Initial request
-           response = requests.post(
-               'http://trino-gateway:8080/v1/statement',
-               headers={'X-Trino-User': 'admin'},
-               data=query
-           )
-
-           if response.status_code != 200:
-               raise Exception(f"Failed to submit query: {response.status_code} {response.text}")
-
-           result = response.json()
-           query_id = result.get('id')
-           print(f"Query submitted with ID: {query_id}")
-
-           # CRITICAL: Accumulate data from ALL responses
-           all_data = []
-           columns = None
-
-           # CRITICAL: Poll while nextUri exists (not based on state)
-           while 'nextUri' in result:
-               state = result['stats']['state']
-
-               # CRITICAL: Collect data from EVERY response
-               if 'data' in result and result['data']:
-                   all_data.extend(result['data'])
-                   print(f"Accumulated {len(result['data'])} rows (total: {len(all_data)})")
-
-               # Capture column metadata (usually in first response with data)
-               if 'columns' in result and not columns:
-                   columns = result['columns']
-
-               print(f"Query {query_id} state: {state}, polling...")
-               time.sleep(1)  # Wait 1 second between polls
-
-               # CRITICAL: Use the nextUri from previous response
-               response = requests.get(
-                   result['nextUri'],
-                   headers={'X-Trino-User': 'admin'}
-               )
-
-               if response.status_code != 200:
-                   raise Exception(f"Failed to poll query: {response.status_code} {response.text}")
-
-               result = response.json()
-
-           # CRITICAL: Collect data from final response (when nextUri is absent)
-           if 'data' in result and result['data']:
-               all_data.extend(result['data'])
-               print(f"Accumulated {len(result['data'])} rows from final response (total: {len(all_data)})")
-
-           if 'columns' in result and not columns:
-               columns = result['columns']
-
-           # Check final state
-           final_state = result['stats']['state']
-           print(f"Query {query_id} final state: {final_state}")
-
-           if final_state in ['FINISHED', 'FINISHING']:
-               print(f"Query completed successfully, total rows: {len(all_data)}")
-               return {'data': all_data, 'columns': columns or [], 'stats': result['stats']}
-           elif final_state == 'FAILED':
-               error_info = result.get('error', {})
-               error_msg = error_info.get('message', 'Unknown error')
-               error_type = error_info.get('errorType', 'UNKNOWN')
-               raise Exception(f"Trino query failed [{error_type}]: {error_msg}")
-           else:
-               raise Exception(f"Query ended in unexpected state: {final_state}")
-       \`\`\`
-  </trino_polling_pattern>
+  <trino_access_pattern>
+    CRITICAL: Trino access is handled differently in discovery vs runtime:
+    
+    DISCOVERY PHASE (Development):
+    - MCP tools handle Trino REST API internally for metadata operations
+    - You don't need to worry about Trino Gateway endpoints or headers
+    - MCP tools handle: SHOW CATALOGS, SHOW SCHEMAS, SHOW TABLES, DESCRIBE, etc.
+    
+    RUNTIME PHASE (Generated PySpark Code):
+    - ALWAYS use Spark JDBC connector with Trino JDBC driver
+    - NEVER use direct Trino REST API calls
+    - NEVER use requests library to fetch data from Trino
+    - See pyspark_trino_integration section for details
+    
+    Trino Gateway URL: http://trino-gateway:8080
+    Authentication: admin/admin (handled by JDBC driver or MCP tools)
+  </trino_access_pattern>
 
   <trino_sql_best_practices>
     CRITICAL RULES for Trino SQL Queries:
@@ -242,89 +118,205 @@ export const getTrinoUsageGuidelines = () => stripIndents`
   </error_handling_patterns>
 
   <pyspark_trino_integration>
-    INTEGRATING TRINO WITH PYSPARK:
+    CRITICAL: INTEGRATING TRINO WITH PYSPARK USING SPARK JDBC CONNECTOR + TRINO JDBC DRIVER
 
-    1. TRINO AS DATA SOURCE:
-       - Use Trino to validate data before PySpark processing
-       - Query metadata to understand schema before DataFrame operations
-       - Use Trino for complex SQL that's difficult in PySpark
+    MANDATORY APPROACH: Use Spark's JDBC connector with Trino JDBC driver to create DataFrames DIRECTLY from Trino
+    - Spark provides: spark.read.jdbc() method (Spark's JDBC connector)
+    - Trino provides: io.trino.jdbc.TrinoDriver (Trino JDBC driver)
+    - Together: Spark JDBC connector uses Trino JDBC driver to connect to Trino
+    
+    DO NOT:
+    - Download data via Trino REST API and then create DataFrames
+    - Fetch data first, parse it, and then send to Spark
+    - Use requests library to get data and then spark.createDataFrame()
+    
+    ALWAYS:
+    - Use spark.read.jdbc() with Trino JDBC driver
+    - Let Spark executors connect directly to Trino
+    - Create DataFrames directly from Trino queries
 
-    2. WORKFLOW PATTERNS:
-       a) Discover → Query → Process:
-          - Use Trino to discover available data
-          - Query sample data for validation
-          - Process with PySpark DataFrames
+    WHY SPARK JDBC + TRINO JDBC APPROACH:
+    - Avoids downloading all data to the client
+    - Leverages Spark's distributed processing
+    - More efficient for large datasets
+    - Supports predicate pushdown and query optimization
+    - Data streams directly from Trino to Spark executors
+    - No intermediate data parsing or conversion needed
 
-       b) Validation → Transform → Load:
-          - Validate data quality with Trino queries
-          - Transform with PySpark
-          - Load results back to storage
-
-    IMPORTANT: Use Spark Connect compatible patterns (see python-prompt for details)
-
-    3. EXAMPLE INTEGRATION CODE WITH DATA ACCUMULATION:
+    1. JDBC CONNECTION SETUP:
        \`\`\`python
-       import requests
-       import time
-       import json
-       from pyspark.sql import SparkSession
-
-       def execute_trino_query(query):
-           # Execute query via Trino Gateway
-           response = requests.post(
-               'http://trino-gateway:8080/v1/statement',
-               headers={'X-Trino-User': 'admin'},
-               data=query
-           )
-
-           if response.status_code != 200:
-               raise Exception(f"Failed to submit query: {response.status_code} {response.text}")
-
-           result = response.json()
-           query_id = result.get('id')
-
-           # CRITICAL: Accumulate data from ALL responses
-           all_data = []
-           columns = None
-
-           # CRITICAL: Poll while nextUri exists (not based on state)
-           while 'nextUri' in result:
-               # CRITICAL: Collect data from EVERY response
-               if 'data' in result and result['data']:
-                   all_data.extend(result['data'])
-
-               if 'columns' in result and not columns:
-                   columns = result['columns']
-
-               print(f"Query state: {result['stats']['state']}, polling...")
-               time.sleep(1)
-
-               response = requests.get(
-                   result['nextUri'],
-                   headers={'X-Trino-User': 'admin'}
-               )
-
-               if response.status_code != 200:
-                   raise Exception(f"Failed to poll query: {response.status_code} {response.text}")
-
-               result = response.json()
-
-           # CRITICAL: Collect data from final response
-           if 'data' in result and result['data']:
-               all_data.extend(result['data'])
-
-           if 'columns' in result and not columns:
-               columns = result['columns']
-
-           # Return results or raise error
-           if result['stats']['state'] in ['FINISHED', 'FINISHING']:
-               return all_data
-           elif result['stats']['state'] == 'FAILED':
-               error_msg = result.get('error', {}).get('message', 'Unknown error')
-               raise Exception(f"Trino query failed: {error_msg}")
-           else:
-               raise Exception(f"Query ended in unexpected state: {result['stats']['state']}")
+       # Trino JDBC URL format
+       TRINO_GATEWAY_URL = "http://trino-gateway:8080"
+       TRINO_USER = "admin"
+       TRINO_PASSWORD = "admin"
+       
+       # Build JDBC URL (remove /v1/statement if present)
+       base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
+       jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
+       
+       # Example: jdbc:trino://trino-gateway:8080/tpcds/sf1
        \`\`\`
+
+    2. READING TABLES VIA JDBC (RECOMMENDED):
+       \`\`\`python
+       from pyspark.sql import SparkSession
+       
+       def read_trino_table_jdbc(spark: SparkSession, catalog: str, schema: str, table: str):
+           """Read data from Trino table using Spark JDBC connector with Trino JDBC driver."""
+           # Build JDBC URL for Trino
+           base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
+           jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
+           
+           logger.info(f"Connecting to Trino via Spark JDBC connector: {jdbc_url}")
+           
+           # JDBC connection properties for Trino JDBC driver
+           connection_properties = {
+               "user": TRINO_USER,
+               "driver": "io.trino.jdbc.TrinoDriver"  # Trino JDBC driver class
+           }
+           
+           if TRINO_PASSWORD:
+               connection_properties["password"] = TRINO_PASSWORD
+           
+           # Spark's JDBC connector uses Trino JDBC driver to create DataFrame directly
+           # Data flows: Trino -> Trino JDBC Driver -> Spark JDBC Connector -> DataFrame
+           df = spark.read.jdbc(
+               url=jdbc_url,
+               table=table,
+               properties=connection_properties
+           )
+           
+           return df
+       \`\`\`
+
+    3. READING WITH CUSTOM QUERIES VIA JDBC:
+       \`\`\`python
+       def read_trino_query_jdbc(spark: SparkSession, catalog: str, schema: str, query: str):
+           """Execute custom SQL query via Spark JDBC connector with Trino JDBC driver."""
+           base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
+           jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
+           
+           # JDBC connection properties for Trino JDBC driver
+           connection_properties = {
+               "user": TRINO_USER,
+               "driver": "io.trino.jdbc.TrinoDriver"  # Trino JDBC driver class
+           }
+           
+           if TRINO_PASSWORD:
+               connection_properties["password"] = TRINO_PASSWORD
+           
+           # Use subquery syntax for custom queries
+           # Wrap your query in parentheses as a subquery
+           query_table = f"({query}) AS trino_query"
+           
+           # Spark JDBC connector executes query via Trino JDBC driver
+           df = spark.read.jdbc(
+               url=jdbc_url,
+               table=query_table,
+               properties=connection_properties
+           )
+           
+           return df
+       \`\`\`
+
+    4. COMPLETE EXAMPLE - CORRECT PATTERN:
+       \`\`\`python
+       import os
+       from pyspark.sql import SparkSession
+       
+       # Configuration
+       TRINO_GATEWAY_URL = os.getenv("TRINO_GATEWAY_URL", "http://trino-gateway:8080")
+       TRINO_USER = os.getenv("TRINO_USER", "admin")
+       TRINO_PASSWORD = os.getenv("TRINO_PASSWORD", "admin")
+       
+       CATALOG = "tpcds"
+       SCHEMA = "sf1"
+       TABLE = "call_center"
+       
+       def create_spark_session(app_name: str) -> SparkSession:
+           """Create Spark session."""
+           is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
+           
+           if is_bolt:
+               return SparkSession.builder \\
+                   .appName(app_name) \\
+                   .remote("sc://localhost:15002") \\
+                   .getOrCreate()
+           else:
+               return SparkSession.builder \\
+                   .appName(app_name) \\
+                   .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \\
+                   .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \\
+                   .config("spark.sql.catalog.spark_catalog.type", "hive") \\
+                   .enableHiveSupport() \\
+                   .getOrCreate()
+       
+       def read_trino_table_jdbc(spark: SparkSession, catalog: str, schema: str, table: str):
+           """Read data from Trino using Spark JDBC connector with Trino JDBC driver."""
+           base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
+           jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
+           
+           # Trino JDBC driver configuration
+           connection_properties = {
+               "user": TRINO_USER,
+               "driver": "io.trino.jdbc.TrinoDriver"  # Trino JDBC driver
+           }
+           
+           if TRINO_PASSWORD:
+               connection_properties["password"] = TRINO_PASSWORD
+           
+           # Spark JDBC connector + Trino JDBC driver = Direct DataFrame creation
+           # No data download to client, data flows directly to Spark executors
+           df = spark.read.jdbc(
+               url=jdbc_url,
+               table=table,
+               properties=connection_properties
+           )
+           
+           return df
+       
+       def main():
+           spark = create_spark_session("TrinoJDBCExample")
+           
+           # Read data directly from Trino using JDBC
+           df = read_trino_table_jdbc(spark, CATALOG, SCHEMA, TABLE)
+           
+           # Now you can use the DataFrame for Spark operations
+           df.cache()
+           print(f"Row count: {df.count()}")
+           df.show(10)
+           
+           # Perform aggregations, joins, etc.
+           from pyspark.sql.functions import col, count as spark_count
+           
+           result_df = df.groupBy("cc_call_center_id") \\
+               .agg(spark_count("*").alias("count")) \\
+               .filter(col("count") > 1)
+           
+           result_df.show()
+           
+           df.unpersist()
+           spark.stop()
+       
+       if __name__ == "__main__":
+           main()
+       \`\`\`
+
+    5. WHEN TO USE DIRECT API VS JDBC:
+       
+       USE JDBC (RECOMMENDED FOR DATAFRAMES):
+       - When creating PySpark DataFrames from Trino data
+       - For large datasets that need distributed processing
+       - When performing Spark transformations and aggregations
+       - For production PySpark jobs
+       
+       USE DIRECT API (ONLY FOR METADATA):
+       - For discovery operations (SHOW CATALOGS, SHOW TABLES, DESCRIBE)
+       - For small metadata queries during development
+       - When you need raw query results without DataFrame creation
+       - For validation and testing queries
+
+    IMPORTANT: The JDBC approach creates DataFrames directly without downloading data to the client first!
   </pyspark_trino_integration>
 
   <data_discovery_workflow>
@@ -358,80 +350,39 @@ export const getTrinoUsageGuidelines = () => stripIndents`
        - Validate expected columns and data types
 
     GENERATED CODE RUNTIME:
-    In generated applications, use direct Trino Gateway with polling and data accumulation:
+    In generated PySpark applications, ALWAYS use Spark JDBC connector with Trino JDBC driver.
+    
+    CORRECT PATTERN - Use JDBC for all data operations:
     \`\`\`python
-    # Runtime query execution in generated applications
-    def execute_trino_query(query):
-        import requests
-        import time
-
-        # Initial request to Trino Gateway
-        response = requests.post(
-            'http://trino-gateway:8080/v1/statement',
-            headers={'X-Trino-User': 'admin'},
-            data=query
+    # Read data from Trino using Spark JDBC connector
+    def read_trino_table_jdbc(spark: SparkSession, catalog: str, schema: str, table: str):
+        """Read data from Trino using Spark JDBC connector with Trino JDBC driver."""
+        TRINO_GATEWAY_URL = os.getenv("TRINO_GATEWAY_URL", "http://trino-gateway:8080")
+        TRINO_USER = os.getenv("TRINO_USER", "admin")
+        TRINO_PASSWORD = os.getenv("TRINO_PASSWORD", "admin")
+        
+        base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
+        jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
+        
+        connection_properties = {
+            "user": TRINO_USER,
+            "driver": "io.trino.jdbc.TrinoDriver"
+        }
+        
+        if TRINO_PASSWORD:
+            connection_properties["password"] = TRINO_PASSWORD
+        
+        # Spark JDBC connector + Trino JDBC driver
+        df = spark.read.jdbc(
+            url=jdbc_url,
+            table=table,
+            properties=connection_properties
         )
-
-        if response.status_code != 200:
-            raise Exception(f"Failed to submit query: {response.status_code} {response.text}")
-
-        result = response.json()
-        query_id = result.get('id')
-        print(f"Query submitted with ID: {query_id}")
-
-        # CRITICAL: Accumulate data from ALL responses
-        all_data = []
-        columns = None
-
-        # CRITICAL: Poll while nextUri exists (not based on state)
-        while 'nextUri' in result:
-            state = result['stats']['state']
-
-            # CRITICAL: Collect data from EVERY response
-            if 'data' in result and result['data']:
-                all_data.extend(result['data'])
-                print(f"Accumulated {len(result['data'])} rows (total: {len(all_data)})")
-
-            # Capture column metadata (usually in first response with data)
-            if 'columns' in result and not columns:
-                columns = result['columns']
-
-            print(f"Query {query_id} state: {state}, polling...")
-            time.sleep(1)
-
-            response = requests.get(
-                result['nextUri'],
-                headers={'X-Trino-User': 'admin'}
-            )
-
-            if response.status_code != 200:
-                raise Exception(f"Failed to poll query: {response.status_code} {response.text}")
-
-            result = response.json()
-
-        # CRITICAL: Collect data from final response (when nextUri is absent)
-        if 'data' in result and result['data']:
-            all_data.extend(result['data'])
-            print(f"Accumulated {len(result['data'])} rows from final response (total: {len(all_data)})")
-
-        if 'columns' in result and not columns:
-            columns = result['columns']
-
-        # Check final state and return results
-        final_state = result['stats']['state']
-        print(f"Query {query_id} final state: {final_state}")
-
-        if final_state in ['FINISHED', 'FINISHING']:
-            print(f"Query completed successfully, total rows: {len(all_data)}")
-            return {'data': all_data, 'columns': columns or [], 'stats': result['stats']}
-        elif final_state == 'FAILED':
-            error_info = result.get('error', {})
-            error_msg = error_info.get('message', 'Unknown error')
-            error_type = error_info.get('errorType', 'UNKNOWN')
-            raise Exception(f"Trino query failed [{error_type}]: {error_msg}")
-        else:
-            raise Exception(f"Query ended in unexpected state: {final_state}")
+        
+        return df
     \`\`\`
+    
+    DO NOT use requests library to fetch data from Trino API in generated code!
   </data_discovery_workflow>
 
   <query_optimization_guidelines>

@@ -70,9 +70,11 @@ export function useChatHistory() {
     }
 
     if (mixedId) {
-      // Debug: Check all chats in database before trying to load specific one
-      getAll(db)
-        .then((allChats: ChatHistoryItem[]) => {
+      // Use async IIFE to handle async operations in useEffect
+      (async () => {
+        // Debug: Check all chats in database before trying to load specific one
+        try {
+          const allChats = await getAll(db);
           logger.info(`📊 Database contents before loading ${mixedId}:`);
           allChats.forEach((chat: ChatHistoryItem, index: number) => {
             logger.info(
@@ -94,110 +96,133 @@ export function useChatHistory() {
           if (allChats.length === 0) {
             logger.info(`📊 Database is empty - no chats found`);
           }
-        })
-        .catch((err: any) => logger.error('Failed to get all chats for debugging:', err));
+        } catch (err: any) {
+          logger.error('Failed to get all chats for debugging:', err);
+        }
 
-      // Debug each lookup method separately
-      Promise.all([
-        getMessages(db, mixedId).then((result) => {
-          logger.debug(`🔍 getMessages(${mixedId}) result:`, result);
-          return result;
-        }),
-        getLatestVersionedSnapshot(db, mixedId),
-      ])
-        .then(async ([storedMessages, snapshot]) => {
-          logger.debug(`🔍 Chat loading result for ${mixedId}:`, {
-            foundMessages: !!storedMessages,
-            messageCount: storedMessages?.messages?.length || 0,
-            chatId: storedMessages?.id,
-            urlId: storedMessages?.urlId,
-            description: storedMessages?.description,
-            hasMessages: storedMessages?.messages && storedMessages.messages.length > 0,
-            storedMessagesType: typeof storedMessages,
-            storedMessagesKeys: storedMessages ? Object.keys(storedMessages) : 'null',
-            storedMessagesValue: storedMessages,
-            isFalsy: !storedMessages,
-            isNull: storedMessages === null,
-            isUndefined: storedMessages === undefined,
-          });
+        /*
+         * Debug each lookup method separately
+         * IMPORTANT: Resolve the actual chatId first before loading snapshot
+         * Snapshots are saved with actualChatId, not mixedId
+         */
+        const actualChatIdForLoad = await resolveActualChatId(mixedId);
+        logger.info(`🔍 Resolved chatId for loading: ${mixedId} → ${actualChatIdForLoad}`);
 
-          if (!storedMessages) {
-            logger.error(`❌ CHAT NOT FOUND for ${mixedId} - redirecting to home`);
-            logger.error(`❌ storedMessages value:`, storedMessages);
-            logger.error(`❌ typeof storedMessages:`, typeof storedMessages);
-            navigateToHome(true);
-            setReady(true);
-            setIsInitialLoad(false);
+        Promise.all([
+          getMessages(db, mixedId).then((result) => {
+            logger.debug(`🔍 getMessages(${mixedId}) result:`, result);
+            return result;
+          }),
+          getLatestVersionedSnapshot(db, actualChatIdForLoad),
+        ])
+          .then(async ([storedMessages, snapshot]) => {
+            logger.info(`🔍 Chat loading for ${mixedId}:`, {
+              foundMessages: !!storedMessages,
+              messageCount: storedMessages?.messages?.length || 0,
+              snapshotExists: !!snapshot,
+              snapshotFiles: snapshot ? Object.keys(snapshot.files || {}).length : 0,
+              snapshotVersion: snapshot?.version,
+              snapshotChangeType: snapshot?.changeType,
+            });
 
-            return;
-          }
+            logger.debug(`🔍 Chat loading result for ${mixedId}:`, {
+              foundMessages: !!storedMessages,
+              messageCount: storedMessages?.messages?.length || 0,
+              chatId: storedMessages?.id,
+              urlId: storedMessages?.urlId,
+              description: storedMessages?.description,
+              hasMessages: storedMessages?.messages && storedMessages.messages.length > 0,
+              storedMessagesType: typeof storedMessages,
+              storedMessagesKeys: storedMessages ? Object.keys(storedMessages) : 'null',
+              storedMessagesValue: storedMessages,
+              isFalsy: !storedMessages,
+              isNull: storedMessages === null,
+              isUndefined: storedMessages === undefined,
+            });
 
-          if (storedMessages) {
-            // Chat found - load it regardless of message count
-            if (storedMessages.messages && storedMessages.messages.length > 0) {
-              // Chat with messages - process normally
-              const validSnapshot = snapshot;
-              const summary = validSnapshot?.summary;
+            if (!storedMessages) {
+              logger.error(`❌ CHAT NOT FOUND for ${mixedId} - redirecting to home`);
+              logger.error(`❌ storedMessages value:`, storedMessages);
+              logger.error(`❌ typeof storedMessages:`, typeof storedMessages);
+              navigateToHome(true);
+              setReady(true);
+              setIsInitialLoad(false);
 
-              const rewindId = searchParams.get('rewindTo');
-              let startingIdx = -1;
-              const endingIdx = rewindId
-                ? storedMessages.messages.findIndex((m) => m.id === rewindId) + 1
-                : storedMessages.messages.length;
-              const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot?.chatIndex);
+              return;
+            }
 
-              if (snapshotIndex >= 0 && snapshotIndex < endingIdx) {
-                startingIdx = snapshotIndex;
-              }
+            if (storedMessages) {
+              // Chat found - load it regardless of message count
+              if (storedMessages.messages && storedMessages.messages.length > 0) {
+                // Chat with messages - process normally
+                const validSnapshot = snapshot;
+                const summary = validSnapshot?.summary;
 
-              if (snapshotIndex > 0 && storedMessages.messages[snapshotIndex].id == rewindId) {
-                startingIdx = -1;
-              }
+                const rewindId = searchParams.get('rewindTo');
+                let startingIdx = -1;
+                const endingIdx = rewindId
+                  ? storedMessages.messages.findIndex((m) => m.id === rewindId) + 1
+                  : storedMessages.messages.length;
+                const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot?.chatIndex);
 
-              let filteredMessages = storedMessages.messages.slice(startingIdx + 1, endingIdx);
-              let archivedMessages: Message[] = [];
+                if (snapshotIndex >= 0 && snapshotIndex < endingIdx) {
+                  startingIdx = snapshotIndex;
+                }
 
-              if (startingIdx >= 0) {
-                archivedMessages = storedMessages.messages.slice(0, startingIdx + 1);
-              }
+                if (snapshotIndex > 0 && storedMessages.messages[snapshotIndex].id == rewindId) {
+                  startingIdx = -1;
+                }
 
-              setArchivedMessages(archivedMessages);
-              logger.debug(': startingIdx', startingIdx);
+                let filteredMessages = storedMessages.messages.slice(startingIdx + 1, endingIdx);
+                let archivedMessages: Message[] = [];
 
-              if (startingIdx > 0) {
-                const files = Object.entries(validSnapshot?.files || {})
-                  .map(([key, value]) => {
-                    if (value?.type !== 'file') {
-                      return null;
-                    }
+                if (startingIdx >= 0) {
+                  archivedMessages = storedMessages.messages.slice(0, startingIdx + 1);
+                }
 
-                    return {
-                      content: value.content,
-                      path: key,
-                    };
-                  })
-                  .filter((x): x is { content: string; path: string } => !!x); // Type assertion
-                logger.debug(': validSnapshot', validSnapshot);
-                logger.debug(': files', files);
+                setArchivedMessages(archivedMessages);
+                logger.debug(': startingIdx', startingIdx);
 
-                const projectCommands = await detectProjectCommands(files);
+                // Always restore the latest snapshot if it exists, not just when rewinding
+                if (validSnapshot && validSnapshot.files && Object.keys(validSnapshot.files).length > 0) {
+                  logger.info(`📦 Restoring snapshot with ${Object.keys(validSnapshot.files).length} files`);
+                  restoreSnapshot(mixedId, validSnapshot);
+                }
 
-                // Call the modified function to get only the command actions string
-                const commandActionsString = createCommandActionsString(projectCommands);
+                if (startingIdx > 0) {
+                  const files = Object.entries(validSnapshot?.files || {})
+                    .map(([key, value]) => {
+                      if (value?.type !== 'file') {
+                        return null;
+                      }
 
-                filteredMessages = [
-                  {
-                    id: generateId(),
-                    role: 'user',
-                    content: `Restore project from snapshot`, // Removed newline
-                    annotations: ['no-store', 'hidden'],
-                  },
-                  {
-                    id: storedMessages.messages[snapshotIndex].id,
-                    role: 'assistant',
+                      return {
+                        content: value.content,
+                        path: key,
+                      };
+                    })
+                    .filter((x): x is { content: string; path: string } => !!x); // Type assertion
+                  logger.debug(': validSnapshot', validSnapshot);
+                  logger.debug(': files', files);
 
-                    // Combine followup message and the artifact with files and command actions
-                    content: `Bolt Restored your chat from a snapshot. You can revert this message to load the full chat history.
+                  const projectCommands = await detectProjectCommands(files);
+
+                  // Call the modified function to get only the command actions string
+                  const commandActionsString = createCommandActionsString(projectCommands);
+
+                  filteredMessages = [
+                    {
+                      id: generateId(),
+                      role: 'user',
+                      content: `Restore project from snapshot`, // Removed newline
+                      annotations: ['no-store', 'hidden'],
+                    },
+                    {
+                      id: storedMessages.messages[snapshotIndex].id,
+                      role: 'assistant',
+
+                      // Combine followup message and the artifact with files and command actions
+                      content: `Bolt Restored your chat from a snapshot. You can revert this message to load the full chat history.
                     <boltArtifact id="restored-project-setup" title="Restored Project & Setup" type="bundled">
                     ${Object.entries(snapshot?.files || {})
                       .map(([key, value]) => {
@@ -215,63 +240,71 @@ ${value.content}
                     ${commandActionsString}
                     </boltArtifact>
                     `, // Added commandActionsString, followupMessage, updated id and title
-                    annotations: [
-                      'no-store',
-                      ...(summary
-                        ? [
-                            {
-                              chatId: storedMessages.messages[snapshotIndex].id,
-                              type: 'chatSummary',
-                              summary,
-                            } satisfies ContextAnnotation,
-                          ]
-                        : []),
-                    ],
-                  },
+                      annotations: [
+                        'no-store',
+                        ...(summary
+                          ? [
+                              {
+                                chatId: storedMessages.messages[snapshotIndex].id,
+                                type: 'chatSummary',
+                                summary,
+                              } satisfies ContextAnnotation,
+                            ]
+                          : []),
+                      ],
+                    },
 
-                  // Remove the separate user and assistant messages for commands
-                  /*
-                   *...(commands !== null // This block is no longer needed
-                   *  ? [ ... ]
-                   *  : []),
-                   */
-                  ...filteredMessages,
-                ];
-                restoreSnapshot(mixedId);
+                    // Remove the separate user and assistant messages for commands
+                    /*
+                     *...(commands !== null // This block is no longer needed
+                     *  ? [ ... ]
+                     *  : []),
+                     */
+                    ...filteredMessages,
+                  ];
+
+                  // Snapshot already restored above, no need to call again here
+                }
+
+                setInitialMessages(filteredMessages);
+              } else {
+                // Chat found but empty (newly created) - load it without messages
+                logger.info(`📭 Loading empty chat: ${mixedId}`);
+                setInitialMessages([]);
+                setArchivedMessages([]);
+
+                // Even for empty chats, restore snapshot if it exists (e.g., user uploaded files)
+                if (snapshot && snapshot.files && Object.keys(snapshot.files).length > 0) {
+                  logger.info(`📦 Restoring snapshot for empty chat with ${Object.keys(snapshot.files).length} files`);
+                  restoreSnapshot(mixedId, snapshot);
+                }
               }
 
-              setInitialMessages(filteredMessages);
-            } else {
-              // Chat found but empty (newly created) - load it without messages
-              logger.info(`📭 Loading empty chat: ${mixedId}`);
-              setInitialMessages([]);
-              setArchivedMessages([]);
+              // Set chat metadata for both cases (with/without messages)
+              setUrlId(storedMessages.urlId);
+              description.set(storedMessages.description);
+              chatId.set(storedMessages.id);
+              chatMetadata.set(storedMessages.metadata);
+
+              // Sync backend project with IndexedDB data on navigation/reload
+              syncBackendProjectWithIndexedDB(storedMessages.id, storedMessages.description);
             }
 
-            // Set chat metadata for both cases (with/without messages)
-            setUrlId(storedMessages.urlId);
-            description.set(storedMessages.description);
-            chatId.set(storedMessages.id);
-            chatMetadata.set(storedMessages.metadata);
+            setReady(true);
+            setIsInitialLoad(false);
+          })
+          .catch((error) => {
+            logger.error(`❌ ERROR loading chat ${mixedId}:`, error);
+            logger.error(error);
 
-            // Sync backend project with IndexedDB data on navigation/reload
-            syncBackendProjectWithIndexedDB(storedMessages.id, storedMessages.description);
-          }
+            logStore.logError('Failed to load chat messages or snapshot', error);
+            toast.error('Failed to load chat: ' + error.message);
 
-          setReady(true);
-          setIsInitialLoad(false);
-        })
-        .catch((error) => {
-          logger.error(`❌ ERROR loading chat ${mixedId}:`, error);
-          logger.error(error);
-
-          logStore.logError('Failed to load chat messages or snapshot', error);
-          toast.error('Failed to load chat: ' + error.message);
-
-          // Set ready state even on error to prevent infinite loading
-          setReady(true);
-          setIsInitialLoad(false);
-        });
+            // Set ready state even on error to prevent infinite loading
+            setReady(true);
+            setIsInitialLoad(false);
+          });
+      })(); // Close async IIFE
     } else {
       /*
        * Handle case where there is no mixedId (e.g., new chat)
@@ -511,15 +544,24 @@ ${value.content}
   );
 
   const restoreSnapshot = useCallback(async (id: string, snapshot?: Snapshot) => {
+    logger.info(
+      '📦 restoreSnapshot called with id:',
+      id,
+      'snapshot files:',
+      snapshot ? Object.keys(snapshot.files || {}).length : 'no snapshot',
+    );
+
     // const snapshotStr = localStorage.getItem(`snapshot:${id}`); // Remove localStorage usage
     const container = await webcontainer;
 
     const validSnapshot = snapshot || { chatIndex: '', files: {} };
 
     if (!validSnapshot?.files) {
+      logger.warn('📦 No files in snapshot, skipping restore');
       return;
     }
 
+    logger.info('📦 Restoring', Object.keys(validSnapshot.files).length, 'files to WebContainer');
     logger.debug(': validSnapshot', validSnapshot);
 
     Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
@@ -608,15 +650,16 @@ ${value.content}
 
       /*
        * Only take snapshot if this is a new message being added, not during page load
-       * Skip ALL snapshots during AI streaming since AI response snapshots are now handled in Chat.client.tsx onFinish
+       * Skip ALL snapshots during AI streaming since AI response snapshots are handled in Chat.client.tsx onFinish
+       * This prevents duplicate snapshots during streaming
        */
       if (!isInitialLoad && messages.length > initialMessages.length) {
         const isCurrentlyStreaming = streamingState.get();
 
         /*
          * Skip snapshot creation only during active AI streaming
-         * AI response snapshots are now centralized to Chat.client.tsx onFinish callback
-         * But allow snapshots for user imports (like folder uploads) even if they create assistant messages
+         * AI response snapshots are triggered in Chat.client.tsx onFinish callback after streaming completes
+         * This allows snapshots for user imports (like folder uploads) even if they create assistant messages
          */
         if (!isCurrentlyStreaming) {
           // Determine the appropriate change type based on context

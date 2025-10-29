@@ -6,6 +6,7 @@ import { createScopedLogger } from '~/utils/logger';
 export type EditorDocuments = Record<string, EditorDocument>;
 
 type SelectedFile = WritableAtom<string | undefined>;
+type OpenTabs = WritableAtom<string[]>;
 
 const logger = createScopedLogger('EditorStore');
 
@@ -14,6 +15,7 @@ export class EditorStore {
 
   selectedFile: SelectedFile = import.meta.hot?.data.selectedFile ?? atom<string | undefined>();
   documents: MapStore<EditorDocuments> = import.meta.hot?.data.documents ?? map({});
+  openTabs: OpenTabs = import.meta.hot?.data.openTabs ?? atom<string[]>([]);
 
   currentDocument = computed([this.documents, this.selectedFile], (documents, selectedFile) => {
     if (!selectedFile) {
@@ -29,6 +31,7 @@ export class EditorStore {
     if (import.meta.hot) {
       import.meta.hot.data.documents = this.documents;
       import.meta.hot.data.selectedFile = this.selectedFile;
+      import.meta.hot.data.openTabs = this.openTabs;
     }
   }
 
@@ -61,6 +64,38 @@ export class EditorStore {
   }
 
   setSelectedFile(filePath: string | undefined) {
+    this.selectedFile.set(filePath);
+
+    // Add to open tabs if not already there
+    if (filePath) {
+      const currentTabs = this.openTabs.get();
+
+      if (!currentTabs.includes(filePath)) {
+        this.openTabs.set([...currentTabs, filePath]);
+      }
+    }
+  }
+
+  closeTab(filePath: string) {
+    const currentTabs = this.openTabs.get();
+    const newTabs = currentTabs.filter((tab) => tab !== filePath);
+    this.openTabs.set(newTabs);
+
+    // If closing the selected file, select another tab
+    if (this.selectedFile.get() === filePath) {
+      const index = currentTabs.indexOf(filePath);
+      const nextTab = newTabs[Math.max(0, index - 1)] || newTabs[0];
+      this.selectedFile.set(nextTab);
+    }
+  }
+
+  closeAllTabs() {
+    this.openTabs.set([]);
+    this.selectedFile.set(undefined);
+  }
+
+  closeOtherTabs(filePath: string) {
+    this.openTabs.set([filePath]);
     this.selectedFile.set(filePath);
   }
 
