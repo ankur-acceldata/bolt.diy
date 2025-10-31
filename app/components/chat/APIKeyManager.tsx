@@ -59,7 +59,24 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
     }
 
     try {
-      const response = await fetch(`/api/check-env-key?provider=${encodeURIComponent(provider.name)}`);
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`/api/check-env-key?provider=${encodeURIComponent(provider.name)}`, {
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        logger.warn(`Provider check returned ${response.status} for ${provider.name}`);
+        setIsEnvKeySet(false);
+        providerEnvKeyStatusCache[provider.name] = false;
+        return;
+      }
+
       const data = await response.json();
       const isSet = (data as { isSet: boolean }).isSet;
 
@@ -67,8 +84,14 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
       providerEnvKeyStatusCache[provider.name] = isSet;
       setIsEnvKeySet(isSet);
     } catch (error) {
-      logger.error('Failed to check environment API key:', error);
+      // Network errors, timeout, or JSON parsing errors - fail gracefully
+      if ((error as Error).name === 'AbortError') {
+        logger.warn(`Provider check timed out for ${provider.name}`);
+      } else {
+        logger.warn('Failed to check environment API key:', error);
+      }
       setIsEnvKeySet(false);
+      providerEnvKeyStatusCache[provider.name] = false;
     }
   }, [provider.name]);
 

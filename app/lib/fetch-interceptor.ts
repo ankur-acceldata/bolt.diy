@@ -120,51 +120,56 @@ export function installFetchInterceptor(): void {
 
   // Replace global fetch with our interceptor
   globalThis.fetch = function interceptedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    let url: string;
+    try {
+      let url: string;
 
-    if (typeof input === 'string') {
-      url = input;
-    } else if (input instanceof URL) {
-      url = input.toString();
-    } else if (input instanceof Request) {
-      url = input.url;
-    } else {
-      // Fallback for other types
-      url = String(input);
-    }
+      if (typeof input === 'string') {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.toString();
+      } else if (input instanceof Request) {
+        url = input.url;
+      } else {
+        // Fallback for other types
+        url = String(input);
+      }
 
-    // Apply base path if needed
-    const finalUrl = applyBasePath(url);
+      // Apply base path if needed
+      const finalUrl = applyBasePath(url);
 
-    // Apply authorization headers if needed
-    const finalInit = applyAuthHeaders(url, init);
+      // Apply authorization headers if needed
+      const finalInit = applyAuthHeaders(url, init);
 
-    // Call original fetch with the modified URL and headers
-    if (typeof input === 'string') {
-      return originalFetch(finalUrl, finalInit);
-    } else if (input instanceof URL) {
-      return originalFetch(new URL(finalUrl), finalInit);
-    } else if (input instanceof Request) {
-      // Create a new request with the modified URL and headers
-      const enhancedInit = applyAuthHeaders(url, init);
-      const newRequest = new Request(finalUrl, {
-        method: input.method,
-        headers: input.headers,
-        body: input.body,
-        mode: input.mode,
-        credentials: input.credentials,
-        cache: input.cache,
-        redirect: input.redirect,
-        referrer: input.referrer,
-        referrerPolicy: input.referrerPolicy,
-        integrity: input.integrity,
-        signal: input.signal,
-        ...enhancedInit, // Apply auth headers and allow init to override
-      });
+      // Call original fetch with the modified URL and headers
+      if (typeof input === 'string') {
+        return originalFetch(finalUrl, finalInit);
+      } else if (input instanceof URL) {
+        return originalFetch(new URL(finalUrl), finalInit);
+      } else if (input instanceof Request) {
+        // Create a new request with the modified URL and headers
+        const enhancedInit = applyAuthHeaders(url, init);
+        const newRequest = new Request(finalUrl, {
+          method: input.method,
+          headers: input.headers,
+          body: input.body,
+          mode: input.mode,
+          credentials: input.credentials,
+          cache: input.cache,
+          redirect: input.redirect,
+          referrer: input.referrer,
+          referrerPolicy: input.referrerPolicy,
+          integrity: input.integrity,
+          signal: input.signal,
+          ...enhancedInit, // Apply auth headers and allow init to override
+        });
 
-      return originalFetch(newRequest);
-    } else {
-      return originalFetch(finalUrl, finalInit);
+        return originalFetch(newRequest);
+      } else {
+        return originalFetch(finalUrl, finalInit);
+      }
+    } catch (error) {
+      // If there's an error in the interceptor itself, reject the promise
+      return Promise.reject(error);
     }
   };
 
