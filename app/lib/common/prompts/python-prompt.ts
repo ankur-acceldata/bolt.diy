@@ -386,19 +386,21 @@ DO NOT ADD ICEBERG/HIVE/HADOOP CONFIGS FOR:
 ❌ Stream processing without Hive/Iceberg
 ❌ In-memory data processing
 
-DECISION MATRIX:
-| Use Case | Minimal | +Iceberg | +Hive | +Hadoop/Kerberos |
-|----------|---------|----------|-------|------------------|
-| Read CSV/JSON/Parquet | ✅ | ❌ | ❌ | ❌ |
-| Trino JDBC queries | ✅ | ❌ | ❌ | ❌ |
-| Datastore migration | ✅ | ❌ | ❌ | ❌ |
-| Basic transformations | ✅ | ❌ | ❌ | ❌ |
-| Iceberg table operations | ❌ | ✅ | ❌ | ❌ |
-| Hive table access | ❌ | ❌ | ✅ | ❌ |
-| Secure Hadoop cluster | ❌ | ❌ | ✅ | ✅ |
-| Iceberg + Hive metastore | ❌ | ✅ | ✅ | ❌ |
+DECISION MATRIX - Hadoop/Kerberos Env Vars in Dockerfile:
+| Use Case | Minimal SparkSession | +Iceberg Config | +Hive Support | Hadoop/Kerberos ENV Vars |
+|----------|---------------------|-----------------|---------------|--------------------------|
+| Read CSV/JSON/Parquet | ✅ | ❌ | ❌ | ❌ (commented out) |
+| Trino JDBC queries | ✅ | ❌ | ❌ | ❌ (commented out) |
+| Datastore migration | ✅ | ❌ | ❌ | ❌ (commented out) |
+| Basic transformations | ✅ | ❌ | ❌ | ❌ (commented out) |
+| PostgreSQL/Snowflake/S3 | ✅ | ❌ | ❌ | ❌ (commented out) |
+| Iceberg table operations | ❌ | ✅ | ❌ | ❌ (commented out) |
+| Hive table access | ❌ | ❌ | ✅ | ❌ (commented out) |
+| Secure Hadoop + Kerberos | ❌ | ❌ | ✅ | ✅ (uncommented ONLY) |
+| Iceberg + Hive metastore | ❌ | ✅ | ✅ | ❌ (commented out) |
 
-PRINCIPLE: Start minimal, add complexity only when requirements explicitly demand it.
+🚨 KEY PRINCIPLE: Start minimal, keep Hadoop/Kerberos vars COMMENTED OUT by default.
+ONLY uncomment when user EXPLICITLY mentions Kerberos authentication or secure Hadoop clusters.
 </spark_configuration_guidelines>
 
 <spark_connect_compatibility>
