@@ -413,6 +413,10 @@ export const Menu = () => {
             <div className="flex gap-2">
               <a
                 href={getBasePath()}
+                onClick={() => {
+                  // Set a flag to indicate intentional navigation to home
+                  sessionStorage.setItem('bolt_navigation_intent', 'new_chat');
+                }}
                 className="flex-1 flex gap-2 items-center bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent font-medium hover:bg-bolt-elements-item-backgroundAccent hover:opacity-90 rounded-lg px-4 py-2 transition-colors"
               >
                 <span className="inline-block i-ph:plus-circle h-4 w-4" />
