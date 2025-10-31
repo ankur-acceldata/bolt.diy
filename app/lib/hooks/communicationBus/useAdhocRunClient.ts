@@ -73,11 +73,11 @@ Required format:
   <boltAction type="shell">
 pip install --no-cache-dir -r requirements.txt
   </boltAction>
-  
+
   <boltAction type="shell">
 python3 -m current_app_name
   </boltAction>
-  
+
   Include auto-run action as instructed when applicable
 </boltArtifact>
 
@@ -156,7 +156,9 @@ python3 -m current_app_name
           executionConfig: {
             jobType: (jobType as JobType) || 'SPARK_CONNECT_PYTHON_ADHOC',
             image: baseImage || '191579300362.dkr.ecr.us-east-1.amazonaws.com/acceldata/xdp/dp/spark:4.0.0-sc',
-            imagePullSecrets: (executionConfig as any)?.imagePullSecrets || ['registry-secret'],
+            imagePullSecrets: (executionConfig as any)?.imagePullSecrets?.length > 0 
+              ? (executionConfig as any).imagePullSecrets 
+              : ['registry-ecr-secret'],
             imagePullPolicy: (executionConfig as any)?.imagePullPolicy || 'IfNotPresent',
             codeSource: {
               type: 'MINIO',
