@@ -352,15 +352,24 @@ return SparkSession.builder \\
 \`\`\`
 
 WHEN TO ADD HADOOP/KERBEROS ENVIRONMENT VARIABLES:
-Add Hadoop/Kerberos env vars in Dockerfile ONLY when:
-✅ Running on Kerberos-secured Hadoop clusters
-✅ Accessing HDFS with Kerberos authentication
-✅ Using Hive with Kerberos security
-✅ Integrating with secure enterprise Hadoop infrastructure
+🚨 CRITICAL: DO NOT ADD BY DEFAULT! Only add when explicitly required.
 
-Hadoop/Kerberos Dockerfile Pattern:
+Add Hadoop/Kerberos env vars in Dockerfile ONLY when:
+✅ User explicitly mentions Kerberos authentication
+✅ User explicitly mentions HDFS access with Kerberos
+✅ User explicitly mentions secure Hadoop cluster
+✅ Job specifically requires Hive with Kerberos security
+
+❌ DO NOT ADD if:
+- Job is not explicitly Hadoop/Kerberos-driven
+- Working with Trino, PostgreSQL, Snowflake, S3 (non-Hadoop datastores)
+- Simple PySpark transformations
+- No mention of Kerberos or secure Hadoop in requirements
+
+Hadoop/Kerberos Dockerfile Pattern (ONLY when required):
 \`\`\`dockerfile
 # Add these environment variables ONLY for Hadoop/Kerberos
+# MOST JOBS DO NOT NEED THESE - Keep them commented out by default
 ENV HADOOP_CONF_DIR=/etc/hadoop/conf \\
     JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
     KRB5_CONFIG=/etc/krb5.conf \\
@@ -591,10 +600,12 @@ DOCKERFILE REQUIREMENTS:
 2. CRITICAL: openjdk:11-jre-slim is Debian-based, so MUST use apt-get (NOT yum, apk, or other package managers)
 3. ALWAYS start with USER root for installation
 4. ALWAYS set SPARK_HOME and SPARK_JARS_DIR environment variables
-5. CONDITIONALLY include Hadoop/Kerberos configuration (only when needed):
-   - Add HADOOP_CONF_DIR, JAVA_SECURITY_KRB5_CONF, KRB5_CONFIG if using Hadoop/Hive/Kerberos
-   - Add SPARK_USER and HADOOP_USER="185" if running on secure Hadoop clusters
-   - Omit these for simple PySpark jobs without Hadoop integration
+5. 🚨 CRITICAL: DO NOT include Hadoop/Kerberos environment variables by default:
+   - DEFAULT BEHAVIOR: Leave HADOOP_CONF_DIR, JAVA_SECURITY_KRB5_CONF, KRB5_CONFIG commented out
+   - ONLY uncomment these when user explicitly requires Kerberos/secure Hadoop
+   - ONLY add SPARK_USER and HADOOP_USER="185" for Kerberos-secured clusters
+   - 99% of jobs DO NOT need these variables - keep them commented out
+   - If in doubt, DO NOT add them
 6. ALWAYS use virtual environment pattern:
    - Create venv at /opt/venv
    - Install requirements in venv
@@ -619,7 +630,9 @@ COMMON DOCKERFILE ERRORS TO AVOID:
 ❌ Including HEALTHCHECK instruction
 ❌ Including EXPOSE instruction
 ❌ Not using virtual environment pattern
-❌ Always including Kerberos/Hadoop configuration (add only when needed)
+❌ 🚨 CRITICAL: Adding Hadoop/Kerberos environment variables for non-Hadoop jobs
+   - HADOOP_CONF_DIR, JAVA_SECURITY_KRB5_CONF, KRB5_CONFIG should stay COMMENTED OUT by default
+   - Only uncomment when user explicitly mentions Kerberos/secure Hadoop in requirements
 ❌ Not switching to USER 185
 ❌ Missing SPARK_HOME and SPARK_JARS_DIR
 ❌ Missing chmod 777 /app
