@@ -132,8 +132,17 @@ export function LogViewer({
 
   // Auto-send logic - only for the latest log viewer instance
   const scheduleAutoSend = useCallback(() => {
-    // Only auto-send if this is the latest instance
-    if (!isLatest || !autoSendEnabled || !onSendMessage || logs.length === 0 || autoSendCountRef.current >= 5) {
+    // Only auto-send if this is the latest instance and stream is closed/completed
+    const isStreamClosed = !isConnected && !isConnecting && !isInitializing;
+
+    if (
+      !isLatest ||
+      !autoSendEnabled ||
+      !onSendMessage ||
+      logs.length === 0 ||
+      autoSendCountRef.current >= 5 ||
+      !isStreamClosed
+    ) {
       return;
     }
 
@@ -146,7 +155,16 @@ export function LogViewer({
     autoSendTimeoutRef.current = setTimeout(() => {
       sendLogsToChat(true); // Force auto-send mode
     }, 4500); // 4.5 seconds
-  }, [isLatest, autoSendEnabled, onSendMessage, logs.length, sendLogsToChat]);
+  }, [
+    isLatest,
+    autoSendEnabled,
+    onSendMessage,
+    logs.length,
+    sendLogsToChat,
+    isConnected,
+    isConnecting,
+    isInitializing,
+  ]);
 
   // Reset auto-send count when auto-send is toggled or logs are cleared
   const toggleAutoSend = useCallback(() => {

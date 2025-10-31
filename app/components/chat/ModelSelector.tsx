@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { classNames } from '~/utils/classNames';
+import { detectConfiguredProvider } from '~/lib/utils/providerDetection';
 
 interface ModelSelectorProps {
   model?: string;
@@ -52,6 +53,8 @@ export const ModelSelector = ({
   const providerOptionsRef = useRef<(HTMLDivElement | null)[]>([]);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
   const [showFreeModelsOnly, setShowFreeModelsOnly] = useState(false);
+  const [isProviderLocked, setIsProviderLocked] = useState(false);
+  const [hasDetectedProvider, setHasDetectedProvider] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -217,6 +220,37 @@ export const ModelSelector = ({
     }
   }, [focusedProviderIndex]);
 
+  // Detect configured provider on mount
+  useEffect(() => {
+    if (providerList.length === 0 || hasDetectedProvider) {
+      return;
+    }
+
+    const detectProvider = async () => {
+      const { provider: detectedProvider, hasMultipleProviders } = await detectConfiguredProvider(providerList);
+
+      if (detectedProvider) {
+        // Lock the provider dropdown if only one provider is configured
+        setIsProviderLocked(!hasMultipleProviders);
+
+        // Set the detected provider
+        setProvider?.(detectedProvider);
+
+        // Get all models for this provider and pick the first one
+        const providerModels = modelList.filter((m) => m.provider === detectedProvider.name);
+        const firstModel = providerModels[0];
+
+        if (firstModel && setModel) {
+          setModel(firstModel.name);
+        }
+
+        setHasDetectedProvider(true);
+      }
+    };
+
+    detectProvider();
+  }, [providerList, modelList, setProvider, setModel, hasDetectedProvider]);
+
   useEffect(() => {
     if (providerList.length === 0) {
       return;
@@ -256,12 +290,13 @@ export const ModelSelector = ({
             'w-full p-2 rounded-lg border border-bolt-elements-borderColor',
             'bg-bolt-elements-prompt-background text-bolt-elements-textPrimary',
             'focus-within:outline-none focus-within:ring-2 focus-within:ring-bolt-elements-focus',
-            'transition-all cursor-pointer',
+            'transition-all',
+            isProviderLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
             isProviderDropdownOpen ? 'ring-2 ring-bolt-elements-focus' : undefined,
           )}
-          onClick={() => setIsProviderDropdownOpen(!isProviderDropdownOpen)}
+          onClick={() => !isProviderLocked && setIsProviderDropdownOpen(!isProviderDropdownOpen)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+            if (!isProviderLocked && (e.key === 'Enter' || e.key === ' ')) {
               e.preventDefault();
               setIsProviderDropdownOpen(!isProviderDropdownOpen);
             }
@@ -270,20 +305,31 @@ export const ModelSelector = ({
           aria-expanded={isProviderDropdownOpen}
           aria-controls="provider-listbox"
           aria-haspopup="listbox"
-          tabIndex={0}
+          aria-disabled={isProviderLocked}
+          tabIndex={isProviderLocked ? -1 : 0}
         >
           <div className="flex items-center justify-between">
-            <div className="truncate">{provider?.name || 'Select provider'}</div>
-            <div
-              className={classNames(
-                'i-ph:caret-down w-4 h-4 text-bolt-elements-textSecondary opacity-75',
-                isProviderDropdownOpen ? 'rotate-180' : undefined,
+            <div className="flex items-center gap-2 truncate">
+              <span className="truncate">{provider?.name || 'Select provider'}</span>
+              {isProviderLocked && (
+                <span
+                  className="i-ph:lock-simple-fill w-3 h-3 text-bolt-elements-textTertiary"
+                  title="Provider locked (configured via environment)"
+                />
               )}
-            />
+            </div>
+            {!isProviderLocked && (
+              <div
+                className={classNames(
+                  'i-ph:caret-down w-4 h-4 text-bolt-elements-textSecondary opacity-75',
+                  isProviderDropdownOpen ? 'rotate-180' : undefined,
+                )}
+              />
+            )}
           </div>
         </div>
 
-        {isProviderDropdownOpen && (
+        {isProviderDropdownOpen && !isProviderLocked && (
           <div
             className="absolute z-20 w-full mt-1 py-1 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 shadow-lg"
             role="listbox"

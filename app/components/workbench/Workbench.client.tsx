@@ -61,8 +61,11 @@ export const Workbench = memo(
     const { forceSync, isInitialized: syncInitialized, syncStatus, currentProjectId } = useSync();
     const { syncEnabled } = useSettings();
 
-    // Use extracted hooks
-    const { isExecuting, executeAdhocRun } = useAdhocRunClient();
+    // Use extracted hooks with callbacks for LLM prompting
+    const { isExecuting, executeAdhocRun } = useAdhocRunClient({
+      onSendMessage,
+      onSetChatInput,
+    });
 
     // Handle pipeline config messages
     usePipelineConfigResponder({

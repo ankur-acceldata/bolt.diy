@@ -7,7 +7,6 @@ export interface TemplateConfig {
   jobType: string;
   type: string;
   stages: string[];
-  fallbackStages: string[];
   codeSourceUrl: string;
 }
 
@@ -22,11 +21,6 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
         return {
           jobType: 'SPARK_CONNECT_JAVA_ADHOC',
           type: 'Java',
-          fallbackStages: [
-            'mvn clean compile',
-            'mvn exec:java -Dexec.mainClass="Main"',
-            "echo 'Java execution completed successfully'",
-          ],
           codeSourceUrl: 'home/projects',
         };
       case 'python-application':
@@ -34,11 +28,6 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
         return {
           jobType: 'SPARK_CONNECT_PYTHON_ADHOC',
           type: 'Python',
-          fallbackStages: [
-            'pip install -r requirements.txt --no-cache-dir',
-            'python3 main.py',
-            "echo 'Python execution completed successfully'",
-          ],
           codeSourceUrl: 'home/projects',
         };
     }
@@ -47,8 +36,8 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
   const defaults = getTemplateDefaults(template?.id);
 
   /*
-   * Use extracted commands if available, otherwise try to get last complete AI commands,
-   * and only fall back to hardcoded defaults as a last resort
+   * Use extracted commands if available, otherwise try to get last complete AI commands.
+   * If no commands are found, return empty stages array to trigger LLM prompt.
    */
   let stages = extractedCommands;
 
@@ -58,17 +47,16 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
 
     if (lastCompleteCommands.length > 0) {
       stages = lastCompleteCommands;
-      logger.info('Using last complete AI command set instead of hardcoded fallback:', {
+      logger.info('Using last complete AI command set:', {
         commands: lastCompleteCommands,
         templateId: template?.id,
       });
     } else {
-      // Final fallback to hardcoded defaults
-      stages = defaults.fallbackStages;
-      logger.warn('No AI commands found, using hardcoded fallback stages:', {
-        fallbackStages: defaults.fallbackStages,
+      // No commands found - return empty array to trigger LLM prompt
+      logger.warn('No install/build commands found. Will prompt LLM to generate them.', {
         templateId: template?.id,
       });
+      stages = [];
     }
   } else {
     logger.info('Using extracted commands from latest artifact:', {
@@ -81,7 +69,6 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
     jobType: defaults.jobType,
     type: defaults.type,
     stages,
-    fallbackStages: defaults.fallbackStages,
     codeSourceUrl: defaults.codeSourceUrl,
   };
 }

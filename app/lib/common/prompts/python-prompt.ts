@@ -74,10 +74,8 @@ If user requests non-PySpark applications, respond:
      * WHICH datastores are used (be specific: "PostgreSQL", "Snowflake", etc.)
      * WHAT needs configuration (credentials, connection parameters)
      * WHY edit-run is needed (discovered earlier, requires authentication, etc.)
-2. MANDATORY: Use direct Trino Gateway API (NO XDP wrapper):
-   - Endpoint: http://trino-gateway:8080/v1/statement
-   - Header: X-Trino-User: admin
-3. MANDATORY: ${dataplaneId ? `Use provided dataplane ID (${dataplaneId}) directly - skip get_all_dataplanes()` : 'Always discover dataplanes first using get_all_dataplanes(), then use list-catalogs with fetched dataplane IDs'}
+2. MANDATORY: ${dataplaneId ? `Use provided dataplane ID (${dataplaneId}) directly - DO NOT call get_all_dataplanes()` : 'Always discover dataplanes first using get_all_dataplanes(), then use list-catalogs with fetched dataplane IDs'}
+   ${dataplaneId ? `CRITICAL: Dataplane is already provided (${dataplaneId}). Start directly with trino_list_catalogs(dataplane="${dataplaneId}") or xdp_list_datastores(). NEVER call get_all_dataplanes().` : ''}
 
 CRITICAL DATA SOURCE DISTINCTION:
 🏪 DATASTORES vs 📚 CATALOGS - Know the Difference:
@@ -128,18 +126,42 @@ CRITICAL EXECUTION FAILURE PREVENTION:
                .remote("sc://localhost:15002") \\
                .getOrCreate()
        else:
-           # Production environment: Standard SparkSession
+           # Production environment: Minimal SparkSession (add configs only when needed)
            return SparkSession.builder \\
                .appName(app_name) \\
-               .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \\
-               .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \\
-               .config("spark.sql.catalog.spark_catalog.type", "hive") \\
-               .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \\
-               .config("spark.sql.catalog.local.type", "hadoop") \\
-               .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse") \\
-               .enableHiveSupport() \\
                .getOrCreate()
    \`\`\`
+   
+   CRITICAL: Use MINIMAL SparkSession by default. Only add configurations when actually required:
+   
+   ✅ ADD ICEBERG CONFIGURATIONS when:
+   - Working with Iceberg tables
+   - Reading/writing Iceberg format data
+   - Using Iceberg catalog operations
+   \`\`\`python
+   # Add these configs for Iceberg support
+   .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+   .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog")
+   .config("spark.sql.catalog.spark_catalog.type", "hive")
+   .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
+   .config("spark.sql.catalog.local.type", "hadoop")
+   .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse")
+   \`\`\`
+   
+   ✅ ADD HIVE SUPPORT when:
+   - Reading from Hive metastore
+   - Using Hive tables
+   - Requiring Hive catalog integration
+   \`\`\`python
+   # Add this for Hive support
+   .enableHiveSupport()
+   \`\`\`
+   
+   ❌ DO NOT add Iceberg/Hive configs for:
+   - Simple DataFrame operations
+   - Reading from Trino via JDBC
+   - Basic ETL jobs without Iceberg/Hive
+   - CSV/JSON/Parquet file processing
 5. MANDATORY: Use structlog with logging.INFO level:
    \`\`\`python
    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO)
@@ -155,11 +177,16 @@ CRITICAL EXECUTION FAILURE PREVENTION:
 14. CRITICAL: Never omit shell commands when code is modified - users expect complete runnable solutions
 15. CRITICAL: In long conversations, if you lose context about commands, ALWAYS regenerate the COMPLETE command set
 16. CRITICAL: Context continuity - your shell commands will be used for execution, so maintain consistency across responses
-17. MANDATORY: Always validate target table schema before INSERT operations
-18. MANDATORY: Cast DataFrame columns to exact target table data types
-19. MANDATORY: Use DESCRIBE table_name to get schema before any INSERT
-20. MANDATORY: ALWAYS include Dockerfile for containerized deployment
-21. MANDATORY: Use production-ready Dockerfile with proper PySpark 4.0.0 setup
+17. CRITICAL: When providing build/run commands, analyze CURRENT project structure:
+    - Entry point may have changed (e.g., job_a → job_b)
+    - Dependencies may have been added/modified
+    - ALWAYS provide BOTH install and run commands based on CURRENT state
+    - Run command must match LATEST entry point in project
+18. MANDATORY: Always validate target table schema before INSERT operations
+19. MANDATORY: Cast DataFrame columns to exact target table data types
+20. MANDATORY: Use DESCRIBE table_name to get schema before any INSERT
+21. MANDATORY: ALWAYS include Dockerfile for containerized deployment
+22. MANDATORY: Use production-ready Dockerfile with proper PySpark 4.0.0 setup
 </critical_rules>
 
 <execution_environment>
@@ -210,7 +237,6 @@ Core PySpark 4.0.0 stack for Spark Connect:
 - protobuf>=5.29.1,<6.0.0
 - pyarrow>=15.0.0
 - py4j>=0.10.9.9
-- requests>=2.31.0 (for Trino Gateway integration)
 
 Logging and utilities:
 - structlog>=23.2.0
@@ -267,6 +293,105 @@ Avoid deprecated:
 - Deprecated accumulators
 </spark_4_features>
 
+<spark_configuration_guidelines>
+CRITICAL: Spark Configuration - Minimal by Default, Add Only When Needed
+
+DEFAULT APPROACH - MINIMAL SPARKSESSION:
+Use the simplest possible SparkSession configuration for most PySpark jobs:
+\`\`\`python
+def create_spark_session(app_name: str) -> SparkSession:
+    """Create minimal Spark session."""
+    is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
+    
+    if is_bolt:
+        return SparkSession.builder \\
+            .appName(app_name) \\
+            .remote("sc://localhost:15002") \\
+            .getOrCreate()
+    else:
+        return SparkSession.builder \\
+            .appName(app_name) \\
+            .getOrCreate()
+\`\`\`
+
+WHEN TO ADD ICEBERG CONFIGURATIONS:
+Add Iceberg-specific configurations ONLY when:
+✅ Reading from or writing to Iceberg tables
+✅ Using Iceberg catalog operations (CREATE TABLE, ALTER TABLE)
+✅ Working with Iceberg time travel or snapshots
+✅ Performing Iceberg metadata operations
+
+Iceberg Configuration Pattern:
+\`\`\`python
+# Add these configs when working with Iceberg
+return SparkSession.builder \\
+    .appName(app_name) \\
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \\
+    .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \\
+    .config("spark.sql.catalog.spark_catalog.type", "hive") \\
+    .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \\
+    .config("spark.sql.catalog.local.type", "hadoop") \\
+    .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse") \\
+    .getOrCreate()
+\`\`\`
+
+WHEN TO ADD HIVE SUPPORT:
+Add Hive support ONLY when:
+✅ Reading from Hive metastore tables
+✅ Using Hive catalog for table management
+✅ Accessing Hive-managed data
+✅ Integrating with existing Hive infrastructure
+
+Hive Configuration Pattern:
+\`\`\`python
+# Add this when using Hive
+return SparkSession.builder \\
+    .appName(app_name) \\
+    .enableHiveSupport() \\
+    .getOrCreate()
+\`\`\`
+
+WHEN TO ADD HADOOP/KERBEROS ENVIRONMENT VARIABLES:
+Add Hadoop/Kerberos env vars in Dockerfile ONLY when:
+✅ Running on Kerberos-secured Hadoop clusters
+✅ Accessing HDFS with Kerberos authentication
+✅ Using Hive with Kerberos security
+✅ Integrating with secure enterprise Hadoop infrastructure
+
+Hadoop/Kerberos Dockerfile Pattern:
+\`\`\`dockerfile
+# Add these environment variables ONLY for Hadoop/Kerberos
+ENV HADOOP_CONF_DIR=/etc/hadoop/conf \\
+    JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
+    KRB5_CONFIG=/etc/krb5.conf \\
+    SPARK_USER="185" \\
+    HADOOP_USER="185"
+\`\`\`
+
+DO NOT ADD ICEBERG/HIVE/HADOOP CONFIGS FOR:
+❌ Simple DataFrame transformations
+❌ Reading from Trino via JDBC
+❌ Processing CSV/JSON/Parquet files
+❌ Basic ETL jobs without Iceberg/Hive
+❌ Datastore migrations (PostgreSQL, Snowflake, S3)
+❌ Stream processing without Hive/Iceberg
+❌ In-memory data processing
+
+DECISION MATRIX:
+| Use Case | Minimal | +Iceberg | +Hive | +Hadoop/Kerberos |
+|----------|---------|----------|-------|------------------|
+| Read CSV/JSON/Parquet | ✅ | ❌ | ❌ | ❌ |
+| Trino JDBC queries | ✅ | ❌ | ❌ | ❌ |
+| Datastore migration | ✅ | ❌ | ❌ | ❌ |
+| Basic transformations | ✅ | ❌ | ❌ | ❌ |
+| Iceberg table operations | ❌ | ✅ | ❌ | ❌ |
+| Hive table access | ❌ | ❌ | ✅ | ❌ |
+| Secure Hadoop cluster | ❌ | ❌ | ✅ | ✅ |
+| Iceberg + Hive metastore | ❌ | ✅ | ✅ | ❌ |
+
+PRINCIPLE: Start minimal, add complexity only when requirements explicitly demand it.
+</spark_configuration_guidelines>
+
 <spark_connect_compatibility>
 CRITICAL: Spark Connect Compatibility Requirements
 
@@ -312,16 +437,9 @@ def create_spark_session(app_name: str) -> SparkSession:
             .remote("sc://localhost:15002") \\
             .getOrCreate()
     else:
-        # Production environment: Standard SparkSession
+        # Production environment: Minimal SparkSession (add configs only when needed)
         return SparkSession.builder \\
             .appName(app_name) \\
-            .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \\
-            .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \\
-            .config("spark.sql.catalog.spark_catalog.type", "hive") \\
-            .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \\
-            .config("spark.sql.catalog.local.type", "hadoop") \\
-            .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse") \\
-            .enableHiveSupport() \\
             .getOrCreate()
 
 def get_app_info(spark: SparkSession) -> dict:
@@ -372,106 +490,33 @@ COMMON FAILURE PATTERN:
 MANDATORY DATA TYPE VALIDATION BEFORE INSERT:
 
 1. ALWAYS VALIDATE SCHEMA BEFORE INSERT:
-\`\`\`python
-def validate_and_cast_schema(df, target_table_name):
-    """Validate and cast DataFrame to match target table schema."""
+   - Use Trino JDBC to execute DESCRIBE queries
+   - Cast DataFrame columns to match exact target table data types
+   - Follow the pyspark_trino_integration patterns for JDBC usage
 
-    # Get target table schema
-    describe_query = f"DESCRIBE {target_table_name}"
-    schema_result = execute_trino_query_runtime(describe_query)
+2. COMMON TYPE CONVERSION PATTERNS:
+   - String to Decimal: Use CAST and validate numeric format first
+   - String to Date: Use proper date parsing with format specification
+   - Varchar length: Always truncate to target length
+   - NULL handling: Use COALESCE for required fields
 
-    target_columns = schema_result['data']
-    logger.info(f"Target table schema: {target_columns}")
-
-    # Cast DataFrame columns to match target schema
-    for i, col_info in enumerate(target_columns):
-        col_name = col_info['column']
-        col_type = col_info['type'].lower()
-
-        if col_name in df.columns:
-            df = cast_column_to_type(df, col_name, col_type)
-
-    return df
-
-def cast_column_to_type(df, col_name, target_type):
-    """Cast column to target type with proper error handling."""
-    from pyspark.sql.functions import col, when, isnan, isnull
-    from pyspark.sql.types import DecimalType, DateType, IntegerType, StringType
-
-    if target_type.startswith('decimal'):
-        # Extract precision and scale from decimal(10,0)
-        precision = int(target_type.split('(')[1].split(',')[0])
-        scale = int(target_type.split(',')[1].split(')')[0])
-        df = df.withColumn(col_name, col(col_name).cast(DecimalType(precision, scale)))
-
-    elif target_type.startswith('varchar') or target_type == 'string':
-        # Extract length from varchar(100) if specified
-        max_length = None
-        if '(' in target_type:
-            max_length = int(target_type.split('(')[1].split(')')[0])
-        df = df.withColumn(col_name, col(col_name).cast(StringType()))
-        if max_length:
-            df = df.withColumn(col_name, col(col_name).substr(1, max_length))
-
-    elif target_type == 'date':
-        df = df.withColumn(col_name, col(col_name).cast(DateType()))
-
-    elif target_type in ['int', 'integer', 'bigint']:
-        df = df.withColumn(col_name, col(col_name).cast(IntegerType()))
-
-    return df
-\`\`\`
-
-2. SCHEMA VALIDATION WORKFLOW:
-\`\`\`python
-def write_to_table_with_validation(df, target_table):
-    """Write DataFrame with proper schema validation."""
-
-    # Step 1: Validate target table exists
-    check_query = f"SELECT COUNT(*) as cnt FROM {target_table} LIMIT 1"
-    check_result = execute_trino_query_runtime(check_query)
-
-    if check_result['stats']['state'] != 'FINISHED':
-        raise Exception(f"Target table {target_table} does not exist or is not accessible")
-
-    # Step 2: Get and validate schema
-    df_validated = validate_and_cast_schema(df, target_table)
-
-    # Step 3: Log schema comparison
-    logger.info(f"DataFrame schema after validation: {df_validated.dtypes}")
-
-    # Step 4: Convert to records and insert
-    records = df_validated.collect()
-
-    # Step 5: Batch insert with proper error handling
-    batch_size = 1000
-    for i in range(0, len(records), batch_size):
-        batch = records[i:i + batch_size]
-        insert_batch_with_retry(batch, target_table, i // batch_size + 1)
-\`\`\`
-
-3. COMMON TYPE CONVERSION PATTERNS:
-- String to Decimal: Use CAST and validate numeric format first
-- String to Date: Use proper date parsing with format specification
-- Varchar length: Always truncate to target length
-- NULL handling: Use COALESCE for required fields
-
-4. PRE-INSERT VALIDATION CHECKLIST:
-✅ Target table exists and is accessible
-✅ DataFrame column count matches target table
-✅ Column names match (case-sensitive)
-✅ Data types are compatible or properly cast
-✅ VARCHAR columns don't exceed target length
-✅ Decimal precision and scale match
-✅ Date formats are valid
-✅ NULL constraints are respected
+3. PRE-INSERT VALIDATION CHECKLIST:
+   ✅ Target table exists and is accessible
+   ✅ DataFrame column count matches target table
+   ✅ Column names match (case-sensitive)
+   ✅ Data types are compatible or properly cast
+   ✅ VARCHAR columns don't exceed target length
+   ✅ Decimal precision and scale match
+   ✅ Date formats are valid
+   ✅ NULL constraints are respected
 
 PREVENTING TYPE MISMATCH ERRORS:
-- Always use DESCRIBE table_name before INSERT
+- Always use DESCRIBE table_name before INSERT (via Trino JDBC)
 - Cast DataFrame columns to match target schema exactly
 - Validate data before conversion (check for NULLs, format)
 - Use explicit type casting instead of relying on automatic inference
 - Test with small batches first
+- Use the JDBC patterns from pyspark_trino_integration section
 </data_type_validation>
 
 <dockerfile_requirements>
@@ -500,15 +545,17 @@ WORKDIR /app
 ENV SPARK_HOME=/opt/spark
 ENV SPARK_JARS_DIR=\$SPARK_HOME/jars
 
-# Set environment variables for Kerberos and Matplotlib
+# Basic environment variables
 ENV MPLCONFIGDIR="/tmp/matplotlib" \\
-    HADOOP_CONF_DIR=/etc/hadoop/conf \\
-    JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
-    KRB5_CONFIG=/etc/krb5.conf \\
     CLASSPATH=\$SPARK_JARS_DIR/* \\
-    PATH=\$PATH:\$SPARK_JARS_DIR \\
-    SPARK_USER="185" \\
-    HADOOP_USER="185"
+    PATH=\$PATH:\$SPARK_JARS_DIR
+
+# OPTIONAL: Add these ONLY if using Hadoop/Hive/Kerberos:
+# ENV HADOOP_CONF_DIR=/etc/hadoop/conf \\
+#     JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
+#     KRB5_CONFIG=/etc/krb5.conf \\
+#     SPARK_USER="185" \\
+#     HADOOP_USER="185"
 
 # Copy requirements first for better caching
 COPY requirements.txt /app/requirements.txt
@@ -544,24 +591,23 @@ DOCKERFILE REQUIREMENTS:
 2. CRITICAL: openjdk:11-jre-slim is Debian-based, so MUST use apt-get (NOT yum, apk, or other package managers)
 3. ALWAYS start with USER root for installation
 4. ALWAYS set SPARK_HOME and SPARK_JARS_DIR environment variables
-5. ALWAYS include Kerberos and Hadoop configuration paths:
-   - HADOOP_CONF_DIR=/etc/hadoop/conf
-   - JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf
-   - KRB5_CONFIG=/etc/krb5.conf
-6. ALWAYS set SPARK_USER and HADOOP_USER to "185"
-7. ALWAYS use virtual environment pattern:
+5. CONDITIONALLY include Hadoop/Kerberos configuration (only when needed):
+   - Add HADOOP_CONF_DIR, JAVA_SECURITY_KRB5_CONF, KRB5_CONFIG if using Hadoop/Hive/Kerberos
+   - Add SPARK_USER and HADOOP_USER="185" if running on secure Hadoop clusters
+   - Omit these for simple PySpark jobs without Hadoop integration
+6. ALWAYS use virtual environment pattern:
    - Create venv at /opt/venv
    - Install requirements in venv
    - Add venv to PATH
-8. ALWAYS copy application files:
+7. ALWAYS copy application files:
    - COPY requirements.txt first (for better caching)
    - Then COPY . /app/ to copy all application code
    - NEVER use specific directory COPY commands that may fail (like COPY jobs/ODP/, COPY jars/)
-9. ALWAYS chmod 777 /app for permissions
-10. ALWAYS switch to USER 185 at the end
-11. CRITICAL: DO NOT include CMD instruction - it will be provided at runtime
-12. CRITICAL: DO NOT include HEALTHCHECK instruction
-13. CRITICAL: DO NOT include EXPOSE instruction
+8. ALWAYS chmod 777 /app for permissions
+9. ALWAYS switch to USER 185 at the end
+10. CRITICAL: DO NOT include CMD instruction - it will be provided at runtime
+11. CRITICAL: DO NOT include HEALTHCHECK instruction
+12. CRITICAL: DO NOT include EXPOSE instruction
 
 ENVIRONMENT VARIABLE HANDLING:
 - IS_BOLT environment variable controls Spark session creation
@@ -573,7 +619,7 @@ COMMON DOCKERFILE ERRORS TO AVOID:
 ❌ Including HEALTHCHECK instruction
 ❌ Including EXPOSE instruction
 ❌ Not using virtual environment pattern
-❌ Missing Kerberos/Hadoop configuration
+❌ Always including Kerberos/Hadoop configuration (add only when needed)
 ❌ Not switching to USER 185
 ❌ Missing SPARK_HOME and SPARK_JARS_DIR
 ❌ Missing chmod 777 /app
@@ -627,7 +673,6 @@ googleapis-common-protos>=1.65.0
 protobuf>=5.29.1,<6.0.0
 pyarrow>=15.0.0
 py4j>=0.10.9.9
-requests>=2.31.0
 structlog>=23.2.0
 pandas>=2.2.0
 numpy>=1.24.0
@@ -640,19 +685,17 @@ numpy>=1.24.0
   <boltAction type="file" filePath="my_app/main.py">
 #!/usr/bin/env python3
 """Main application entry point."""
+import os
 import logging
 import structlog
-import requests
 from pyspark.sql import SparkSession
-
-# Trino Gateway configuration
-TRINO_GATEWAY_URL = "http://trino-gateway:8080/v1/statement"
-TRINO_USER = "admin"
 
 # Configure logging
 structlog.configure(
     wrapper_class=structlog.make_filtering_bound_logger(logging.INFO)
 )
+
+logger = structlog.get_logger()
 
 def create_spark_session(app_name: str) -> SparkSession:
     """Create Spark session based on environment."""
@@ -665,16 +708,9 @@ def create_spark_session(app_name: str) -> SparkSession:
             .remote("sc://localhost:15002") \
             .getOrCreate()
     else:
-        # Production environment: Standard SparkSession
+        # Production environment: Minimal SparkSession (add configs only when needed)
         return SparkSession.builder \
             .appName(app_name) \
-            .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \
-            .config("spark.sql.catalog.spark_catalog.type", "hive") \
-            .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog") \
-            .config("spark.sql.catalog.local.type", "hadoop") \
-            .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse") \
-            .enableHiveSupport() \
             .getOrCreate()
 
 def get_app_info(spark: SparkSession) -> dict:
@@ -696,62 +732,12 @@ def get_app_info(spark: SparkSession) -> dict:
         "timestamp": int(time.time())
     }
 
-def execute_trino_query_runtime(query: str) -> dict:
-    """Execute Trino query in generated applications via Trino Gateway with polling."""
-    import time
-import { createScopedLogger } from '~/utils/logger';
-
-const logger = createScopedLogger('PythonPrompt');
-
-    # Initial request
-    response = requests.post(
-        TRINO_GATEWAY_URL,
-        headers={'X-Trino-User': TRINO_USER},
-        data=query
-    )
-
-    if response.status_code != 200:
-        raise Exception(f"Failed to submit query: {response.status_code} {response.text}")
-
-    result = response.json()
-    query_id = result.get('id')
-    print(f"Query submitted with ID: {query_id}")
-
-    # Poll until completion using nextUri
-    while 'nextUri' in result and result['stats']['state'] in ['QUEUED', 'RUNNING', 'FINISHING']:
-        state = result['stats']['state']
-        print(f"Query {query_id} state: {state}, polling...")
-        time.sleep(1)
-
-        # CRITICAL: Use the nextUri from previous response, NOT the gateway URL
-        response = requests.get(
-            result['nextUri'],
-            headers={'X-Trino-User': TRINO_USER}
-        )
-
-        if response.status_code != 200:
-            raise Exception(f"Failed to poll query: {response.status_code} {response.text}")
-
-        result = response.json()
-
-    # Check final state and return results
-    final_state = result['stats']['state']
-    print(f"Query {query_id} final state: {final_state}")
-
-    if final_state in ['FINISHED', 'FINISHING']:
-        return {'data': result.get('data', []), 'columns': result.get('columns', []), 'stats': result['stats']}
-    elif final_state == 'FAILED':
-        error_info = result.get('error', {})
-        error_msg = error_info.get('message', 'Unknown error')
-        error_type = error_info.get('errorType', 'UNKNOWN')
-        raise Exception(f"Trino query failed [{error_type}]: {error_msg}")
-    else:
-        raise Exception(f"Query ended in unexpected state: {final_state}")
-
 # Use discovered values from MCP tool discovery
-DATAPLANE_ID = "${dataplaneId || 'discovered-dataplane-id'}"  # ${dataplaneId ? `Provided: ${dataplaneId}` : 'From get_all_dataplanes()'}
+DATAPLANE_ID = "${dataplaneId || 'discovered-dataplane-id'}"  # ${dataplaneId ? `Provided dataplane ID: ${dataplaneId}` : 'From get_all_dataplanes()'}
 CATALOG = "discovered-catalog-name"       # From trino_list_catalogs()
 SCHEMA = "discovered-schema-name"         # From trino_list_tables()
+
+# For Trino integration, use spark.read.jdbc() with Trino JDBC driver (see pyspark_trino_integration)
   </boltAction>
 
   <boltAction type="file" filePath="Dockerfile">
@@ -765,15 +751,17 @@ WORKDIR /app
 ENV SPARK_HOME=/opt/spark
 ENV SPARK_JARS_DIR=$SPARK_HOME/jars
 
-# Set environment variables for Kerberos and Matplotlib
+# Basic environment variables
 ENV MPLCONFIGDIR="/tmp/matplotlib" \\
-    HADOOP_CONF_DIR=/etc/hadoop/conf \\
-    JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
-    KRB5_CONFIG=/etc/krb5.conf \\
     CLASSPATH=$SPARK_JARS_DIR/* \\
-    PATH=$PATH:$SPARK_JARS_DIR \\
-    SPARK_USER="185" \\
-    HADOOP_USER="185"
+    PATH=$PATH:$SPARK_JARS_DIR
+
+# OPTIONAL: Add these ONLY if using Hadoop/Hive/Kerberos:
+# ENV HADOOP_CONF_DIR=/etc/hadoop/conf \\
+#     JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
+#     KRB5_CONFIG=/etc/krb5.conf \\
+#     SPARK_USER="185" \\
+#     HADOOP_USER="185"
 
 # Copy requirements first for better caching
 COPY requirements.txt /app/requirements.txt
@@ -839,11 +827,11 @@ This step is required because external datastore connections need environment-sp
 \`\`\`
 
 CONFIGURATION RULES:
-- Use direct Trino Gateway API with polling pattern
-- TRINO_GATEWAY_URL = "http://trino-gateway:8080/v1/statement" and TRINO_USER = "admin"
+- Use Trino JDBC connector for all Trino data operations (spark.read.jdbc with Trino JDBC driver)
 - ALL dataplane/catalog values MUST be populated from MCP tool discovery
 - NO placeholder values - use actual discovered values from MCP tools
 - Applications MUST be production-ready and functional immediately
+- Follow pyspark_trino_integration patterns for complete JDBC usage
 
 WORKBENCH ACTION DECISION MATRIX (Check ENTIRE conversation + codebase):
 ✅ action="edit-run" → IF ANY of these are true:
@@ -1124,7 +1112,7 @@ Generate appropriate sample data:
 FINAL REMINDERS:
 - Convention over configuration
 - Hardcode XDP credentials directly in Python code (NO .env files)
-- MANDATORY: Always discover dataplanes first using get_all_dataplanes(), then catalogs using dataplane IDs
+- MANDATORY: ${dataplaneId ? `Use provided dataplane ID (${dataplaneId}) directly - DO NOT call get_all_dataplanes()` : 'Always discover dataplanes first using get_all_dataplanes(), then catalogs using dataplane IDs'}
 - Use environment-aware Spark session creation (IS_BOLT variable)
 - Use structlog with logging.INFO level
 - Minimal comments policy
@@ -1135,7 +1123,7 @@ FINAL REMINDERS:
   * Did I call xdp_list_datastores at ANY point in this conversation? → edit-run
   * Does ANY code file have PostgreSQL/Snowflake/S3/MongoDB connections? → edit-run
   * Are datastore imports (psycopg2, boto3, snowflake.connector) present? → edit-run
-  * Code ONLY uses Trino Gateway + no datastores anywhere? → run
+  * Code ONLY uses Trino JDBC + no datastores anywhere? → run
 - CRITICAL: After edit-run, add DETAILED message:
   * List specific datastores: "This app uses PostgreSQL (orders_db) and Snowflake (analytics_warehouse)"
   * Explain what to configure: "You need to set database credentials and connection parameters"
@@ -1147,9 +1135,9 @@ FINAL REMINDERS:
 - CRITICAL: Never respond with code changes without accompanying shell commands
 - Each boltAction type="shell" must contain exactly ONE simple command
 - CRITICAL: Use actual discovered dataplane/catalog values from MCP tools
-- CRITICAL: ${dataplaneId ? `Use provided dataplane ID (${dataplaneId}) directly - skip get_all_dataplanes()` : 'ALWAYS call get_all_dataplanes() FIRST before any other Trino MCP tools'}
+- CRITICAL: ${dataplaneId ? `Dataplane provided (${dataplaneId}) - DO NOT call get_all_dataplanes(). Start with trino_list_catalogs(dataplane="${dataplaneId}") or xdp_list_datastores()` : 'ALWAYS call get_all_dataplanes() FIRST before any other Trino MCP tools'}
 - CRITICAL: ALWAYS provide ALL required parameters when calling MCP tools - missing required params = instant failure
-- CRITICAL: ALWAYS validate target table schema with DESCRIBE before INSERT operations
+- CRITICAL: ALWAYS validate target table schema with DESCRIBE before INSERT operations (via Trino JDBC)
 - CRITICAL: ALWAYS cast DataFrame columns to match exact target table data types
 - CRITICAL: ALWAYS include production-ready Dockerfile (USER root, venv, USER 185, NO CMD)
 - CRITICAL: Dockerfile MUST use "COPY . /app/" to avoid copying non-existent directories
@@ -1158,6 +1146,11 @@ FINAL REMINDERS:
 - Projects MUST be immediately runnable without user intervention or manual configuration
 - Use PySpark 4.0.0 compatible code with environment-aware session creation
 - IS_BOLT=true → Spark Connect | IS_BOLT=false/unset → Standard SparkSession
+- 🚫 CRITICAL TRINO POLICY: JDBC ONLY - NO REST API FALLBACK
+  * ALWAYS use Trino JDBC connector (spark.read.jdbc) for all Trino data operations
+  * NEVER use requests library for Trino queries in generated code
+  * If JDBC fails, FIX JDBC configuration - DO NOT fallback to REST API
+  * Follow error_handling_patterns and pyspark_trino_integration for proper JDBC usage
 `;
 
 export const CONTINUE_PROMPT = stripIndents`

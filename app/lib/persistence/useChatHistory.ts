@@ -165,7 +165,12 @@ export function useChatHistory() {
                   : storedMessages.messages.length;
                 const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot?.chatIndex);
 
-                if (snapshotIndex >= 0 && snapshotIndex < endingIdx) {
+                /*
+                 * Only truncate history if explicitly rewinding to a specific message.
+                 * By default, load full chat history even when snapshot exists.
+                 * This ensures users see complete conversation on reload.
+                 */
+                if (rewindId && snapshotIndex >= 0 && snapshotIndex < endingIdx) {
                   startingIdx = snapshotIndex;
                 }
 

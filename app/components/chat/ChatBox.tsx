@@ -12,7 +12,8 @@ import FilePreview from './FilePreview';
 import { ScreenshotStateManager } from './ScreenshotStateManager';
 import { SendButton } from './SendButton.client';
 import { IconButton } from '~/components/ui/IconButton';
-import { toast } from 'react-toastify';
+
+// import { toast } from 'react-toastify';
 import { SpeechRecognitionButton } from '~/components/chat/SpeechRecognition';
 import styles from './BaseChat.module.scss';
 import type { ProviderInfo } from '~/types/model';
@@ -312,7 +313,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             <IconButton title="Upload file" className="transition-all" onClick={() => props.handleFileUpload()}>
               <div className="i-ph:paperclip text-xl"></div>
             </IconButton>
-            <IconButton
+            {/* <IconButton
               title="Enhance prompt"
               disabled={props.input.length === 0 || props.enhancingPrompt}
               className={classNames('transition-all', props.enhancingPrompt ? 'opacity-100' : '')}
@@ -326,7 +327,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               ) : (
                 <div className="i-bolt:stars text-xl"></div>
               )}
-            </IconButton>
+            </IconButton> */}
 
             <SpeechRecognitionButton
               isListening={props.isListening}
@@ -334,7 +335,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               onStop={props.stopListening}
               disabled={props.isStreaming}
             />
-            {props.chatStarted && (
+            {/* {props.chatStarted && (
               <IconButton
                 title="Discuss"
                 className={classNames(
@@ -350,7 +351,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 <div className={`i-ph:chats text-xl`} />
                 {props.chatMode === 'discuss' ? <span>Discuss</span> : <span />}
               </IconButton>
-            )}
+            )} */}
             <IconButton
               title="Model Settings"
               className={classNames('transition-all flex items-center gap-1', {

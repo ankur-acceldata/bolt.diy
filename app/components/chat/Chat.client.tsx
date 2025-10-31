@@ -246,11 +246,16 @@ export const ChatImpl = memo(
 
       // Configure fetch options for longer timeout
       fetch: (url, options) => {
+        // Combine the original abort signal (for stop button) with timeout signal
+        const timeoutSignal = AbortSignal.timeout(TIMEOUT_CONSTANTS.CHAT_REQUEST_TIMEOUT);
+        const originalSignal = options?.signal;
+
+        // If there's an original signal, combine both signals using AbortSignal.any()
+        const combinedSignal = originalSignal ? AbortSignal.any([originalSignal, timeoutSignal]) : timeoutSignal;
+
         return fetch(url, {
           ...options,
-
-          // Increase timeout to 5 minutes to match backend keep-alive
-          signal: AbortSignal.timeout(TIMEOUT_CONSTANTS.CHAT_REQUEST_TIMEOUT),
+          signal: combinedSignal,
         });
       },
       onError: (e: Error) => {
@@ -647,6 +652,38 @@ export const ChatImpl = memo(
       return attachments;
     };
 
+    /*
+     * Helper function to append hidden context instructions to user messages.
+     * These instructions are wrapped in boltArtifact tags so they're hidden from UI
+     * but visible to the LLM to guide command generation.
+     */
+    const appendHiddenContextInstructions = (content: string): string => {
+      const hiddenInstructions = `
+
+<boltArtifact id="context-instruction" title="Project Context">
+CONTEXT FOR AI: When providing build/run commands, analyze the CURRENT project structure:
+- Entry point may have changed (e.g., job_a → job_b)
+- Dependencies may have been added/modified
+- ALWAYS provide BOTH install and run commands based on CURRENT state
+- Run command must match LATEST entry point in project
+
+CRITICAL: Commands MUST be wrapped in bolt artifact format:
+<boltArtifact id="build-commands" title="Build and Run Commands">
+  <boltAction type="shell">
+pip install --no-cache-dir -r requirements.txt
+  </boltAction>
+  
+  <boltAction type="shell">
+python3 -m current_app_name
+  </boltAction>
+  
+  Include auto-run action as instructed when applicable
+</boltArtifact>
+</boltArtifact>`;
+
+      return content + hiddenInstructions;
+    };
+
     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
       const messageContent = messageInput || input;
 
@@ -788,7 +825,8 @@ export const ChatImpl = memo(
 
       if (modifiedFiles !== undefined) {
         const userUpdateArtifact = filesToArtifacts(modifiedFiles, `${Date.now()}`);
-        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${userUpdateArtifact}${finalMessageContent}`;
+        const contentWithInstructions = appendHiddenContextInstructions(`${userUpdateArtifact}${finalMessageContent}`);
+        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${contentWithInstructions}`;
 
         const attachmentOptions =
           uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
@@ -804,7 +842,8 @@ export const ChatImpl = memo(
 
         workbenchStore.resetAllFileModifications();
       } else {
-        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+        const contentWithInstructions = appendHiddenContextInstructions(finalMessageContent);
+        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${contentWithInstructions}`;
 
         const attachmentOptions =
           uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;

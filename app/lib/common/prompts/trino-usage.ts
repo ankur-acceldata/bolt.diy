@@ -22,6 +22,13 @@ export const getTrinoUsageGuidelines = () => stripIndents`
     - NEVER use requests library to fetch data from Trino
     - See pyspark_trino_integration section for details
     
+    🚫 CRITICAL: NO FALLBACK TO REST API
+    - If JDBC connection fails, FIX the JDBC configuration
+    - NEVER fallback to using requests library or REST API
+    - JDBC is the ONLY supported method for runtime Trino access
+    - Troubleshoot JDBC issues (missing JAR, wrong URL, auth problems)
+    - DO NOT implement REST API as a backup solution
+    
     Trino Gateway URL: http://trino-gateway:8080
     Authentication: admin/admin (handled by JDBC driver or MCP tools)
   </trino_access_pattern>
@@ -115,6 +122,47 @@ export const getTrinoUsageGuidelines = () => stripIndents`
        - Retry transient failures with exponential backoff
        - Break large queries into smaller chunks if memory errors occur
        - Use streaming results for large result sets
+
+    4. JDBC CONNECTION ERROR HANDLING:
+       🚫 CRITICAL: NEVER FALLBACK TO REST API ON JDBC FAILURES
+       
+       Common JDBC errors and proper fixes:
+       - "ClassNotFoundException: io.trino.jdbc.TrinoDriver"
+         → FIX: Add Trino JDBC JAR to classpath or Spark jars directory
+         → WRONG: Switch to requests library
+       
+       - "No suitable driver found for jdbc:trino://"
+         → FIX: Verify JDBC URL format and driver registration
+         → WRONG: Use REST API instead
+       
+       - "Connection refused" or "Timeout"
+         → FIX: Check network connectivity, verify Trino Gateway is accessible
+         → WRONG: Implement REST API fallback
+       
+       - "Authentication failed"
+         → FIX: Verify username/password in JDBC properties
+         → WRONG: Try REST API with different auth
+       
+       PROPER ERROR HANDLING PATTERN:
+       \`\`\`python
+       try:
+           df = spark.read.jdbc(url=jdbc_url, table=table, properties=connection_properties)
+       except Exception as e:
+           logger.error(f"JDBC connection failed: {e}")
+           # FIX THE JDBC ISSUE - DO NOT FALLBACK TO REST API
+           # Check: JAR availability, URL format, network, authentication
+           raise Exception(f"Trino JDBC connection failed. Please verify JDBC configuration: {e}")
+       \`\`\`
+       
+       FORBIDDEN PATTERN:
+       \`\`\`python
+       try:
+           df = spark.read.jdbc(...)
+       except Exception as jdbc_error:
+           # ❌ WRONG: Fallback to REST API
+           logger.warning("JDBC failed, trying REST API...")
+           response = requests.post("http://trino-gateway:8080/v1/statement", ...)
+       \`\`\`
   </error_handling_patterns>
 
   <pyspark_trino_integration>
@@ -243,12 +291,9 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                    .remote("sc://localhost:15002") \\
                    .getOrCreate()
            else:
+               # Minimal SparkSession (add configs only when needed)
                return SparkSession.builder \\
                    .appName(app_name) \\
-                   .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \\
-                   .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \\
-                   .config("spark.sql.catalog.spark_catalog.type", "hive") \\
-                   .enableHiveSupport() \\
                    .getOrCreate()
        
        def read_trino_table_jdbc(spark: SparkSession, catalog: str, schema: str, table: str):
@@ -302,19 +347,27 @@ export const getTrinoUsageGuidelines = () => stripIndents`
            main()
        \`\`\`
 
-    5. WHEN TO USE DIRECT API VS JDBC:
+    5. WHEN TO USE JDBC VS REST API:
        
-       USE JDBC (RECOMMENDED FOR DATAFRAMES):
+       ✅ USE JDBC (MANDATORY FOR ALL RUNTIME CODE):
        - When creating PySpark DataFrames from Trino data
        - For large datasets that need distributed processing
        - When performing Spark transformations and aggregations
        - For production PySpark jobs
+       - For ALL data operations in generated applications
        
-       USE DIRECT API (ONLY FOR METADATA):
+       ✅ REST API (ONLY FOR MCP TOOLS - NOT IN GENERATED CODE):
+       - MCP tools use REST API internally during discovery phase
        - For discovery operations (SHOW CATALOGS, SHOW TABLES, DESCRIBE)
-       - For small metadata queries during development
-       - When you need raw query results without DataFrame creation
-       - For validation and testing queries
+       - NEVER use REST API in generated PySpark applications
+       - NEVER use requests library for Trino queries in runtime code
+
+    🚫 CRITICAL POLICY: JDBC ONLY - NO FALLBACK
+    - Generated PySpark applications MUST use JDBC exclusively
+    - If JDBC fails, troubleshoot and fix JDBC configuration
+    - NEVER implement REST API fallback in generated code
+    - NEVER use requests library for Trino data access
+    - REST API is for MCP tools only, not for application runtime
 
     IMPORTANT: The JDBC approach creates DataFrames directly without downloading data to the client first!
   </pyspark_trino_integration>
@@ -352,6 +405,12 @@ export const getTrinoUsageGuidelines = () => stripIndents`
     GENERATED CODE RUNTIME:
     In generated PySpark applications, ALWAYS use Spark JDBC connector with Trino JDBC driver.
     
+    🚫 CRITICAL: NO REST API IN GENERATED CODE
+    - NEVER use requests library for Trino queries
+    - NEVER implement REST API fallback if JDBC fails
+    - ALWAYS troubleshoot and fix JDBC issues
+    - REST API is for MCP tools only, not application runtime
+    
     CORRECT PATTERN - Use JDBC for all data operations:
     \`\`\`python
     # Read data from Trino using Spark JDBC connector
@@ -372,17 +431,25 @@ export const getTrinoUsageGuidelines = () => stripIndents`
         if TRINO_PASSWORD:
             connection_properties["password"] = TRINO_PASSWORD
         
-        # Spark JDBC connector + Trino JDBC driver
-        df = spark.read.jdbc(
-            url=jdbc_url,
-            table=table,
-            properties=connection_properties
-        )
-        
-        return df
+        try:
+            # Spark JDBC connector + Trino JDBC driver
+            df = spark.read.jdbc(
+                url=jdbc_url,
+                table=table,
+                properties=connection_properties
+            )
+            return df
+        except Exception as e:
+            logger.error(f"JDBC connection failed: {e}")
+            # DO NOT FALLBACK TO REST API - FIX JDBC CONFIGURATION
+            raise Exception(f"Trino JDBC connection failed. Verify JAR, URL, and auth: {e}")
     \`\`\`
     
-    DO NOT use requests library to fetch data from Trino API in generated code!
+    FORBIDDEN PATTERNS:
+    ❌ Using requests library to fetch data from Trino
+    ❌ Implementing REST API fallback on JDBC failures
+    ❌ Mixing JDBC and REST API approaches
+    ❌ Using REST API for data operations in generated code
   </data_discovery_workflow>
 
   <query_optimization_guidelines>

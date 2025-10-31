@@ -342,6 +342,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           supabaseConnection: supabase,
           toolChoice: 'auto',
 
+          // Pass through abort signal from client request to allow termination
+          abortSignal: request.signal,
+
           // Provide executable tools so the LLM can auto-run tools during reasoning
           tools: mcpService.tools,
           maxSteps: maxLLMSteps,
@@ -605,13 +608,30 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       },
     });
   } catch (error: any) {
-    logger.error(error);
-
     // Clean up keep-alive interval on error
     if (keepAliveInterval) {
       clearInterval(keepAliveInterval);
       keepAliveInterval = null;
     }
+
+    // Handle abort errors gracefully (user clicked stop button)
+    if (error.name === 'AbortError' || request.signal?.aborted) {
+      logger.info('Chat request aborted by client');
+
+      return new Response(
+        JSON.stringify({
+          error: false,
+          message: 'Request aborted by user',
+          aborted: true,
+        }),
+        {
+          status: 200, // Return 200 for graceful abort
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    logger.error(error);
 
     const errorResponse = {
       error: true,

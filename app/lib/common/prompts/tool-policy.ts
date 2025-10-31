@@ -224,14 +224,12 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     CRITICAL: ${hasDataplane ? 'Dataplane provided - use directly without get_all_dataplanes()' : 'If get_all_dataplanes is not called first, all subsequent MCP tools will fail!'}$`
     }
 
-    TRINO GATEWAY FOR GENERATED CODE:
-    Generated applications should use direct Trino Gateway for runtime queries:
-    - Endpoint: http://trino-gateway:8080/v1/statement
-    - HTTP Method: POST
-    - Headers:
-      - X-Trino-User: admin
-    - Body: Raw SQL query string (not JSON)
-    - CRITICAL: Must implement polling pattern for nextUri until query completion
+    TRINO INTEGRATION FOR GENERATED CODE:
+    Generated applications MUST use Trino JDBC connector with Spark:
+    - Use spark.read.jdbc() with Trino JDBC driver (io.trino.jdbc.TrinoDriver)
+    - NEVER use direct REST API calls (requests library)
+    - Follow pyspark_trino_integration section for complete JDBC patterns
+    - CRITICAL: No fallback to REST API if JDBC fails - fix JDBC configuration instead
 
     SPARK CONNECT COMPATIBILITY:
     CRITICAL: Generated PySpark code must be Spark Connect compatible (no sparkContext access)
@@ -268,11 +266,11 @@ export const getToolPolicy = (dataplaneId?: string, dataplaneName?: string) => {
     3. Retry: trino_list_tables(dataplane="21", catalog="hive")
 
     GENERATED CODE ERROR HANDLING:
-    For Trino Gateway usage in generated applications, include proper error handling:
-    - Network timeouts and retries
-    - Query polling state management
+    For Trino JDBC usage in generated applications, include proper error handling:
+    - JDBC connection failures and retries
     - SQL syntax error handling
-    - Failed query state responses
+    - Network timeouts
+    - Follow error_handling_patterns section for JDBC error handling
   </error_handling>
 
   <value_resolution>
