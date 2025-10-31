@@ -10,25 +10,25 @@ export const getTrinoUsageGuidelines = () => stripIndents`
 <trino_usage_guidelines>
   <trino_access_pattern>
     CRITICAL: Trino access is handled differently in discovery vs runtime:
-    
+
     DISCOVERY PHASE (Development):
     - MCP tools handle Trino REST API internally for metadata operations
     - You don't need to worry about Trino Gateway endpoints or headers
     - MCP tools handle: SHOW CATALOGS, SHOW SCHEMAS, SHOW TABLES, DESCRIBE, etc.
-    
+
     RUNTIME PHASE (Generated PySpark Code):
     - ALWAYS use Spark JDBC connector with Trino JDBC driver
     - NEVER use direct Trino REST API calls
     - NEVER use requests library to fetch data from Trino
     - See pyspark_trino_integration section for details
-    
+
     🚫 CRITICAL: NO FALLBACK TO REST API
     - If JDBC connection fails, FIX the JDBC configuration
     - NEVER fallback to using requests library or REST API
     - JDBC is the ONLY supported method for runtime Trino access
     - Troubleshoot JDBC issues (missing JAR, wrong URL, auth problems)
     - DO NOT implement REST API as a backup solution
-    
+
     Trino Gateway URL: http://trino-gateway:8080
     Authentication: admin/admin (handled by JDBC driver or MCP tools)
   </trino_access_pattern>
@@ -125,24 +125,24 @@ export const getTrinoUsageGuidelines = () => stripIndents`
 
     4. JDBC CONNECTION ERROR HANDLING:
        🚫 CRITICAL: NEVER FALLBACK TO REST API ON JDBC FAILURES
-       
+
        Common JDBC errors and proper fixes:
        - "ClassNotFoundException: io.trino.jdbc.TrinoDriver"
          → FIX: Add Trino JDBC JAR to classpath or Spark jars directory
          → WRONG: Switch to requests library
-       
+
        - "No suitable driver found for jdbc:trino://"
          → FIX: Verify JDBC URL format and driver registration
          → WRONG: Use REST API instead
-       
+
        - "Connection refused" or "Timeout"
          → FIX: Check network connectivity, verify Trino Gateway is accessible
          → WRONG: Implement REST API fallback
-       
+
        - "Authentication failed"
          → FIX: Verify username/password in JDBC properties
          → WRONG: Try REST API with different auth
-       
+
        PROPER ERROR HANDLING PATTERN:
        \`\`\`python
        try:
@@ -153,7 +153,7 @@ export const getTrinoUsageGuidelines = () => stripIndents`
            # Check: JAR availability, URL format, network, authentication
            raise Exception(f"Trino JDBC connection failed. Please verify JDBC configuration: {e}")
        \`\`\`
-       
+
        FORBIDDEN PATTERN:
        \`\`\`python
        try:
@@ -172,12 +172,12 @@ export const getTrinoUsageGuidelines = () => stripIndents`
     - Spark provides: spark.read.jdbc() method (Spark's JDBC connector)
     - Trino provides: io.trino.jdbc.TrinoDriver (Trino JDBC driver)
     - Together: Spark JDBC connector uses Trino JDBC driver to connect to Trino
-    
+
     DO NOT:
     - Download data via Trino REST API and then create DataFrames
     - Fetch data first, parse it, and then send to Spark
     - Use requests library to get data and then spark.createDataFrame()
-    
+
     ALWAYS:
     - Use spark.read.jdbc() with Trino JDBC driver
     - Let Spark executors connect directly to Trino
@@ -197,35 +197,32 @@ export const getTrinoUsageGuidelines = () => stripIndents`
        TRINO_GATEWAY_URL = "http://trino-gateway:8080"
        TRINO_USER = "admin"
        TRINO_PASSWORD = "admin"
-       
+
        # Build JDBC URL (remove /v1/statement if present)
        base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
        jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
-       
+
        # Example: jdbc:trino://trino-gateway:8080/tpcds/sf1
        \`\`\`
 
     2. READING TABLES VIA JDBC (RECOMMENDED):
        \`\`\`python
        from pyspark.sql import SparkSession
-       
+
        def read_trino_table_jdbc(spark: SparkSession, catalog: str, schema: str, table: str):
            """Read data from Trino table using Spark JDBC connector with Trino JDBC driver."""
            # Build JDBC URL for Trino
            base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
            jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
-           
+
            logger.info(f"Connecting to Trino via Spark JDBC connector: {jdbc_url}")
-           
+
            # JDBC connection properties for Trino JDBC driver
            connection_properties = {
                "user": TRINO_USER,
                "driver": "io.trino.jdbc.TrinoDriver"  # Trino JDBC driver class
            }
-           
-           if TRINO_PASSWORD:
-               connection_properties["password"] = TRINO_PASSWORD
-           
+
            # Spark's JDBC connector uses Trino JDBC driver to create DataFrame directly
            # Data flows: Trino -> Trino JDBC Driver -> Spark JDBC Connector -> DataFrame
            df = spark.read.jdbc(
@@ -233,7 +230,7 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                table=table,
                properties=connection_properties
            )
-           
+
            return df
        \`\`\`
 
@@ -243,27 +240,27 @@ export const getTrinoUsageGuidelines = () => stripIndents`
            """Execute custom SQL query via Spark JDBC connector with Trino JDBC driver."""
            base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
            jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
-           
+
            # JDBC connection properties for Trino JDBC driver
            connection_properties = {
                "user": TRINO_USER,
                "driver": "io.trino.jdbc.TrinoDriver"  # Trino JDBC driver class
            }
-           
+
            if TRINO_PASSWORD:
                connection_properties["password"] = TRINO_PASSWORD
-           
+
            # Use subquery syntax for custom queries
            # Wrap your query in parentheses as a subquery
            query_table = f"({query}) AS trino_query"
-           
+
            # Spark JDBC connector executes query via Trino JDBC driver
            df = spark.read.jdbc(
                url=jdbc_url,
                table=query_table,
                properties=connection_properties
            )
-           
+
            return df
        \`\`\`
 
@@ -271,20 +268,20 @@ export const getTrinoUsageGuidelines = () => stripIndents`
        \`\`\`python
        import os
        from pyspark.sql import SparkSession
-       
+
        # Configuration
        TRINO_GATEWAY_URL = os.getenv("TRINO_GATEWAY_URL", "http://trino-gateway:8080")
        TRINO_USER = os.getenv("TRINO_USER", "admin")
        TRINO_PASSWORD = os.getenv("TRINO_PASSWORD", "admin")
-       
+
        CATALOG = "tpcds"
        SCHEMA = "sf1"
        TABLE = "call_center"
-       
+
        def create_spark_session(app_name: str) -> SparkSession:
            """Create Spark session."""
            is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
-           
+
            if is_bolt:
                return SparkSession.builder \\
                    .appName(app_name) \\
@@ -295,21 +292,21 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                return SparkSession.builder \\
                    .appName(app_name) \\
                    .getOrCreate()
-       
+
        def read_trino_table_jdbc(spark: SparkSession, catalog: str, schema: str, table: str):
            """Read data from Trino using Spark JDBC connector with Trino JDBC driver."""
            base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
            jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
-           
+
            # Trino JDBC driver configuration
            connection_properties = {
                "user": TRINO_USER,
                "driver": "io.trino.jdbc.TrinoDriver"  # Trino JDBC driver
            }
-           
+
            if TRINO_PASSWORD:
                connection_properties["password"] = TRINO_PASSWORD
-           
+
            # Spark JDBC connector + Trino JDBC driver = Direct DataFrame creation
            # No data download to client, data flows directly to Spark executors
            df = spark.read.jdbc(
@@ -317,45 +314,45 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                table=table,
                properties=connection_properties
            )
-           
+
            return df
-       
+
        def main():
            spark = create_spark_session("TrinoJDBCExample")
-           
+
            # Read data directly from Trino using JDBC
            df = read_trino_table_jdbc(spark, CATALOG, SCHEMA, TABLE)
-           
+
            # Now you can use the DataFrame for Spark operations
            df.cache()
            print(f"Row count: {df.count()}")
            df.show(10)
-           
+
            # Perform aggregations, joins, etc.
            from pyspark.sql.functions import col, count as spark_count
-           
+
            result_df = df.groupBy("cc_call_center_id") \\
                .agg(spark_count("*").alias("count")) \\
                .filter(col("count") > 1)
-           
+
            result_df.show()
-           
+
            df.unpersist()
            spark.stop()
-       
+
        if __name__ == "__main__":
            main()
        \`\`\`
 
     5. WHEN TO USE JDBC VS REST API:
-       
+
        ✅ USE JDBC (MANDATORY FOR ALL RUNTIME CODE):
        - When creating PySpark DataFrames from Trino data
        - For large datasets that need distributed processing
        - When performing Spark transformations and aggregations
        - For production PySpark jobs
        - For ALL data operations in generated applications
-       
+
        ✅ REST API (ONLY FOR MCP TOOLS - NOT IN GENERATED CODE):
        - MCP tools use REST API internally during discovery phase
        - For discovery operations (SHOW CATALOGS, SHOW TABLES, DESCRIBE)
@@ -404,13 +401,13 @@ export const getTrinoUsageGuidelines = () => stripIndents`
 
     GENERATED CODE RUNTIME:
     In generated PySpark applications, ALWAYS use Spark JDBC connector with Trino JDBC driver.
-    
+
     🚫 CRITICAL: NO REST API IN GENERATED CODE
     - NEVER use requests library for Trino queries
     - NEVER implement REST API fallback if JDBC fails
     - ALWAYS troubleshoot and fix JDBC issues
     - REST API is for MCP tools only, not application runtime
-    
+
     CORRECT PATTERN - Use JDBC for all data operations:
     \`\`\`python
     # Read data from Trino using Spark JDBC connector
@@ -419,18 +416,18 @@ export const getTrinoUsageGuidelines = () => stripIndents`
         TRINO_GATEWAY_URL = os.getenv("TRINO_GATEWAY_URL", "http://trino-gateway:8080")
         TRINO_USER = os.getenv("TRINO_USER", "admin")
         TRINO_PASSWORD = os.getenv("TRINO_PASSWORD", "admin")
-        
+
         base_url = TRINO_GATEWAY_URL.replace("/v1/statement", "")
         jdbc_url = f"jdbc:trino://{base_url.replace('http://', '').replace('https://', '')}/{catalog}/{schema}"
-        
+
         connection_properties = {
             "user": TRINO_USER,
             "driver": "io.trino.jdbc.TrinoDriver"
         }
-        
+
         if TRINO_PASSWORD:
             connection_properties["password"] = TRINO_PASSWORD
-        
+
         try:
             # Spark JDBC connector + Trino JDBC driver
             df = spark.read.jdbc(
@@ -444,7 +441,7 @@ export const getTrinoUsageGuidelines = () => stripIndents`
             # DO NOT FALLBACK TO REST API - FIX JDBC CONFIGURATION
             raise Exception(f"Trino JDBC connection failed. Verify JAR, URL, and auth: {e}")
     \`\`\`
-    
+
     FORBIDDEN PATTERNS:
     ❌ Using requests library to fetch data from Trino
     ❌ Implementing REST API fallback on JDBC failures
