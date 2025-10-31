@@ -247,9 +247,6 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                "driver": "io.trino.jdbc.TrinoDriver"  # Trino JDBC driver class
            }
 
-           if TRINO_PASSWORD:
-               connection_properties["password"] = TRINO_PASSWORD
-
            # Use subquery syntax for custom queries
            # Wrap your query in parentheses as a subquery
            query_table = f"({query}) AS trino_query"
@@ -303,9 +300,6 @@ export const getTrinoUsageGuidelines = () => stripIndents`
                "user": TRINO_USER,
                "driver": "io.trino.jdbc.TrinoDriver"  # Trino JDBC driver
            }
-
-           if TRINO_PASSWORD:
-               connection_properties["password"] = TRINO_PASSWORD
 
            # Spark JDBC connector + Trino JDBC driver = Direct DataFrame creation
            # No data download to client, data flows directly to Spark executors
