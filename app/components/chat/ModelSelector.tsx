@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { classNames } from '~/utils/classNames';
-import { detectConfiguredProvider } from '~/lib/utils/providerDetection';
+// import { detectConfiguredProvider } from '~/lib/utils/providerDetection'; // Disabled - see line 226
 
 interface ModelSelectorProps {
   model?: string;
@@ -53,8 +53,8 @@ export const ModelSelector = ({
   const providerOptionsRef = useRef<(HTMLDivElement | null)[]>([]);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
   const [showFreeModelsOnly, setShowFreeModelsOnly] = useState(false);
-  const [isProviderLocked, setIsProviderLocked] = useState(false);
-  const [hasDetectedProvider, setHasDetectedProvider] = useState(false);
+  const [isProviderLocked] = useState(false); // Removed setter - provider detection disabled
+  // const [hasDetectedProvider, setHasDetectedProvider] = useState(false); // Unused - provider detection disabled
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -221,6 +221,9 @@ export const ModelSelector = ({
   }, [focusedProviderIndex]);
 
   // Detect configured provider on mount
+  // DISABLED: This causes continuous API calls that fail in certain deployments
+  // and prevents the UI from loading properly. Users can manually select providers.
+  /*
   useEffect(() => {
     if (providerList.length === 0 || hasDetectedProvider) {
       return;
@@ -250,6 +253,7 @@ export const ModelSelector = ({
 
     detectProvider();
   }, [providerList, modelList, setProvider, setModel, hasDetectedProvider]);
+  */
 
   useEffect(() => {
     if (providerList.length === 0) {
