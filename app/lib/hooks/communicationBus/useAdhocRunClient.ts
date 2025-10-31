@@ -98,7 +98,7 @@ export function useAdhocRunClient() {
           name: '',
           executionConfig: {
             jobType: (jobType as JobType) || 'SPARK_CONNECT_PYTHON_ADHOC',
-            image: baseImage || 'docker.io/apache/spark:4.0.0',
+            image: baseImage || '191579300362.dkr.ecr.us-east-1.amazonaws.com/acceldata/xdp/dp/spark:4.0.0-sc',
             imagePullSecrets: (executionConfig as any)?.imagePullSecrets || ['registry-secret'],
             imagePullPolicy: (executionConfig as any)?.imagePullPolicy || 'IfNotPresent',
             codeSource: {

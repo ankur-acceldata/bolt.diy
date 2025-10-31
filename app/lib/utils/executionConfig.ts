@@ -36,7 +36,7 @@ export function getExecutionConfig(template?: { id: string; name: string }): Tem
           type: 'Python',
           fallbackStages: [
             'pip install -r requirements.txt --no-cache-dir',
-            'python3 success_test.py',
+            'python3 main.py',
             "echo 'Python execution completed successfully'",
           ],
           codeSourceUrl: 'home/projects',
