@@ -141,9 +141,16 @@ export function useChatHistory() {
             });
 
             if (!storedMessages) {
-              logger.error(`❌ CHAT NOT FOUND for ${mixedId} - redirecting to home`);
-              logger.error(`❌ storedMessages value:`, storedMessages);
-              logger.error(`❌ typeof storedMessages:`, typeof storedMessages);
+              // Chat not found in database - this is expected if user cleared data or invalid ID
+              logger.info(`Chat ${mixedId} not found in database - redirecting to home`);
+              logger.debug('Chat lookup details:', {
+                storedMessages,
+                type: typeof storedMessages,
+              });
+              
+              // Show a user-friendly message
+              toast.info('Chat not found. Starting a new conversation.');
+              
               navigateToHome(true);
               setReady(true);
               setIsInitialLoad(false);
@@ -299,11 +306,24 @@ ${value.content}
             setIsInitialLoad(false);
           })
           .catch((error) => {
-            logger.error(`❌ ERROR loading chat ${mixedId}:`, error);
-            logger.error(error);
+            // Check if this is a "not found" error vs actual error
+            const errorMessage = error?.message || String(error);
+            const isNotFoundError = 
+              errorMessage.includes('not found') || 
+              errorMessage.includes('does not exist') ||
+              errorMessage.includes('No such object');
 
-            logStore.logError('Failed to load chat messages or snapshot', error);
-            toast.error('Failed to load chat: ' + error.message);
+            if (isNotFoundError) {
+              // Expected condition - chat doesn't exist
+              logger.info(`Chat ${mixedId} not found in database - redirecting to home`);
+              toast.info('Chat not found. Starting a new conversation.');
+              navigateToHome(true);
+            } else {
+              // Actual error that needs attention
+              logger.error(`Error loading chat ${mixedId}:`, error);
+              logStore.logError('Failed to load chat messages or snapshot', error);
+              toast.error('Failed to load chat. Please try again.');
+            }
 
             // Set ready state even on error to prevent infinite loading
             setReady(true);

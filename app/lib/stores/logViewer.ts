@@ -59,6 +59,16 @@ export class LogViewerStore {
    * Load persisted state from localStorage for current project
    */
   private _loadPersistedState(): PersistedLogViewerState {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined') {
+      return {
+        showLogViewerPanel: false,
+        logViewerInstances: [],
+        activeLogViewerId: null,
+        autoSendEnabled: false,
+      };
+    }
+
     try {
       const storageKey = this._getStorageKey();
       const stored = localStorage.getItem(storageKey);
@@ -87,6 +97,11 @@ export class LogViewerStore {
    * Persist current state to localStorage for current project
    */
   private _persistState(): void {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     try {
       const storageKey = this._getStorageKey();
       const state: PersistedLogViewerState = {

@@ -3,7 +3,10 @@ import { useEffect, useState, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { classNames } from '~/utils/classNames';
-// import { detectConfiguredProvider } from '~/lib/utils/providerDetection'; // Disabled - see line 226
+import { detectConfiguredProvider } from '~/lib/utils/providerDetection';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('ModelSelector');
 
 interface ModelSelectorProps {
   model?: string;
@@ -53,8 +56,8 @@ export const ModelSelector = ({
   const providerOptionsRef = useRef<(HTMLDivElement | null)[]>([]);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
   const [showFreeModelsOnly, setShowFreeModelsOnly] = useState(false);
-  const [isProviderLocked] = useState(false); // Removed setter - provider detection disabled
-  // const [hasDetectedProvider, setHasDetectedProvider] = useState(false); // Unused - provider detection disabled
+  const [isProviderLocked, setIsProviderLocked] = useState(false);
+  const [hasDetectedProvider, setHasDetectedProvider] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -220,40 +223,61 @@ export const ModelSelector = ({
     }
   }, [focusedProviderIndex]);
 
-  // Detect configured provider on mount
-  // DISABLED: This causes continuous API calls that fail in certain deployments
-  // and prevents the UI from loading properly. Users can manually select providers.
-  /*
+  // Auto-select first provider immediately to prevent loading hang
+  useEffect(() => {
+    if (providerList.length === 0 || provider) {
+      return; // Skip if no providers or already have one selected
+    }
+
+    // Immediately select first provider to unblock UI
+    const firstProvider = providerList[0];
+    setProvider?.(firstProvider);
+
+    // Get all models for this provider and pick the first one
+    const providerModels = modelList.filter((m) => m.provider === firstProvider.name);
+    const firstModel = providerModels[0];
+
+    if (firstModel && setModel) {
+      setModel(firstModel.name);
+    }
+  }, [providerList, modelList, provider, setProvider, setModel]);
+
+  // Detect configured provider in background (non-blocking)
   useEffect(() => {
     if (providerList.length === 0 || hasDetectedProvider) {
       return;
     }
 
     const detectProvider = async () => {
-      const { provider: detectedProvider, hasMultipleProviders } = await detectConfiguredProvider(providerList);
+      try {
+        const { provider: detectedProvider, hasMultipleProviders } = await detectConfiguredProvider(providerList);
 
-      if (detectedProvider) {
-        // Lock the provider dropdown if only one provider is configured
-        setIsProviderLocked(!hasMultipleProviders);
+        if (detectedProvider) {
+          // Lock the provider dropdown if only one provider is configured
+          setIsProviderLocked(!hasMultipleProviders);
 
-        // Set the detected provider
-        setProvider?.(detectedProvider);
+          // Update to detected provider (will override the default selection)
+          setProvider?.(detectedProvider);
 
-        // Get all models for this provider and pick the first one
-        const providerModels = modelList.filter((m) => m.provider === detectedProvider.name);
-        const firstModel = providerModels[0];
+          // Get all models for this provider and pick the first one
+          const providerModels = modelList.filter((m) => m.provider === detectedProvider.name);
+          const firstModel = providerModels[0];
 
-        if (firstModel && setModel) {
-          setModel(firstModel.name);
+          if (firstModel && setModel) {
+            setModel(firstModel.name);
+          }
         }
-
+      } catch (error) {
+        // Detection failed, but UI already has default provider selected
+        logger.debug('Provider detection failed, using default provider');
+      } finally {
         setHasDetectedProvider(true);
       }
     };
 
+    // Run detection in background without blocking
     detectProvider();
   }, [providerList, modelList, setProvider, setModel, hasDetectedProvider]);
-  */
 
   useEffect(() => {
     if (providerList.length === 0) {

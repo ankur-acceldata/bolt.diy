@@ -419,9 +419,6 @@ export const getTrinoUsageGuidelines = () => stripIndents`
             "driver": "io.trino.jdbc.TrinoDriver"
         }
 
-        if TRINO_PASSWORD:
-            connection_properties["password"] = TRINO_PASSWORD
-
         try:
             # Spark JDBC connector + Trino JDBC driver
             df = spark.read.jdbc(

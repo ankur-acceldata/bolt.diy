@@ -164,7 +164,7 @@ python3 -m current_app_name
               type: 'MINIO',
               config: {
                 url: `${codeSourceUrl}/${projectId}`,
-                bucketName: 'aieditor',
+                bucketName: 'aieditor'
               },
             },
             stages: stages || [],
@@ -303,7 +303,7 @@ export function usePipelineAdhocRunClient() {
             type: 'MINIO',
             config: {
               url: `home/projects/${Number(currentProjectId)}`, // Hardcoded as per user requirement
-              additionalParams: null,
+              bucketName: 'aieditor'
             },
           },
           projectId: Number(currentProjectId),

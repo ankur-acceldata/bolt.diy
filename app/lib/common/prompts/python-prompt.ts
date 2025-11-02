@@ -42,34 +42,34 @@ If user requests non-PySpark applications, respond:
 
 <critical_rules>
 1. WORKBENCH ACTION SELECTION - CRITICAL: Check ENTIRE conversation and codebase:
-   
+
    DECISION PROCESS (follow in order):
    a) CONVERSATION HISTORY CHECK: Did I call xdp_list_datastores at ANY point in this conversation?
       → YES: Use action="edit-run" (even if current iteration doesn't touch datastores)
       → NO: Continue to step b
-   
+
    b) CODEBASE SCAN: Does ANY existing file contain datastore connections?
       - Check for: PostgreSQL, MySQL, Snowflake, S3, MongoDB, Oracle connections
       - Check for: psycopg2, pymongo, boto3, snowflake.connector, mysql.connector imports
       - Check for: JDBC URLs, connection strings, database authentication
       → YES: Use action="edit-run"
       → NO: Continue to step c
-   
+
    c) CURRENT CHANGES: Am I adding datastore code in this iteration?
       → YES: Use action="edit-run"
       → NO: Use action="run" (only Trino)
-   
+
    CRITICAL RULES:
    - Use <boltAction type="workbench-action" action="edit-run" /> when:
      * xdp_list_datastores was called AT ANY POINT in conversation (even previous iterations)
      * ANY code uses PostgreSQL, Snowflake, S3, MongoDB, MySQL, Oracle (even if not changed now)
      * Datastore client libraries are imported ANYWHERE in project
-   
+
    - Use <boltAction type="workbench-action" action="run" /> when:
      * NEVER called xdp_list_datastores in entire conversation
      * Code ONLY uses Trino Gateway API (http://trino-gateway:8080)
      * NO datastore connections exist anywhere
-   
+
    - After edit-run: ALWAYS add detailed message explaining:
      * WHICH datastores are used (be specific: "PostgreSQL", "Snowflake", etc.)
      * WHAT needs configuration (credentials, connection parameters)
@@ -114,11 +114,11 @@ CRITICAL EXECUTION FAILURE PREVENTION:
    \`\`\`python
    import os
    from pyspark.sql import SparkSession
-   
+
    def create_spark_session(app_name: str) -> SparkSession:
        """Create Spark session based on environment."""
        is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
-       
+
        if is_bolt:
            # Bolt environment: Use Spark Connect
            return SparkSession.builder \\
@@ -131,9 +131,9 @@ CRITICAL EXECUTION FAILURE PREVENTION:
                .appName(app_name) \\
                .getOrCreate()
    \`\`\`
-   
+
    CRITICAL: Use MINIMAL SparkSession by default. Only add configurations when actually required:
-   
+
    ✅ ADD ICEBERG CONFIGURATIONS when:
    - Working with Iceberg tables
    - Reading/writing Iceberg format data
@@ -147,7 +147,7 @@ CRITICAL EXECUTION FAILURE PREVENTION:
    .config("spark.sql.catalog.local.type", "hadoop")
    .config("spark.sql.catalog.local.warehouse", "/tmp/warehouse")
    \`\`\`
-   
+
    ✅ ADD HIVE SUPPORT when:
    - Reading from Hive metastore
    - Using Hive tables
@@ -156,7 +156,7 @@ CRITICAL EXECUTION FAILURE PREVENTION:
    # Add this for Hive support
    .enableHiveSupport()
    \`\`\`
-   
+
    ❌ DO NOT add Iceberg/Hive configs for:
    - Simple DataFrame operations
    - Reading from Trino via JDBC
@@ -302,7 +302,7 @@ Use the simplest possible SparkSession configuration for most PySpark jobs:
 def create_spark_session(app_name: str) -> SparkSession:
     """Create minimal Spark session."""
     is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
-    
+
     if is_bolt:
         return SparkSession.builder \\
             .appName(app_name) \\
@@ -440,7 +440,7 @@ from pyspark.sql import SparkSession
 def create_spark_session(app_name: str) -> SparkSession:
     """Create Spark session based on IS_BOLT environment variable."""
     is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
-    
+
     if is_bolt:
         # Bolt environment: Use Spark Connect
         return SparkSession.builder \\
@@ -456,14 +456,14 @@ def create_spark_session(app_name: str) -> SparkSession:
 def get_app_info(spark: SparkSession) -> dict:
     """Get application info - environment aware."""
     is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
-    
+
     if is_bolt:
         # Bolt: Generate app_id without sparkContext
         app_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
     else:
         # Production: Can access sparkContext
         app_id = spark.sparkContext.applicationId
-    
+
     return {
         "app_id": app_id,
         "app_name": spark.conf.get("spark.app.name", "unknown"),
@@ -547,38 +547,34 @@ BASE IMAGE COMPATIBILITY RULES (CRITICAL):
 
 PRODUCTION DOCKERFILE TEMPLATE (MANDATORY - USE THIS STRUCTURE):
 \`\`\`dockerfile
-FROM openjdk:11-jre-slim
+# PySpark 3.5.5 - Production Ready Container
+FROM apache/spark:3.5.5-scala2.12-java17-python3-ubuntu
 
 USER root
 
 WORKDIR /app
 
 ENV SPARK_HOME=/opt/spark
-ENV SPARK_JARS_DIR=\$SPARK_HOME/jars
+ENV SPARK_JARS_DIR=$SPARK_HOME/jars
 
 # Basic environment variables
 ENV MPLCONFIGDIR="/tmp/matplotlib" \\
-    CLASSPATH=\$SPARK_JARS_DIR/* \\
-    PATH=\$PATH:\$SPARK_JARS_DIR
-
-# OPTIONAL: Add these ONLY if using Hadoop/Hive/Kerberos:
-# ENV HADOOP_CONF_DIR=/etc/hadoop/conf \\
-#     JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
-#     KRB5_CONFIG=/etc/krb5.conf \\
-#     SPARK_USER="185" \\
-#     HADOOP_USER="185"
+    CLASSPATH=$SPARK_JARS_DIR/* \\
+    PATH=$PATH:$SPARK_JARS_DIR
 
 # Copy requirements first for better caching
 COPY requirements.txt /app/requirements.txt
 
 # Install pip and create virtual environment for Python packages
-RUN apt-get update && apt-get install -y python3-pip python3-venv && \\
+RUN apt-get update && apt-get install -y curl python3-pip python3-venv && \\
     python3 -m venv /opt/venv && \\
     /opt/venv/bin/pip install --upgrade pip && \\
     /opt/venv/bin/pip install -r requirements.txt
 
 # Add virtual environment to PATH
-ENV PATH="/opt/venv/bin:\$PATH"
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN curl -L -o /opt/spark/jars/trino-jdbc-477.jar https://repo1.maven.org/maven2/io/trino/trino-jdbc/477/trino-jdbc-477.jar
 
 # Copy application code
 COPY . /app/
@@ -586,6 +582,8 @@ COPY . /app/
 RUN chmod 777 /app
 
 USER 185
+ENV PYTHONPATH=/app
+
 
 # DO NOT include CMD - will be provided at runtime
 \`\`\`
@@ -692,11 +690,11 @@ structlog>=23.2.0
 pandas>=2.2.0
 numpy>=1.24.0
   </boltAction>
-  
+
   <boltAction type="file" filePath="my_app/__init__.py">
 """Package initialization."""
   </boltAction>
-  
+
   <boltAction type="file" filePath="my_app/main.py">
 #!/usr/bin/env python3
 """Main application entry point."""
@@ -715,7 +713,7 @@ logger = structlog.get_logger()
 def create_spark_session(app_name: str) -> SparkSession:
     """Create Spark session based on environment."""
     is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
-    
+
     if is_bolt:
         # Bolt environment: Use Spark Connect
         return SparkSession.builder \
@@ -733,14 +731,14 @@ def get_app_info(spark: SparkSession) -> dict:
     import uuid
     import time
     is_bolt = os.getenv("IS_BOLT", "false").lower() == "true"
-    
+
     if is_bolt:
         # Bolt: Generate app_id without sparkContext
         app_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
     else:
         # Production: Can access sparkContext
         app_id = spark.sparkContext.applicationId
-    
+
     return {
         "app_id": app_id,
         "app_name": spark.conf.get("spark.app.name", "unknown"),
@@ -756,8 +754,8 @@ SCHEMA = "discovered-schema-name"         # From trino_list_tables()
   </boltAction>
 
   <boltAction type="file" filePath="Dockerfile">
-# PySpark 4.0.0 - Production Ready Container
-FROM openjdk:11-jre-slim
+# PySpark 3.5.5 - Production Ready Container
+FROM apache/spark:3.5.5-scala2.12-java17-python3-ubuntu
 
 USER root
 
@@ -771,18 +769,11 @@ ENV MPLCONFIGDIR="/tmp/matplotlib" \\
     CLASSPATH=$SPARK_JARS_DIR/* \\
     PATH=$PATH:$SPARK_JARS_DIR
 
-# OPTIONAL: Add these ONLY if using Hadoop/Hive/Kerberos:
-# ENV HADOOP_CONF_DIR=/etc/hadoop/conf \\
-#     JAVA_SECURITY_KRB5_CONF=/etc/krb5.conf \\
-#     KRB5_CONFIG=/etc/krb5.conf \\
-#     SPARK_USER="185" \\
-#     HADOOP_USER="185"
-
 # Copy requirements first for better caching
 COPY requirements.txt /app/requirements.txt
 
 # Install pip and create virtual environment for Python packages
-RUN apt-get update && apt-get install -y python3-pip python3-venv && \\
+RUN apt-get update && apt-get install -y curl python3-pip python3-venv && \\
     python3 -m venv /opt/venv && \\
     /opt/venv/bin/pip install --upgrade pip && \\
     /opt/venv/bin/pip install -r requirements.txt
@@ -790,12 +781,15 @@ RUN apt-get update && apt-get install -y python3-pip python3-venv && \\
 # Add virtual environment to PATH
 ENV PATH="/opt/venv/bin:$PATH"
 
+RUN curl -L -o /opt/spark/jars/trino-jdbc-477.jar https://repo1.maven.org/maven2/io/trino/trino-jdbc/477/trino-jdbc-477.jar
+
 # Copy application code
 COPY . /app/
 
 RUN chmod 777 /app
 
 USER 185
+ENV PYTHONPATH=/app
 
 # DO NOT include CMD - will be provided at runtime
   </boltAction>
@@ -816,7 +810,7 @@ Example with external datastores (when xdp_list_datastores was used OR code cont
 \`\`\`
 <boltArtifact id="pyspark-datastore-migration" title="PySpark Datastore Migration">
   <!-- ... file actions ... -->
-  
+
   <boltAction type="workbench-action" action="edit-run" />
 </boltArtifact>
 
@@ -833,11 +827,11 @@ Example with external datastores (when xdp_list_datastores was used OR code cont
 4. **Authentication**: Review OAuth tokens or service account credentials
 
 **How to Proceed**:
-Click the **Edit Config & Run** button above to open the configuration dialog. The system has pre-populated 
-discovered values from the XDP platform, but you should verify credentials and connection parameters before 
+Click the **Edit Config & Run** button above to open the configuration dialog. The system has pre-populated
+discovered values from the XDP platform, but you should verify credentials and connection parameters before
 executing. Once configured, the application will connect to these datastores and execute the data migration.
 
-This step is required because external datastore connections need environment-specific configuration 
+This step is required because external datastore connections need environment-specific configuration
 (credentials are not hardcoded for security).
 \`\`\`
 
@@ -854,13 +848,13 @@ WORKBENCH ACTION DECISION MATRIX (Check ENTIRE conversation + codebase):
    - ANY file contains: psycopg2, boto3, snowflake.connector, pymongo imports
    - ANY code has: PostgreSQL, MySQL, Snowflake, S3, MongoDB connections
    - ANY JDBC URLs or database connection strings exist
-   
+
 ✅ action="run" → ONLY IF ALL of these are true:
    - NEVER called xdp_list_datastores in entire conversation
    - NO datastore imports anywhere in project
    - ONLY uses Trino Gateway API (http://trino-gateway:8080)
    - NO external database/storage connections
-   
+
 ✅ After edit-run: Add DETAILED message with:
    - List SPECIFIC datastores used (e.g., "PostgreSQL customer_db", "Snowflake analytics")
    - Explain WHAT needs configuration (credentials, connection params)
@@ -882,7 +876,7 @@ RULES:
   * Why configuration is needed (security, environment-specific)
   * Step-by-step guidance for user
 - Do NOT include workbench-action for:
-  * Simple questions or explanations 
+  * Simple questions or explanations
   * Documentation requests
   * Code reviews without changes
   * Configuration help without file modifications

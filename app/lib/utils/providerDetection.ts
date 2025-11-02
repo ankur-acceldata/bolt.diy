@@ -4,7 +4,7 @@ import { createScopedLogger } from '~/utils/logger';
 const logger = createScopedLogger('ProviderDetection');
 
 // Timeout for provider configuration checks (in ms)
-const PROVIDER_CHECK_TIMEOUT = 5000;
+const PROVIDER_CHECK_TIMEOUT = 10000; // Increased to 10s for base path routing
 
 /**
  * Fetch with timeout support
@@ -57,7 +57,7 @@ export async function detectConfiguredProvider(providerList: ProviderInfo[]): Pr
     });
 
     const results = await Promise.allSettled(checkPromises);
-    
+
     // Extract successful results
     results.forEach((result) => {
       if (result.status === 'fulfilled' && result.value) {
@@ -67,7 +67,7 @@ export async function detectConfiguredProvider(providerList: ProviderInfo[]): Pr
 
     // Return the first configured provider
     if (configuredProviders.length === 0) {
-      logger.info('No configured provider detected');
+      // No logging needed - this is a normal state
       return { provider: null, hasMultipleProviders: false };
     }
 
@@ -81,7 +81,7 @@ export async function detectConfiguredProvider(providerList: ProviderInfo[]): Pr
       hasMultipleProviders: configuredProviders.length > 1,
     };
   } catch (error) {
-    logger.warn('Failed to detect configured provider (falling back to no provider):', error);
+    // Silently return no provider - detection is optional
     return { provider: null, hasMultipleProviders: false };
   }
 }
@@ -92,23 +92,51 @@ export async function detectConfiguredProvider(providerList: ProviderInfo[]): Pr
  */
 export async function isProviderConfigured(providerName: string): Promise<boolean> {
   try {
-    const response = await fetchWithTimeout(`/api/check-env-key?provider=${encodeURIComponent(providerName)}`);
+    const apiUrl = `/api/check-env-key?provider=${encodeURIComponent(providerName)}`;
+    logger.debug(`Checking ${providerName} at: ${apiUrl}`);
     
-    // Check if response is ok before parsing JSON
-    if (!response.ok) {
-      logger.warn(`Provider check returned ${response.status} for ${providerName}`);
-      return false;
+    // Use a fresh controller for each request to avoid cancellation issues
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PROVIDER_CHECK_TIMEOUT);
+    
+    try {
+      const response = await fetch(apiUrl, { 
+        signal: controller.signal,
+        // Add cache control to prevent stale responses
+        cache: 'no-cache',
+      });
+      
+      clearTimeout(timeoutId);
+      
+      logger.debug(`${providerName} response: status=${response.status}, ok=${response.ok}`);
+      
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        logger.debug(`${providerName} response not ok: ${response.status}`);
+        return false;
+      }
+      
+      const data = await response.json();
+      const isSet = (data as { isSet: boolean }).isSet;
+      
+      logger.info(`${providerName} configured: ${isSet}`);
+      
+      return isSet;
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      // Check if this was an abort error
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        logger.debug(`${providerName} request timed out after ${PROVIDER_CHECK_TIMEOUT}ms`);
+        return false;
+      }
+      
+      throw fetchError;
     }
-    
-    const data = await response.json();
-    return (data as { isSet: boolean }).isSet;
   } catch (error) {
-    // Network errors, timeout, or JSON parsing errors - fail gracefully
-    if ((error as Error).name === 'AbortError') {
-      logger.warn(`Provider check timed out for ${providerName} (falling back to false)`);
-    } else {
-      logger.warn(`Failed to check if provider ${providerName} is configured (falling back to false):`, error);
-    }
+    // Network errors, timeout, or JSON parsing errors - fail silently
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.debug(`${providerName} check failed: ${errorMsg}`);
     return false;
   }
 }

@@ -58,8 +58,9 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
 
           try {
             const serverData = await getServerConfig();
-            logger.debug(' STORE - Got server config:', serverData.mcpConfig);
-            logger.debug(' STORE - Got server tools:', serverData.serverTools);
+            const serverCount = Object.keys(serverData.mcpConfig?.mcpServers || {}).length;
+            const toolsCount = Object.keys(serverData.serverTools || {}).length;
+            logger.debug(`STORE - Got server config with ${serverCount} server(s) and ${toolsCount} tool(s)`);
 
             // Use server config as the source of truth
             const updatedSettings = {
@@ -91,8 +92,9 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
 
         try {
           const serverData = await getServerConfig();
-          logger.debug(' STORE - Got initial server config:', serverData.mcpConfig);
-          logger.debug(' STORE - Got initial server tools:', serverData.serverTools);
+          const serverCount = Object.keys(serverData.mcpConfig?.mcpServers || {}).length;
+          const toolsCount = Object.keys(serverData.serverTools || {}).length;
+          logger.debug(`✅ STORE - Got initial server config with ${serverCount} server(s) and ${toolsCount} tool(s)`);
 
           const settings: MCPSettings = {
             maxLLMSteps: 10,
@@ -117,11 +119,9 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
     }
 
     set(() => ({ isInitialized: true }));
-    logger.debug('🏁 MCP Store: Initialization complete, final state:', {
-      isInitialized: true,
-      serverTools: get().serverTools,
-      mcpConfig: get().settings.mcpConfig,
-    });
+    const finalServerCount = Object.keys(get().settings.mcpConfig?.mcpServers || {}).length;
+    const finalToolsCount = Object.keys(get().serverTools || {}).length;
+    logger.debug(`🏁 MCP Store: Initialization complete - ${finalServerCount} server(s), ${finalToolsCount} tool(s)`);
   },
   updateSettings: async (newSettings: MCPSettings) => {
     if (get().isUpdatingConfig) {
@@ -155,8 +155,8 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
 
     const data = (await response.json()) as { serverTools: MCPServerTools; mcpConfig: MCPConfig };
 
-    logger.debug(' STORE - checkServersAvailabilities got data:', data);
-    logger.debug(' STORE - Setting serverTools:', data.serverTools);
+    const toolsCount = Object.keys(data.serverTools || {}).length;
+    logger.debug(`✅ STORE - checkServersAvailabilities found ${toolsCount} tool(s)`);
 
     set(() => ({ serverTools: data.serverTools }));
   },
