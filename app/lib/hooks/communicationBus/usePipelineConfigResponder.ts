@@ -8,6 +8,7 @@ import { description } from '~/lib/persistence';
 
 import { getJobConfigFromXdp } from '~/lib/services/jobConfigService';
 import { getProjectId } from '~/utils/fileLocks';
+import { JobPromotionService } from '~/lib/services/jobPromotionService';
 
 const logger = createScopedLogger('usePipelineConfigResponder');
 
@@ -44,6 +45,10 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
          * const stages = extractShellCommands();
          */
 
+        // Extract job parameters dynamically from artifacts
+        const jobParams = JobPromotionService.extractJobCreationParams();
+        logger.info('Extracted job parameters for pipeline config:', jobParams);
+
         const stages = ["echo 'Hello World'"];
         const jobConfig = await getJobConfigFromXdp(busRef.current, stages);
 
@@ -56,8 +61,13 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
           description: description.get() || '',
           projectId: projectIdRef.current || getProjectId() || 'default-project',
           sourceUrl: codeSourceUrl,
-          stages,
+          stages: stages,
           imageFromUrl: jobConfig.baseImage || '',
+          jobExecutionConfig: {
+            jobType: 'SPARK_PYTHON',
+            mainApplicationFile: jobParams?.mainApplicationFile || 'local:///app/main.py',
+            ...(jobParams?.arguments && { arguments: jobParams.arguments }),
+          }
         };
 
         logger.info('Sending GET_PIPELINE_CONFIG_RESPONSE');
