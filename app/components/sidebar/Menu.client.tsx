@@ -10,7 +10,17 @@ import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
 import { ControlPanel } from '~/components/@settings/core/ControlPanel';
 
 import { Button } from '~/components/ui/Button';
-import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
+import { Checkbox } from '~/components/ui/Checkbox';
+import {
+  db,
+  deleteById,
+  getAll,
+  getMessages,
+  setMessages,
+  chatId,
+  type ChatHistoryItem,
+  useChatHistory,
+} from '~/lib/persistence';
 import { cubicEasingFn } from '~/utils/easings';
 import { HistoryItem } from './HistoryItem';
 import { binDates } from './date-binning';
@@ -48,8 +58,8 @@ const menuVariants = {
 } satisfies Variants;
 
 type DialogContent =
-  | { type: 'delete'; item: ChatHistoryItem }
-  | { type: 'bulkDelete'; items: ChatHistoryItem[] }
+  | { type: 'delete'; item: ChatHistoryItem; deletePipeline?: boolean }
+  | { type: 'bulkDelete'; items: ChatHistoryItem[]; deletePipeline?: boolean }
   | null;
 
 /*
@@ -112,19 +122,156 @@ export const Menu = () => {
     handleSearchChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
   }, [handleSearchChange]);
 
-  const loadEntries = useCallback(() => {
-    if (db) {
-      getAll(db)
-        .then((list) => list.filter((item) => item.urlId && item.description))
-        .then(setList)
-        .catch((error) => toast.error(error.message));
+  const loadEntries = useCallback(async () => {
+    try {
+      // Fetch projects from backend API
+      logger.info('📡 Fetching all projects from backend...');
+
+      const response = await fetch('/api/projects', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch projects: ${response.status}`);
+      }
+
+      const result = (await response.json()) as { success: boolean; data?: any };
+
+      logger.info('📦 Backend response:', {
+        success: result.success,
+        hasData: !!result.data,
+        dataType: typeof result.data,
+        dataKeys: result.data ? Object.keys(result.data) : [],
+      });
+
+      /*
+       * Extract projects array from nested structure
+       * Backend returns: { success, data: { data: { projects: [...] } } }
+       */
+      const projectsArray = result.data?.data?.projects || result.data?.projects || result.data;
+
+      logger.info('📦 Projects array:', {
+        isArray: Array.isArray(projectsArray),
+        length: Array.isArray(projectsArray) ? projectsArray.length : 0,
+      });
+
+      if (result.success && projectsArray && Array.isArray(projectsArray)) {
+        logger.info(`✅ Loaded ${projectsArray.length} projects from backend`);
+
+        // Log first project to see structure
+        if (projectsArray.length > 0) {
+          logger.info('📋 Sample project structure:', projectsArray[0]);
+        }
+
+        // Transform backend projects to ChatHistoryItem format
+        const transformedList: ChatHistoryItem[] = projectsArray
+          .map((project: any) => {
+            const transformed = {
+              id: String(project.id),
+              urlId: String(project.id),
+              description: project.name || project.description || 'Untitled Project',
+              messages: [],
+              timestamp: project.updatedAt || project.createdAt || new Date().toISOString(),
+            };
+
+            logger.debug('🔄 Transformed project:', { original: project.id, transformed });
+
+            return transformed;
+          })
+          .filter((item: ChatHistoryItem) => {
+            const isValid = item.urlId && item.description;
+
+            if (!isValid) {
+              logger.warn('⚠️ Filtered out invalid item:', item);
+            }
+
+            return isValid;
+          });
+
+        logger.info(`📊 Transformed ${transformedList.length} projects for display`);
+        setList(transformedList);
+
+        // Also store in IndexedDB for offline access
+        if (db) {
+          logger.info('💾 Caching projects in IndexedDB...');
+
+          for (const project of projectsArray) {
+            try {
+              // Check if project exists in IndexedDB
+              const existingChat = await getMessages(db, String(project.id));
+
+              if (!existingChat) {
+                // Only create entry if it doesn't exist
+                await setMessages(
+                  db,
+                  String(project.id),
+                  [], // Empty messages for now
+                  String(project.id), // urlId
+                  project.name || project.description || 'Untitled Project',
+                  project.updatedAt || project.createdAt,
+                  undefined, // metadata
+                );
+              }
+            } catch (error) {
+              logger.warn(`Failed to cache project ${project.id} in IndexedDB:`, error);
+            }
+          }
+
+          logger.info('✅ Projects cached in IndexedDB');
+        }
+      } else {
+        logger.warn('No projects returned from backend');
+        setList([]);
+      }
+    } catch (error: any) {
+      logger.error('Failed to load projects from backend:', error);
+      toast.error('Failed to load projects from backend');
+
+      // Fallback to IndexedDB if backend fails
+      if (db) {
+        logger.info('⚠️ Falling back to IndexedDB...');
+        getAll(db)
+          .then((list) => list.filter((item) => item.urlId && item.description))
+          .then(setList)
+          .catch((fallbackError) => {
+            logger.error('IndexedDB fallback also failed:', fallbackError);
+            toast.error(fallbackError.message);
+          });
+      }
     }
-  }, []);
+  }, [db]);
 
   const deleteChat = useCallback(
-    async (id: string): Promise<void> => {
+    async (id: string, deletePipeline: boolean = false): Promise<void> => {
       if (!db) {
         throw new Error('Database not available');
+      }
+
+      // Delete from backend API first
+      try {
+        logger.info(`Deleting project ${id} from backend (deletePipeline: ${deletePipeline})`);
+
+        const response = await fetch(`/api/projects/${id}?deletePipeline=${deletePipeline}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          logger.warn(`Backend delete failed for project ${id}: ${response.status}`);
+
+          // Continue with local deletion even if backend fails
+        } else {
+          logger.info(`Successfully deleted project ${id} from backend`);
+        }
+      } catch (backendError) {
+        logger.error(`Error deleting project ${id} from backend:`, backendError);
+
+        // Continue with local deletion even if backend fails
       }
 
       // Delete chat snapshot from localStorage
@@ -136,7 +283,7 @@ export const Menu = () => {
         logger.error(`Error deleting snapshot for chat ${id}:`, snapshotError);
       }
 
-      // Delete the chat from the database
+      // Delete the chat from the local database
       await deleteById(db, id);
       logger.info('fully deleted chat:', id);
     },
@@ -144,16 +291,20 @@ export const Menu = () => {
   );
 
   const deleteItem = useCallback(
-    (event: React.UIEvent, item: ChatHistoryItem) => {
+    (event: React.UIEvent, item: ChatHistoryItem, deletePipeline: boolean = false) => {
       event.preventDefault();
       event.stopPropagation();
 
       // Log the delete operation to help debugging
-      logger.debug('Attempting to delete chat:', { id: item.id, description: item.description });
+      logger.debug('Attempting to delete chat:', {
+        id: item.id,
+        description: item.description,
+        deletePipeline,
+      });
 
-      deleteChat(item.id)
-        .then(() => {
-          toast.success('Chat deleted successfully', {
+      deleteChat(item.id, deletePipeline)
+        .then(async () => {
+          toast.success(`Chat deleted successfully${deletePipeline ? ' (including pipeline)' : ''}`, {
             position: 'bottom-right',
             autoClose: 3000,
           });
@@ -162,6 +313,15 @@ export const Menu = () => {
           loadEntries();
 
           if (chatId.get() === item.id) {
+            // Clear URL state to prevent restoration to deleted project
+            try {
+              const { clearURLState } = await import('~/utils/urlStateManager');
+              clearURLState();
+              logger.debug('Cleared URL state for deleted project');
+            } catch (error) {
+              logger.error('Failed to clear URL state:', error);
+            }
+
             // hard page navigation to clear the stores
             logger.debug('Navigating away from deleted chat');
             navigateToHome(true);
@@ -228,6 +388,15 @@ export const Menu = () => {
 
       // Navigate if needed
       if (shouldNavigate) {
+        // Clear URL state to prevent restoration to deleted project
+        try {
+          const { clearURLState } = await import('~/utils/urlStateManager');
+          clearURLState();
+          logger.debug('Cleared URL state for deleted project(s)');
+        } catch (error) {
+          logger.error('Failed to clear URL state:', error);
+        }
+
         logger.debug('Navigating away from deleted chat');
         navigateToHome(true);
       }
@@ -239,14 +408,17 @@ export const Menu = () => {
     setDialogContent(null);
   };
 
-  const toggleSelectionMode = () => {
-    setSelectionMode(!selectionMode);
-
-    if (selectionMode) {
-      // If turning selection mode OFF, clear selection
-      setSelectedItems([]);
-    }
-  };
+  /*
+   * Selection mode toggle - currently disabled in UI
+   * const toggleSelectionMode = () => {
+   *   setSelectionMode(!selectionMode);
+   *
+   *   if (selectionMode) {
+   *     // If turning selection mode OFF, clear selection
+   *     setSelectedItems([]);
+   *   }
+   * };
+   */
 
   const toggleItemSelection = useCallback((id: string) => {
     setSelectedItems((prev) => {
@@ -294,6 +466,12 @@ export const Menu = () => {
     });
   }, [filteredList]); // Depends only on filteredList
 
+  // Load projects on mount (initial load)
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
+
+  // Refresh projects when menu opens (for updates)
   useEffect(() => {
     if (open) {
       loadEntries();
@@ -422,7 +600,7 @@ export const Menu = () => {
                 <span className="inline-block i-ph:plus-circle h-4 w-4" />
                 <span className="text-sm font-medium">Start new chat</span>
               </a>
-              <button
+              {/* <button
                 onClick={toggleSelectionMode}
                 className={classNames(
                   'flex gap-1 items-center rounded-lg px-3 py-2 transition-colors min-w-[44px] justify-center',
@@ -433,7 +611,7 @@ export const Menu = () => {
                 aria-label={selectionMode ? 'Exit selection mode' : 'Enter selection mode'}
               >
                 <span className={selectionMode ? 'i-ph:x h-4 w-4' : 'i-ph:check-square h-4 w-4'} />
-              </button>
+              </button> */}
             </div>
             <div className="relative w-full">
               <div className="absolute left-3 top-1/2 -translate-y-1/2">
@@ -522,6 +700,25 @@ export const Menu = () => {
                           </span>
                         </p>
                         <p className="mt-2">Are you sure you want to delete this chat?</p>
+                        <div className="mt-4 flex items-start gap-3 p-3 bg-bolt-elements-bg-depth-2 rounded-lg border border-bolt-elements-borderColor">
+                          <Checkbox
+                            checked={dialogContent.deletePipeline || false}
+                            onCheckedChange={(checked) => {
+                              setDialogContentWithLogging({
+                                ...dialogContent,
+                                deletePipeline: checked === true,
+                              });
+                            }}
+                          />
+                          <div className="flex-1">
+                            <label className="text-sm font-medium text-bolt-elements-textPrimary cursor-pointer">
+                              Also delete related code and pipeline
+                            </label>
+                            <p className="text-xs text-bolt-elements-textTertiary mt-1">
+                              This will permanently remove all associated files and pipeline configurations
+                            </p>
+                          </div>
+                        </div>
                       </DialogDescription>
                     </div>
                     <div className="flex justify-end gap-3 px-6 py-4 bg-bolt-elements-bg-depth-2 border-t border-bolt-elements-borderColor">
@@ -532,7 +729,7 @@ export const Menu = () => {
                         type="danger"
                         onClick={(event) => {
                           logger.debug('Dialog delete button clicked for item:', dialogContent.item);
-                          deleteItem(event, dialogContent.item);
+                          deleteItem(event, dialogContent.item, dialogContent.deletePipeline || false);
                           closeDialog();
                         }}
                       >

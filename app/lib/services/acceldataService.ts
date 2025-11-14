@@ -520,6 +520,52 @@ export class AcceldataService {
   }
 
   /**
+   * Delete a project by ID
+   * @param projectId - The project ID to delete
+   * @param deletePipeline - Whether to also delete the associated pipeline
+   * @param request - Optional request object for headers
+   */
+  static async deleteProject(
+    projectId: string | number,
+    deletePipeline: boolean = false,
+    request?: Request,
+  ): Promise<AcceldataApiResponse> {
+    logger.info(`Deleting project ${projectId} (deletePipeline: ${deletePipeline})`);
+
+    const endpoint = `/api/projects/${projectId}${deletePipeline ? '?deletePipeline=true' : ''}`;
+
+    const result = await this.call(endpoint, {
+      method: 'DELETE',
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = `Project ${projectId} deleted successfully${deletePipeline ? ' (including pipeline)' : ''}`;
+    }
+
+    return result;
+  }
+
+  /**
+   * Get all sessions for a project
+   */
+  static async getProjectSessions(projectId: string | number, request?: Request): Promise<AcceldataApiResponse> {
+    logger.info(`Fetching sessions for project ${projectId}`);
+
+    const result = await this.call(`/api/projects/${projectId}/sessions`, {
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = `Sessions fetched successfully for project ${projectId}`;
+    }
+
+    return result;
+  }
+
+  /**
    * Create user session for a project
    */
   static async createUserSession(
@@ -538,6 +584,43 @@ export class AcceldataService {
 
     if (result.success) {
       result.message = `User session created successfully for project ${projectId}`;
+    }
+
+    return result;
+  }
+
+  /**
+   * Create or update session for a project
+   * This is used for saving chat data to a session
+   */
+  static async createOrUpdateSession(
+    projectId: string | number,
+    sessionData: any,
+    request?: Request,
+  ): Promise<AcceldataApiResponse> {
+    /*
+     * If id is provided, use PUT to update existing session
+     * Otherwise, use POST to create new session
+     */
+    const sessionId = sessionData.id;
+    const method = sessionId ? 'PUT' : 'POST';
+    const endpoint = sessionId
+      ? `/api/projects/${projectId}/sessions/${sessionId}`
+      : `/api/projects/${projectId}/sessions`;
+
+    logger.info(
+      `${method === 'PUT' ? 'Updating' : 'Creating'} session for project ${projectId}${sessionId ? ` (session ${sessionId})` : ''}`,
+    );
+
+    const result = await this.call(endpoint, {
+      method,
+      body: sessionData,
+      requestHeaders: request?.headers,
+      request,
+    });
+
+    if (result.success) {
+      result.message = `Session ${method === 'PUT' ? 'updated' : 'created'} successfully for project ${projectId}`;
     }
 
     return result;

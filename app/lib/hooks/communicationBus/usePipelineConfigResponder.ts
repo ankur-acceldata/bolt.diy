@@ -61,13 +61,13 @@ export function usePipelineConfigResponder({ currentProjectId }: UsePipelineConf
           description: description.get() || '',
           projectId: projectIdRef.current || getProjectId() || 'default-project',
           sourceUrl: codeSourceUrl,
-          stages: stages,
+          stages,
           imageFromUrl: jobConfig.baseImage || '',
           jobExecutionConfig: {
             jobType: 'SPARK_PYTHON',
             mainApplicationFile: jobParams?.mainApplicationFile || 'local:///app/main.py',
             ...(jobParams?.arguments && { arguments: jobParams.arguments }),
-          }
+          },
         };
 
         logger.info('Sending GET_PIPELINE_CONFIG_RESPONSE');

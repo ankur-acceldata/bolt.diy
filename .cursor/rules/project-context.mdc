@@ -1,0 +1,115 @@
+---
+alwaysApply: true
+---
+
+# Project Context: Bolt.DIY - AI-Powered Full-Stack Web Development
+
+> **📖 For complete project documentation, see [`context/README.md`](../context/README.md)**
+
+## 🚨 Critical Workflow: Context-First Development (ALWAYS FOLLOW)
+
+**Before starting ANY work:**
+
+1. **Check Context First**
+   ```bash
+   cd context/ && ls -la | grep "feature-name"
+   ```
+   - Review what's been done, issues encountered, what needs to be done
+
+2. **Create Context if Missing**
+   ```bash
+   mkdir context/feature-name
+   cp context/CONTEXT_TEMPLATE.md context/feature-name/IMPLEMENTATION.md
+   ```
+
+3. **Document Continuously**
+   - Update context as you work
+   - **Document ALL file changes** (created/modified/deleted) with reasons
+   - Include issues and solutions
+   - Update what needs to be done next
+
+### File Tracking (MANDATORY)
+
+For EVERY file created/modified/deleted, document:
+- **Created**: Path, purpose, why created, key exports
+- **Modified**: Path, changes made, why modified, lines changed  
+- **Deleted**: Path, why deleted, migration path
+
+## Essential Resources
+
+- **[`context/README.md`](../context/README.md)** - Main documentation index
+- **[`context/WORKFLOW_GUIDE.md`](../context/WORKFLOW_GUIDE.md)** - Complete workflow guide
+- **[`context/CONTEXT_TEMPLATE.md`](../context/CONTEXT_TEMPLATE.md)** - Template for new features
+- **[`context/EXAMPLE_WORKFLOW.md`](../context/EXAMPLE_WORKFLOW.md)** - Real-world examples
+- **[`context/FILE_TRACKING_GUIDE.md`](../context/FILE_TRACKING_GUIDE.md)** - File tracking guidelines
+
+## Critical Patterns
+
+### Logging
+```typescript
+import { createScopedLogger } from '~/utils/logger';
+const logger = createScopedLogger('ComponentName');
+logger.info('Message'); // NOT console.log
+```
+
+### API Integration
+- Headers added via fetch interceptor (centralized)
+- NO explicit headers in individual API calls
+- See: `context/api-integration/API_INTERCEPTOR_GUIDE.md`
+
+### Environment Variables
+- **BASE_URL**: Asset URLs and API endpoints
+- **BASE_PATH**: Application base path (e.g., `/ai-editor/`)
+- Never hardcode - consume from config
+
+### Theming
+- Multi-theme system with light/dark modes
+- UI components must be theme-agnostic
+- See: `context/theming/THEME_SYSTEM.md`
+
+## Always Remember ✅
+
+1. Check context before starting work
+2. Create context if it doesn't exist
+3. Document ALL file changes with reasons
+4. Update context continuously
+5. Use scoped logger, not `console.log`
+6. Follow centralized API patterns
+7. Never hardcode base paths
+8. Ensure theme-agnostic UI components
+9. Add newline at end of files
+10. Never add markdown docs to root (only `README.md`)
+
+## Never Do ❌
+
+1. Start coding without checking/creating context
+2. Use `console.log` (use scoped logger)
+3. Add headers explicitly in API calls
+4. Hardcode base paths or URLs
+5. Add markdown files to project root
+6. Skip documenting file changes
+7. Use wrangler CLI in Docker production
+8. Skip testing after implementation
+
+## Tech Stack
+
+- **Frontend**: Remix (React), UnoCSS, Tailwind, Zustand
+- **Backend**: Node.js/Cloudflare Workers, Golang API, Minio
+- **Build**: Vite, pnpm
+- **Deploy**: Docker, Kubernetes, Cloudflare Workers
+
+## Quick Commands
+
+```bash
+
+# Check context
+cd context/ && ls -la | grep "feature-name"
+
+# Create new feature context
+mkdir context/feature-name
+cp context/CONTEXT_TEMPLATE.md context/feature-name/IMPLEMENTATION.md
+```
+
+---
+
+**Remember:** Context-first development is not optional—it's how we work. Every feature starts with documentation, continues with continuous updates, and ends with complete file tracking.

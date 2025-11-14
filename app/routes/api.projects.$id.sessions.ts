@@ -4,6 +4,10 @@ import { AcceldataService } from '~/lib/services/acceldataService';
 
 const logger = createScopedLogger('api.projects.$id.sessions');
 
+/**
+ * GET /api/projects/:id/sessions
+ * Fetch all sessions for a project
+ */
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { id } = params;
 
@@ -12,10 +16,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   try {
-    const result = await AcceldataService.getAllSessionsByProjectId(id, request);
+    logger.info(`Fetching sessions for project ${id}`);
+
+    const result = await AcceldataService.getProjectSessions(id, request);
+
     return json(result, { status: result.status });
   } catch (error) {
     logger.error(`Error fetching sessions for project ${id}:`, error);
+
     return json(
       {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -26,6 +34,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 }
 
+/**
+ * POST /api/projects/:id/sessions
+ * Create a new session for a project
+ */
 export async function action({ request, params }: ActionFunctionArgs) {
   const { id } = params;
 
@@ -33,34 +45,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ error: 'Project ID is required', success: false }, { status: 400 });
   }
 
+  // Only handle POST requests (PUT is handled by separate route)
   if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, { status: 405 });
+    return json({ error: 'Method not allowed', success: false }, { status: 405 });
   }
 
   try {
-    let sessionData: any;
+    const sessionData = await request.json();
 
-    try {
-      const bodyText = await request.text();
+    logger.info(`Creating new session for project ${id}`);
 
-      if (bodyText && bodyText.trim()) {
-        sessionData = JSON.parse(bodyText);
-        logger.info(`Creating session for project ${id} with data:`, sessionData);
-      }
-    } catch (parseError) {
-      logger.warn('Failed to parse request body:', parseError);
-      return json({ error: 'Invalid JSON in request body', success: false }, { status: 400 });
-    }
-
-    if (!sessionData) {
-      return json({ error: 'Session data is required', success: false }, { status: 400 });
-    }
-
-    const result = await AcceldataService.createUserSession(id, sessionData, request);
+    const result = await AcceldataService.createOrUpdateSession(id, sessionData, request);
 
     return json(result, { status: result.status });
   } catch (error) {
-    logger.error(`Session creation error for project ${id}:`, error);
+    logger.error(`Error creating session for project ${id}:`, error);
+
     return json(
       {
         error: error instanceof Error ? error.message : 'Unknown error',

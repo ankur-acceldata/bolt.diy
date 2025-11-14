@@ -1,7 +1,7 @@
 import { atom, type WritableAtom } from 'nanostores';
 import { createScopedLogger } from '~/utils/logger';
 import type { LogViewerInstance, CreateLogViewerInstanceConfig } from '~/types/logStream';
-import { getProjectId } from '~/utils/fileLocks';
+import { getCurrentChatId } from '~/utils/fileLocks';
 
 const logger = createScopedLogger('LogViewerStore');
 
@@ -44,19 +44,53 @@ export class LogViewerStore {
     this.activeLogViewerId.subscribe(() => this._persistState());
     this.autoSendEnabled.subscribe(() => this._persistState());
 
+    // Listen for chat ID changes to reload state for new chat
+    if (typeof window !== 'undefined') {
+      let lastChatId = getCurrentChatId();
+
+      // Use MutationObserver to detect URL changes (for SPA navigation)
+      const observer = new MutationObserver(() => {
+        const currentChatId = getCurrentChatId();
+
+        if (currentChatId !== lastChatId) {
+          logger.info(`Chat ID changed from ${lastChatId} to ${currentChatId}, reloading log viewer state`);
+          lastChatId = currentChatId;
+          this._reloadStateForNewChat();
+        }
+      });
+
+      observer.observe(document, { subtree: true, childList: true });
+    }
+
     logger.info('LogViewerStore initialized with persisted state:', persistedState);
   }
 
   /**
-   * Get storage key scoped to current project ID
+   * Reload log viewer state when chat ID changes
+   * This ensures each chat session has its own independent log viewer state
    */
-  private _getStorageKey(): string {
-    const projectId = getProjectId();
-    return `${STORAGE_KEY_PREFIX}_${projectId}`;
+  private _reloadStateForNewChat(): void {
+    const newState = this._loadPersistedState();
+
+    this.showLogViewerPanel.set(newState.showLogViewerPanel);
+    this.logViewerInstances.set(newState.logViewerInstances);
+    this.activeLogViewerId.set(newState.activeLogViewerId);
+    this.autoSendEnabled.set(newState.autoSendEnabled);
+
+    logger.info('Reloaded log viewer state for new chat:', newState);
   }
 
   /**
-   * Load persisted state from localStorage for current project
+   * Get storage key scoped to current chat ID (session)
+   * Each chat session should have its own log viewer state
+   */
+  private _getStorageKey(): string {
+    const chatId = getCurrentChatId();
+    return `${STORAGE_KEY_PREFIX}_${chatId}`;
+  }
+
+  /**
+   * Load persisted state from localStorage for current chat session
    */
   private _loadPersistedState(): PersistedLogViewerState {
     // Check if we're in a browser environment
@@ -75,8 +109,8 @@ export class LogViewerStore {
 
       if (stored) {
         const parsed = JSON.parse(stored) as PersistedLogViewerState;
-        const projectId = getProjectId();
-        logger.info(`Loaded persisted log viewer state for project ${projectId}`);
+        const chatId = getCurrentChatId();
+        logger.info(`Loaded persisted log viewer state for chat ${chatId}`);
 
         return parsed;
       }
@@ -94,7 +128,7 @@ export class LogViewerStore {
   }
 
   /**
-   * Persist current state to localStorage for current project
+   * Persist current state to localStorage for current chat session
    */
   private _persistState(): void {
     // Check if we're in a browser environment
@@ -113,23 +147,23 @@ export class LogViewerStore {
 
       localStorage.setItem(storageKey, JSON.stringify(state));
 
-      const projectId = getProjectId();
-      logger.debug(`Persisted log viewer state for project ${projectId}`);
+      const chatId = getCurrentChatId();
+      logger.debug(`Persisted log viewer state for chat ${chatId}`);
     } catch (error) {
       logger.error('Failed to persist log viewer state:', error);
     }
   }
 
   /**
-   * Clear persisted state from localStorage for current project
+   * Clear persisted state from localStorage for current chat session
    */
   clearPersistedState(): void {
     try {
       const storageKey = this._getStorageKey();
       localStorage.removeItem(storageKey);
 
-      const projectId = getProjectId();
-      logger.info(`Cleared persisted log viewer state for project ${projectId}`);
+      const chatId = getCurrentChatId();
+      logger.info(`Cleared persisted log viewer state for chat ${chatId}`);
     } catch (error) {
       logger.error('Failed to clear persisted log viewer state:', error);
     }

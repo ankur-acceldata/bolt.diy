@@ -7,6 +7,7 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
 import { createChatUrl, navigateToChat, navigateToHome } from '~/utils/api';
 import { streamingState } from '~/lib/stores/streaming';
+import type { ProjectResponse } from '~/types/backend-api';
 import {
   getMessages,
   createProjectAndGetId,
@@ -101,6 +102,51 @@ export function useChatHistory() {
         }
 
         /*
+         * STEP 1: Fetch sessions from backend for this project
+         * This ensures we always have the latest data from the backend
+         * mixedId is the projectId, we fetch the latest session for it
+         */
+        logger.info(`🌐 Fetching sessions for project ${mixedId} from backend...`);
+
+        let backendData: any = null;
+
+        try {
+          const { BackendPersistenceService: backendPersistenceService } = await import(
+            '~/lib/services/backendPersistenceService'
+          );
+
+          // Load the latest session for this project
+          backendData = await backendPersistenceService.loadChat(mixedId);
+
+          if (backendData && backendData.messages && backendData.messages.length > 0) {
+            logger.info(`✅ Loaded ${backendData.messages.length} messages from backend session ${backendData.id}`);
+
+            /*
+             * Store backend data in IndexedDB for current session
+             * Use the session ID as the chat ID
+             */
+            logger.info(`💾 Storing backend session data in IndexedDB...`);
+            await setMessages(
+              db,
+              backendData.id, // Use session ID as chat ID
+              backendData.messages,
+              backendData.id, // urlId
+              backendData.description,
+              backendData.timestamp,
+              backendData.metadata,
+            );
+            logger.info(`✅ Backend session data stored in IndexedDB`);
+          } else {
+            logger.info(`ℹ️ No sessions found in backend for project ${mixedId}`);
+          }
+        } catch (backendError: any) {
+          logger.warn(`⚠️ Could not load sessions from backend:`, backendError);
+
+          // Continue to try loading from IndexedDB as fallback
+        }
+
+        /*
+         * STEP 2: Load from IndexedDB (either backend data we just stored, or existing data)
          * Debug each lookup method separately
          * IMPORTANT: Resolve the actual chatId first before loading snapshot
          * Snapshots are saved with actualChatId, not mixedId
@@ -147,10 +193,10 @@ export function useChatHistory() {
                 storedMessages,
                 type: typeof storedMessages,
               });
-              
+
               // Show a user-friendly message
               toast.info('Chat not found. Starting a new conversation.');
-              
+
               navigateToHome(true);
               setReady(true);
               setIsInitialLoad(false);
@@ -308,8 +354,8 @@ ${value.content}
           .catch((error) => {
             // Check if this is a "not found" error vs actual error
             const errorMessage = error?.message || String(error);
-            const isNotFoundError = 
-              errorMessage.includes('not found') || 
+            const isNotFoundError =
+              errorMessage.includes('not found') ||
               errorMessage.includes('does not exist') ||
               errorMessage.includes('No such object');
 
@@ -441,7 +487,7 @@ ${value.content}
         return;
       }
 
-      logger.info(`🔄 Syncing backend project ${projectId} with IndexedDB data...`);
+      logger.info(`🔄 Checking backend project ${projectId} metadata...`);
 
       const { ProjectService: projectService } = await import('~/lib/services/projectService');
 
@@ -449,10 +495,15 @@ ${value.content}
       const backendProject = await projectService.getProject(projectId);
       logger.info('📋 Backend project state:', backendProject);
 
-      // Step 2: Check what data is missing in backend
-      const missingName = !backendProject.name || backendProject.name === '';
-      const missingDescription = !backendProject.description || backendProject.description === '';
-      const missingUrl = !backendProject.url || backendProject.url === '';
+      // Handle nested response structure (result.data might have .data property)
+      const { extractProjectData: extractData } = await import('~/types/backend-api');
+      const projectData = extractData(backendProject as ProjectResponse);
+      logger.debug('📋 Extracted project data:', projectData);
+
+      // Step 2: Check what data is missing in backend (metadata only, NOT session data)
+      const missingName = !projectData.name || projectData.name === '';
+      const missingDescription = !projectData.description || projectData.description === '';
+      const missingUrl = !projectData.url || projectData.url === '';
 
       logger.debug('🔍 Backend missing data check:', {
         missingName,
@@ -460,7 +511,10 @@ ${value.content}
         missingUrl,
       });
 
-      // Step 3: If missing data, update backend with IndexedDB data
+      /*
+       * Step 3: If missing metadata, update ONLY metadata (not session)
+       * Session updates are handled separately via BackendPersistenceService
+       */
       if (missingName || missingDescription || missingUrl) {
         const updateData: any = {};
 
@@ -474,47 +528,29 @@ ${value.content}
         }
 
         if (Object.keys(updateData).length > 0) {
-          logger.info('🔄 Updating backend with IndexedDB data:', updateData);
+          logger.info('🔄 Updating backend project metadata (NOT session):', updateData);
+
+          /*
+           * IMPORTANT: Update only metadata, do NOT include userSession
+           * This prevents creating a new session
+           */
           await projectService.updateProject(projectId, updateData);
-          logger.info('✅ Backend project synced successfully');
+          logger.info('✅ Backend project metadata synced successfully');
         }
       } else {
-        logger.info('✅ Backend project already complete - no sync needed');
+        logger.info('✅ Backend project metadata already complete - no sync needed');
       }
     } catch (error) {
-      logger.error('❌ Failed to sync backend project:', error);
+      logger.error('❌ Failed to sync backend project metadata:', error);
 
       // Don't throw - keep chat loading even if sync fails
     }
   };
 
-  const updateProjectNameIfNeeded = async (newTitle: string) => {
-    try {
-      const currentChatId = chatId.get();
-
-      if (!currentChatId) {
-        return;
-      }
-
-      // Update backend project with AI-generated title
-      logger.info('Updating backend project with AI-generated title:', newTitle, 'for project:', currentChatId);
-
-      try {
-        const { ProjectService: projectService } = await import('~/lib/services/projectService');
-        await projectService.updateProject(currentChatId, {
-          name: newTitle,
-          description: newTitle, // Use the same title for both name and description as requested
-        });
-        logger.info('Successfully updated project with new title:', newTitle);
-      } catch (updateError) {
-        logger.error('Failed to update backend project:', updateError);
-
-        // Don't throw here to avoid breaking chat functionality if project update fails
-      }
-    } catch (error) {
-      logger.error('Failed to update project name:', error);
-    }
-  };
+  /*
+   * Note: updateProjectNameIfNeeded has been moved to Chat.client.tsx onFinish callback
+   * to avoid calling the API multiple times during streaming. This function is no longer used.
+   */
 
   const takeSnapshot = useCallback(
     async (
@@ -703,8 +739,10 @@ ${value.content}
       if (!description.get() && firstArtifact?.title) {
         description.set(firstArtifact?.title);
 
-        // Also update the backend project name with the AI-generated title
-        updateProjectNameIfNeeded(firstArtifact.title);
+        /*
+         * Note: Backend project name update is now handled in Chat.client.tsx onFinish callback
+         * to avoid calling the API multiple times during streaming
+         */
       }
 
       if (!finalChatId) {

@@ -21,7 +21,7 @@ export class JobPromotionService {
   static extractJobCreationParams(): JobPromotionParams | null {
     try {
       logger.info('[extractJobCreationParams] Starting job promotion extraction...');
-      
+
       // 1. Find main application file from artifacts
       const mainApplicationFile = this._findMainApplicationFile();
       logger.info(`[extractJobCreationParams] _findMainApplicationFile returned: ${mainApplicationFile}`);
@@ -62,7 +62,7 @@ export class JobPromotionService {
    */
   private static _findMainApplicationFile(): string | null {
     logger.info('[_findMainApplicationFile] Starting search for main application file...');
-    
+
     try {
       const artifacts = workbenchStore.artifacts.get();
       const artifactIdList = workbenchStore.artifactIdList;
@@ -77,7 +77,7 @@ export class JobPromotionService {
       // Get latest artifact (most recent AI generation)
       const latestMessageId = artifactIdList[artifactIdList.length - 1];
       logger.info(`[_findMainApplicationFile] Latest artifact message ID: ${latestMessageId}`);
-      
+
       const latestArtifact = artifacts[latestMessageId];
 
       if (!latestArtifact) {
@@ -102,20 +102,24 @@ export class JobPromotionService {
           // Check for common Python main file patterns
           if (this._isMainApplicationFile(filePath)) {
             logger.info(`[findMainApplicationFile] Found main file pattern: ${filePath}`);
-            
-            // Keep full path including module directory
-            // Example: call_center_analysis/main.py -> /app/call_center_analysis/main.py
+
+            /*
+             * Keep full path including module directory
+             * Example: call_center_analysis/main.py -> /app/call_center_analysis/main.py
+             */
             const cleanPath = filePath.replace(/^\.\//, '');
             const fullPath = workDir ? `${workDir}/${cleanPath}` : cleanPath;
-            
+
             logger.info(`[findMainApplicationFile] cleanPath: ${cleanPath}`);
             logger.info(`[findMainApplicationFile] fullPath: ${fullPath}`);
+
             return fullPath;
           }
         }
       }
 
       logger.warn('[findMainApplicationFile] No main application file found in artifacts');
+
       return null;
     } catch (error) {
       logger.error('Error finding main application file:', error);

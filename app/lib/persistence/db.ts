@@ -2,15 +2,26 @@ import type { Message } from 'ai';
 import { createScopedLogger } from '~/utils/logger';
 import type { ChatHistoryItem } from './useChatHistory';
 import type { Snapshot, VersionedSnapshot, SnapshotVersionIndex, SnapshotVersion, ChangeType } from './types'; // Import all snapshot types
+import { BackendPersistenceService } from '~/lib/services/backendPersistenceService';
+import { logStore } from '~/lib/stores/logs';
 
 export interface IChatMetadata {
   gitUrl: string;
   gitBranch?: string;
   netlifySiteId?: string;
   projectId?: string;
+  sessionId?: string; // Added to store backend session ID
 }
 
 const logger = createScopedLogger('ChatHistory');
+
+/*
+ * Feature flag to enable backend persistence
+ * Set to true to use backend storage, false to use IndexedDB only
+ * NOTE: Currently disabled to prevent API call loops during streaming
+ * Backend sync is handled manually in Chat.client.tsx onFinish callback
+ */
+const ENABLE_BACKEND_PERSISTENCE = false;
 
 // this is used at the top level and never rejects
 export async function openDatabase(): Promise<IDBDatabase | undefined> {
@@ -103,7 +114,8 @@ export async function setMessages(
   timestamp?: string,
   metadata?: IChatMetadata,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  // Store in IndexedDB first (for backward compatibility and offline support)
+  const indexedDBPromise = new Promise<void>((resolve, reject) => {
     const transaction = db.transaction('chats', 'readwrite');
     const store = transaction.objectStore('chats');
 
@@ -129,25 +141,104 @@ export async function setMessages(
     const request = store.put(chatData);
 
     request.onsuccess = () => {
-      logger.debug(`Successfully stored chat with id: ${id}`);
+      logger.debug(`Successfully stored chat with id: ${id} in IndexedDB`);
       resolve();
     };
 
     request.onerror = () => {
-      logger.error(`Failed to store chat with id: ${id}`, request.error);
+      logger.error(`Failed to store chat with id: ${id} in IndexedDB`, request.error);
       reject(request.error);
     };
   });
+
+  // If backend persistence is enabled, also store in backend
+  if (ENABLE_BACKEND_PERSISTENCE) {
+    try {
+      logStore.logSystem('[HYBRID-PERSIST] Storing chat in both IndexedDB and backend', {
+        chatId: id,
+        messageCount: messages.length,
+      });
+
+      // Wait for IndexedDB to complete first
+      await indexedDBPromise;
+
+      // Then store in backend (non-blocking, fire and forget)
+      BackendPersistenceService.saveChat(id, messages, description, metadata).catch((error) => {
+        logger.error(`Failed to store chat ${id} in backend (non-critical):`, error);
+        logStore.logError('[HYBRID-PERSIST] Backend storage failed (non-critical)', error);
+
+        // Don't throw - IndexedDB storage succeeded, backend is supplementary
+      });
+
+      logger.debug(`Chat ${id} stored in IndexedDB, backend storage initiated`);
+
+      // Wait for IndexedDB to complete before returning
+      await indexedDBPromise;
+    } catch (error) {
+      logger.error(`Failed to store chat ${id}:`, error);
+      throw error;
+    }
+  } else {
+    // Only IndexedDB storage
+    await indexedDBPromise;
+  }
 }
 
 export async function getMessages(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
   logger.debug(`🔍 getMessages called with id: ${id}`);
 
+  // If backend persistence is enabled, try backend first
+  if (ENABLE_BACKEND_PERSISTENCE) {
+    try {
+      logStore.logSystem('[HYBRID-PERSIST] Attempting to load chat from backend', { chatId: id });
+
+      const backendChat = await BackendPersistenceService.loadChat(id);
+
+      if (backendChat && backendChat.messages.length > 0) {
+        logger.info(`🔍 Found chat in backend with ${backendChat.messages.length} messages`);
+        logStore.logSystem('[HYBRID-PERSIST] Chat loaded from backend', {
+          chatId: id,
+          messageCount: backendChat.messages.length,
+        });
+
+        // Also update IndexedDB cache with backend data
+        try {
+          const transaction = db.transaction('chats', 'readwrite');
+          const store = transaction.objectStore('chats');
+
+          store.put({
+            id: backendChat.id,
+            messages: backendChat.messages,
+            urlId: backendChat.urlId || backendChat.id,
+            description: backendChat.description,
+            timestamp: backendChat.timestamp,
+            metadata: backendChat.metadata,
+          });
+
+          logger.debug(`🔍 Updated IndexedDB cache from backend data`);
+        } catch (cacheError) {
+          logger.warn(`Failed to update IndexedDB cache:`, cacheError);
+
+          // Non-critical, continue
+        }
+
+        return backendChat as ChatHistoryItem;
+      }
+
+      logger.debug(`🔍 Chat not found in backend, falling back to IndexedDB`);
+      logStore.logSystem('[HYBRID-PERSIST] Chat not in backend, trying IndexedDB', { chatId: id });
+    } catch (backendError) {
+      logger.warn(`Failed to load from backend, falling back to IndexedDB:`, backendError);
+      logStore.logError('[HYBRID-PERSIST] Backend load failed, falling back to IndexedDB', backendError);
+    }
+  }
+
+  // Fallback to IndexedDB
   const byId = await getMessagesById(db, id);
   logger.debug(`🔍 getMessagesById result:`, byId ? 'FOUND' : 'NOT FOUND');
 
   if (byId) {
-    logger.debug(`🔍 Returning chat found by ID`);
+    logger.debug(`🔍 Returning chat found by ID from IndexedDB`);
     return byId;
   }
 

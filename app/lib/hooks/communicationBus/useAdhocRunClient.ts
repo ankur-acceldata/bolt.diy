@@ -156,15 +156,16 @@ python3 -m current_app_name
           executionConfig: {
             jobType: (jobType as JobType) || 'SPARK_CONNECT_PYTHON_ADHOC',
             image: baseImage || '191579300362.dkr.ecr.us-east-1.amazonaws.com/acceldata/xdp/dp/spark:4.0.0-sc',
-            imagePullSecrets: (executionConfig as any)?.imagePullSecrets?.length > 0
-              ? (executionConfig as any).imagePullSecrets
-              : ['registry-ecr-secret'],
+            imagePullSecrets:
+              (executionConfig as any)?.imagePullSecrets?.length > 0
+                ? (executionConfig as any).imagePullSecrets
+                : ['registry-ecr-secret'],
             imagePullPolicy: (executionConfig as any)?.imagePullPolicy || 'IfNotPresent',
             codeSource: {
               type: 'MINIO',
               config: {
                 url: `${codeSourceUrl}/${projectId}`,
-                bucketName: 'aieditor'
+                bucketName: 'aieditor',
               },
             },
             stages: stages || [],
@@ -303,7 +304,7 @@ export function usePipelineAdhocRunClient() {
             type: 'MINIO',
             config: {
               url: `home/projects/${Number(currentProjectId)}`, // Hardcoded as per user requirement
-              bucketName: 'aieditor'
+              bucketName: 'aieditor',
             },
           },
           projectId: Number(currentProjectId),

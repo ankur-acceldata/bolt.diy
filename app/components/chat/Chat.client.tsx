@@ -125,6 +125,75 @@ export const ChatImpl = memo(
   ({ description, initialMessages, storeMessageHistory, importChat, exportChat, createNewChatProject }: ChatProps) => {
     useShortcuts();
 
+    // Helper function to sync chat to backend
+    const syncChatToBackend = useCallback(async (currentMessages: Message[], source: string) => {
+      logger.info(`[BACKEND-SYNC] Sync triggered from: ${source}`);
+
+      try {
+        const { chatId: chatIdStore, description: descriptionStore } = await import('~/lib/persistence');
+        const currentChatId = chatIdStore.get();
+        const currentDescription = descriptionStore.get();
+
+        logger.info('[BACKEND-SYNC] Chat state:', {
+          currentChatId,
+          hasDescription: !!currentDescription,
+          messageCount: currentMessages.length,
+          source,
+        });
+
+        if (currentChatId && currentMessages.length > 0) {
+          logger.info('[BACKEND-SYNC] Starting backend sync for chat:', currentChatId);
+
+          const { BackendPersistenceService } = await import('~/lib/services/backendPersistenceService');
+
+          // Sync to backend with current description or AI-generated title
+          const { firstArtifact } = workbenchStore;
+          const finalDescription = currentDescription || firstArtifact?.title || 'Chat Session';
+
+          logger.info('[BACKEND-SYNC] Calling BackendPersistenceService.saveChat with:', {
+            chatId: currentChatId,
+            messageCount: currentMessages.length,
+            description: finalDescription,
+          });
+
+          await BackendPersistenceService.saveChat(
+            currentChatId,
+            currentMessages,
+            finalDescription,
+            undefined, // metadata will be added later if needed
+          );
+
+          logger.info('[BACKEND-SYNC] Successfully synced chat to backend');
+
+          // Update project metadata with AI-generated description if available
+          if (finalDescription && finalDescription !== 'Chat Session') {
+            try {
+              const { ProjectService } = await import('~/lib/services/projectService');
+
+              logger.info('[BACKEND-SYNC] Updating project description:', finalDescription);
+
+              await ProjectService.updateProject(currentChatId, {
+                name: finalDescription,
+                description: finalDescription,
+              });
+
+              logger.info('[BACKEND-SYNC] Project description updated successfully');
+            } catch (descError) {
+              logger.error('[BACKEND-SYNC] Failed to update project description:', descError);
+
+              // Don't throw - description update failure shouldn't break chat
+            }
+          }
+        } else {
+          logger.warn('[BACKEND-SYNC] Skipping backend sync - missing chatId or no messages');
+        }
+      } catch (syncError) {
+        logger.error('[BACKEND-SYNC] Failed to sync chat to backend:', syncError);
+
+        // Don't throw - backend sync failure shouldn't break chat
+      }
+    }, []);
+
     // Initialize sync functionality
     const { currentProjectId, updateSyncChatId } = useSync();
 
@@ -314,10 +383,78 @@ export const ChatImpl = memo(
             logger.error('Failed to trigger snapshot after AI response:', error);
           }
         }
+
+        /*
+         * Sync chat to backend after AI response completes
+         * This is done here (onFinish) instead of in setMessages to avoid
+         * calling the API multiple times during streaming
+         *
+         * Note: We need to get the current messages from the state, not the closure
+         * The 'message' parameter contains the new assistant message
+         */
+
+        /*
+         * Get all messages including the new one from the assistant
+         * The useChat hook should have already updated the messages array
+         * We'll use a small delay to ensure state is updated
+         */
+        setTimeout(async () => {
+          try {
+            const { chatId: chatIdStore } = await import('~/lib/persistence');
+            const currentChatId = chatIdStore.get();
+
+            if (currentChatId && db) {
+              logger.info('[BACKEND-SYNC] Syncing after LLM response completion');
+
+              // Get the latest messages from IndexedDB (includes both user and assistant messages)
+              const { getMessages } = await import('~/lib/persistence/db');
+              const chatData = await getMessages(db, currentChatId);
+
+              if (chatData && chatData.messages && chatData.messages.length > 0) {
+                // Update the ref to track this sync
+                lastSyncedCountRef.current = chatData.messages.length;
+
+                await syncChatToBackend(chatData.messages, 'onFinish-assistant-response');
+              } else {
+                logger.warn('[BACKEND-SYNC] No messages found in IndexedDB for chat:', currentChatId);
+              }
+            }
+          } catch (error) {
+            logger.error('[BACKEND-SYNC] Failed to sync after assistant response:', error);
+          }
+        }, 500); // Wait 500ms for messages to be stored in IndexedDB
       },
       initialMessages,
       initialInput: Cookies.get(PROMPT_COOKIE_KEY) || '',
     });
+
+    // Track the last synced message count to avoid duplicate syncs
+    const lastSyncedCountRef = useRef(0);
+
+    // Sync to backend when user sends a message (immediately, not waiting for LLM response)
+    useEffect(() => {
+      const lastMessage = messages[messages.length - 1];
+
+      /*
+       * Only sync if:
+       * 1. We have messages
+       * 2. Last message is from user
+       * 3. We haven't already synced this message count
+       * 4. DB is ready
+       */
+      if (messages.length > 0 && lastMessage?.role === 'user' && messages.length > lastSyncedCountRef.current && db) {
+        logger.info('[BACKEND-SYNC] User message detected, syncing to backend immediately');
+
+        // Update the ref to prevent duplicate syncs
+        lastSyncedCountRef.current = messages.length;
+
+        // Sync immediately with current messages (don't wait for IndexedDB)
+        syncChatToBackend(messages, 'user-message').catch((error) => {
+          logger.error('[BACKEND-SYNC] Failed to sync user message:', error);
+        });
+      }
+    }, [messages, syncChatToBackend, db]);
+
     useEffect(() => {
       const prompt = searchParams.get('prompt');
 

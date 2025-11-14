@@ -35,7 +35,7 @@ export interface CommunicationBus {
   ): Promise<R>;
 }
 
-export interface ProjectResponse {
+export interface ProjectServiceResponse {
   id: string;
 
   // Add other fields from your project metadata response
@@ -366,7 +366,7 @@ export class ProjectService {
     projectId: string,
     data: Partial<ProjectCreationData> = {},
     bus?: CommunicationBus,
-  ): Promise<ProjectResponse> {
+  ): Promise<ProjectServiceResponse> {
     try {
       logger.info('=== ProjectService.updateProject CALLED ===');
       logger.info('Project ID:', projectId);
@@ -394,13 +394,17 @@ export class ProjectService {
         id: Number(projectId),
         name: data.name || data.description || 'Updated Project', // Use description as name if name not provided
         description: data.description || data.name || 'Updated Project Description',
-        url: projectUrl, // Use the adhoc-run URL pattern
+        url: data.url || projectUrl, // Use provided URL or fallback to adhoc-run URL pattern
         dataplaneId: finalDataplaneId,
-        userSession: {
-          projectId: Number(projectId),
-          session: data.userSession?.session || '', // Empty as requested
-          dataplaneId: data.userSession?.dataplaneId || finalDataplaneId,
-        },
+
+        // Only include userSession if explicitly provided in input data
+        ...(data.userSession && {
+          userSession: {
+            projectId: Number(projectId),
+            session: data.userSession.session || '',
+            dataplaneId: data.userSession.dataplaneId || finalDataplaneId,
+          },
+        }),
         ...data, // Include any additional fields
       };
 
@@ -449,7 +453,7 @@ export class ProjectService {
   /**
    * Get project details by ID
    */
-  static async getProject(projectId: string): Promise<ProjectResponse> {
+  static async getProject(projectId: string): Promise<ProjectServiceResponse> {
     try {
       const response = await fetch(`/api/projects/${projectId}`, {
         method: 'GET',

@@ -74,6 +74,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
         logger.warn(`Provider check returned ${response.status} for ${provider.name}`);
         setIsEnvKeySet(false);
         providerEnvKeyStatusCache[provider.name] = false;
+
         return;
       }
 
@@ -90,6 +91,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
       } else {
         logger.warn('Failed to check environment API key:', error);
       }
+
       setIsEnvKeySet(false);
       providerEnvKeyStatusCache[provider.name] = false;
     }

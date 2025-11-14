@@ -33,40 +33,64 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json({ error: 'Project ID is required', success: false }, { status: 400 });
   }
 
-  if (request.method !== 'PUT') {
-    return json({ error: 'Method not allowed' }, { status: 405 });
-  }
-
-  try {
-    let projectData: any;
-
+  // Handle DELETE request
+  if (request.method === 'DELETE') {
     try {
-      const bodyText = await request.text();
+      const url = new URL(request.url);
+      const deletePipeline = url.searchParams.get('deletePipeline') === 'true';
 
-      if (bodyText && bodyText.trim()) {
-        projectData = JSON.parse(bodyText);
-        logger.info(`Updating project ${id} with data:`, projectData);
-      }
-    } catch (parseError) {
-      logger.warn('Failed to parse request body:', parseError);
-      return json({ error: 'Invalid JSON in request body', success: false }, { status: 400 });
+      logger.info(`Deleting project ${id} (deletePipeline: ${deletePipeline})`);
+
+      const result = await AcceldataService.deleteProject(id, deletePipeline, request);
+
+      return json(result, { status: result.status });
+    } catch (error) {
+      logger.error(`Project ${id} delete error:`, error);
+      return json(
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          success: false,
+        },
+        { status: 500 },
+      );
     }
-
-    if (!projectData) {
-      return json({ error: 'Project data is required', success: false }, { status: 400 });
-    }
-
-    const result = await AcceldataService.updateProject(id, projectData, request);
-
-    return json(result, { status: result.status });
-  } catch (error) {
-    logger.error(`Project ${id} update error:`, error);
-    return json(
-      {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        success: false,
-      },
-      { status: 500 },
-    );
   }
+
+  // Handle PUT request
+  if (request.method === 'PUT') {
+    try {
+      let projectData: any;
+
+      try {
+        const bodyText = await request.text();
+
+        if (bodyText && bodyText.trim()) {
+          projectData = JSON.parse(bodyText);
+          logger.info(`Updating project ${id} with data:`, projectData);
+        }
+      } catch (parseError) {
+        logger.warn('Failed to parse request body:', parseError);
+        return json({ error: 'Invalid JSON in request body', success: false }, { status: 400 });
+      }
+
+      if (!projectData) {
+        return json({ error: 'Project data is required', success: false }, { status: 400 });
+      }
+
+      const result = await AcceldataService.updateProject(id, projectData, request);
+
+      return json(result, { status: result.status });
+    } catch (error) {
+      logger.error(`Project ${id} update error:`, error);
+      return json(
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          success: false,
+        },
+        { status: 500 },
+      );
+    }
+  }
+
+  return json({ error: 'Method not allowed' }, { status: 405 });
 }

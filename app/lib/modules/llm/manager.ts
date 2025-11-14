@@ -128,11 +128,13 @@ export class LLMManager {
             .catch((err) => {
               // Only log non-API-key errors - missing API keys are expected for unconfigured providers
               const errorMessage = typeof err === 'string' ? err : err?.message || String(err);
+
               if (errorMessage.includes('Missing Api Key configuration')) {
                 logger.debug(`Skipping ${provider.name} - no API key configured`);
               } else {
                 logger.error(`Error getting dynamic models ${provider.name} :`, err);
               }
+
               return [];
             });
 
@@ -210,11 +212,13 @@ export class LLMManager {
       .catch((err) => {
         // Only log non-API-key errors - missing API keys are expected for unconfigured providers
         const errorMessage = typeof err === 'string' ? err : err?.message || String(err);
+
         if (errorMessage.includes('Missing Api Key configuration')) {
           logger.debug(`Skipping ${provider.name} - no API key configured`);
         } else {
           logger.error(`Error getting dynamic models ${provider.name} :`, err);
         }
+
         return [];
       });
     const dynamicModelsName = dynamicModels.map((d) => d.name);

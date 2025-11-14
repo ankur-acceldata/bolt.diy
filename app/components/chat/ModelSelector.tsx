@@ -267,7 +267,7 @@ export const ModelSelector = ({
             setModel(firstModel.name);
           }
         }
-      } catch (error) {
+      } catch {
         // Detection failed, but UI already has default provider selected
         logger.debug('Provider detection failed, using default provider');
       } finally {

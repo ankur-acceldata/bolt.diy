@@ -39,14 +39,16 @@ export const loader: LoaderFunction = async ({ context, request }) => {
      * 3. Process environment variables (from .env.local)
      * 4. LLMManager environment variables
      */
-    const foundInCookie = !!(apiKeys?.[provider]);
-    const foundInCloudflare = !!((context?.cloudflare?.env as Record<string, any>)?.[envVarName]);
-    const foundInProcess = !!(process.env[envVarName]);
-    const foundInLLMManager = !!(llmManager.env[envVarName]);
+    const foundInCookie = !!apiKeys?.[provider];
+    const foundInCloudflare = !!(context?.cloudflare?.env as Record<string, any>)?.[envVarName];
+    const foundInProcess = !!process.env[envVarName];
+    const foundInLLMManager = !!llmManager.env[envVarName];
 
     const isSet = foundInCookie || foundInCloudflare || foundInProcess || foundInLLMManager;
 
-    logger.info(`Provider ${provider} check: isSet=${isSet} (cookie=${foundInCookie}, cloudflare=${foundInCloudflare}, process=${foundInProcess}, llmMgr=${foundInLLMManager})`);
+    logger.info(
+      `Provider ${provider} check: isSet=${isSet} (cookie=${foundInCookie}, cloudflare=${foundInCloudflare}, process=${foundInProcess}, llmMgr=${foundInLLMManager})`,
+    );
 
     return Response.json({ isSet });
   } catch (error) {

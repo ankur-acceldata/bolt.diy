@@ -119,6 +119,7 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
     }
 
     set(() => ({ isInitialized: true }));
+
     const finalServerCount = Object.keys(get().settings.mcpConfig?.mcpServers || {}).length;
     const finalToolsCount = Object.keys(get().serverTools || {}).length;
     logger.debug(`🏁 MCP Store: Initialization complete - ${finalServerCount} server(s), ${finalToolsCount} tool(s)`);
