@@ -37,11 +37,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (request.method === 'DELETE') {
     try {
       const url = new URL(request.url);
-      const deletePipeline = url.searchParams.get('deletePipeline') === 'true';
+      const deletePipelines = url.searchParams.get('deletePipelines') === 'true';
 
-      logger.info(`Deleting project ${id} (deletePipeline: ${deletePipeline})`);
+      logger.info(`Deleting project ${id} (deletePipelines: ${deletePipelines})`);
 
-      const result = await AcceldataService.deleteProject(id, deletePipeline, request);
+      const result = await AcceldataService.deleteProject(id, deletePipelines, request);
 
       return json(result, { status: result.status });
     } catch (error) {

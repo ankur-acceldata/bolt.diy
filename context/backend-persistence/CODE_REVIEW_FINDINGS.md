@@ -129,11 +129,11 @@ const url = existingSessionId
 
 ---
 
-### 4. Project Deletion with Pipeline Option
+### 4. Project Deletion with Pipelines Option
 
 **Status**: ✅ NEW FEATURE
 
-**Change**: Added DELETE endpoint with optional `deletePipeline` query parameter
+**Change**: Added DELETE endpoint with optional `deletePipelines` query parameter
 
 **Files**:
 - `app/routes/api.projects.$id.ts` (DELETE handler added)
@@ -143,13 +143,15 @@ const url = existingSessionId
 **Implementation**:
 ```typescript
 // API
-DELETE /api/projects/{id}?deletePipeline=true
+DELETE /api/projects/{id}?deletePipelines=true
 
 // Service
-static async deleteProject(projectId: string, deletePipeline: boolean = false)
+static async deleteProject(projectId: string, deletePipelines: boolean = false)
 ```
 
 **Impact**: Users can now choose whether to delete associated pipelines
+
+**Note**: Parameter uses plural `deletePipelines` to match backend API expectations
 
 ---
 
@@ -365,10 +367,16 @@ static async deleteProject(projectId: string, deletePipeline: boolean = false)
 - Renamed `ProjectResponse` in `projectService.ts` to `ProjectServiceResponse` to avoid conflicts
 - Updated `ProjectData.id` and `ProjectResponse.id` to support both `number | string` types
 - Fixed return type in `backendPersistenceService.ts` to ensure `string` is always returned
+- **Parameter naming**: Uses `deletePipelines` (plural) throughout for consistency with backend API
+
+### Files Updated for deletePipelines Parameter
+1. `app/lib/services/acceldataService.ts` - Method signature and query parameter
+2. `app/routes/api.projects.$id.ts` - Query parameter parsing
+3. `app/components/sidebar/Menu.client.tsx` - TypeScript types and all references
 
 ---
 
 **Last Updated**: 2025-11-14  
 **Reviewed By**: AI Assistant  
-**Status**: ✅ All Type Safety Fixes Complete & Verified
+**Status**: ✅ All Type Safety Fixes Complete & Verified | ✅ deletePipelines Parameter Applied
 

@@ -522,17 +522,17 @@ export class AcceldataService {
   /**
    * Delete a project by ID
    * @param projectId - The project ID to delete
-   * @param deletePipeline - Whether to also delete the associated pipeline
+   * @param deletePipelines - Whether to also delete the associated pipelines
    * @param request - Optional request object for headers
    */
   static async deleteProject(
     projectId: string | number,
-    deletePipeline: boolean = false,
+    deletePipelines: boolean = false,
     request?: Request,
   ): Promise<AcceldataApiResponse> {
-    logger.info(`Deleting project ${projectId} (deletePipeline: ${deletePipeline})`);
+    logger.info(`Deleting project ${projectId} (deletePipelines: ${deletePipelines})`);
 
-    const endpoint = `/api/projects/${projectId}${deletePipeline ? '?deletePipeline=true' : ''}`;
+    const endpoint = `/api/projects/${projectId}${deletePipelines ? '?deletePipelines=true' : ''}`;
 
     const result = await this.call(endpoint, {
       method: 'DELETE',
@@ -541,7 +541,7 @@ export class AcceldataService {
     });
 
     if (result.success) {
-      result.message = `Project ${projectId} deleted successfully${deletePipeline ? ' (including pipeline)' : ''}`;
+      result.message = `Project ${projectId} deleted successfully${deletePipelines ? ' (including pipelines)' : ''}`;
     }
 
     return result;

@@ -58,8 +58,8 @@ const menuVariants = {
 } satisfies Variants;
 
 type DialogContent =
-  | { type: 'delete'; item: ChatHistoryItem; deletePipeline?: boolean }
-  | { type: 'bulkDelete'; items: ChatHistoryItem[]; deletePipeline?: boolean }
+  | { type: 'delete'; item: ChatHistoryItem; deletePipelines?: boolean }
+  | { type: 'bulkDelete'; items: ChatHistoryItem[]; deletePipelines?: boolean }
   | null;
 
 /*
@@ -245,16 +245,16 @@ export const Menu = () => {
   }, [db]);
 
   const deleteChat = useCallback(
-    async (id: string, deletePipeline: boolean = false): Promise<void> => {
+    async (id: string, deletePipelines: boolean = false): Promise<void> => {
       if (!db) {
         throw new Error('Database not available');
       }
 
       // Delete from backend API first
       try {
-        logger.info(`Deleting project ${id} from backend (deletePipeline: ${deletePipeline})`);
+        logger.info(`Deleting project ${id} from backend (deletePipelines: ${deletePipelines})`);
 
-        const response = await fetch(`/api/projects/${id}?deletePipeline=${deletePipeline}`, {
+        const response = await fetch(`/api/projects/${id}?deletePipelines=${deletePipelines}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
@@ -291,7 +291,7 @@ export const Menu = () => {
   );
 
   const deleteItem = useCallback(
-    (event: React.UIEvent, item: ChatHistoryItem, deletePipeline: boolean = false) => {
+    (event: React.UIEvent, item: ChatHistoryItem, deletePipelines: boolean = false) => {
       event.preventDefault();
       event.stopPropagation();
 
@@ -299,12 +299,12 @@ export const Menu = () => {
       logger.debug('Attempting to delete chat:', {
         id: item.id,
         description: item.description,
-        deletePipeline,
+        deletePipelines,
       });
 
-      deleteChat(item.id, deletePipeline)
+      deleteChat(item.id, deletePipelines)
         .then(async () => {
-          toast.success(`Chat deleted successfully${deletePipeline ? ' (including pipeline)' : ''}`, {
+          toast.success(`Chat deleted successfully${deletePipelines ? ' (including pipelines)' : ''}`, {
             position: 'bottom-right',
             autoClose: 3000,
           });
@@ -702,11 +702,11 @@ export const Menu = () => {
                         <p className="mt-2">Are you sure you want to delete this chat?</p>
                         <div className="mt-4 flex items-start gap-3 p-3 bg-bolt-elements-bg-depth-2 rounded-lg border border-bolt-elements-borderColor">
                           <Checkbox
-                            checked={dialogContent.deletePipeline || false}
+                            checked={dialogContent.deletePipelines || false}
                             onCheckedChange={(checked) => {
                               setDialogContentWithLogging({
                                 ...dialogContent,
-                                deletePipeline: checked === true,
+                                deletePipelines: checked === true,
                               });
                             }}
                           />
@@ -729,7 +729,7 @@ export const Menu = () => {
                         type="danger"
                         onClick={(event) => {
                           logger.debug('Dialog delete button clicked for item:', dialogContent.item);
-                          deleteItem(event, dialogContent.item, dialogContent.deletePipeline || false);
+                          deleteItem(event, dialogContent.item, dialogContent.deletePipelines || false);
                           closeDialog();
                         }}
                       >
