@@ -59,7 +59,8 @@ ENV WRANGLER_SEND_METRICS=false \
     BASE_PATH=${BASE_PATH} \
     HOST=${HOST} \
     PORT=${PORT} \
-    RUNNING_IN_DOCKER=true
+    RUNNING_IN_DOCKER=true \
+    HMR_ENABLED=false
 
 # Pre-configure wrangler to disable metrics
 RUN mkdir -p /root/.config/.wrangler && \
