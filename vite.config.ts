@@ -80,6 +80,9 @@ export default defineConfig((config) => {
   const PORT = Number(env.PORT || 5173);
   const LISTEN_HOST = HOST ? `local.${HOST}` : undefined;
 
+  // Check if HMR should be disabled
+  const HMR_ENABLED = env.HMR_ENABLED !== 'false' && env.VITE_HMR_ENABLED !== 'false';
+
   // Get base path from environment variable with /ai-editor as default
   const BASE_PATH = env.BASE_PATH || env.VITE_BASE_PATH || '/ai-editor';
   const BASE_URL = BASE_PATH ? (BASE_PATH.endsWith('/') ? BASE_PATH : `${BASE_PATH}/`) : '/';
@@ -133,8 +136,8 @@ export default defineConfig((config) => {
         https: httpsConfig,
         strictPort: true,
 
-        // Make HMR work when using custom host
-        hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
+        // Make HMR work when using custom host, or disable if HMR_ENABLED is false
+        hmr: HMR_ENABLED ? (LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined) : false,
         proxy: (() => {
           const proxyConfig: Record<string, any> = {};
 
@@ -295,8 +298,8 @@ export default defineConfig((config) => {
       https: httpsConfig,
       strictPort: true,
 
-      // Make HMR work when using custom host
-      hmr: LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined,
+      // Make HMR work when using custom host, or disable if HMR_ENABLED is false
+      hmr: HMR_ENABLED ? (LISTEN_HOST ? { host: LISTEN_HOST, port: PORT } : undefined) : false,
       proxy: (() => {
         const proxyConfig: Record<string, any> = {};
 
