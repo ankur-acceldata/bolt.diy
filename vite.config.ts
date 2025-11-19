@@ -80,8 +80,8 @@ export default defineConfig((config) => {
   const PORT = Number(env.PORT || 5173);
   const LISTEN_HOST = HOST ? `local.${HOST}` : undefined;
 
-  // Check if HMR should be disabled
-  const HMR_ENABLED = env.HMR_ENABLED !== 'false' && env.VITE_HMR_ENABLED !== 'false';
+  // HMR is disabled by default, only enabled when explicitly set to 'true' in env
+  const HMR_ENABLED = env.HMR_ENABLED === 'true' || env.VITE_HMR_ENABLED === 'true';
 
   // Get base path from environment variable with /ai-editor as default
   const BASE_PATH = env.BASE_PATH || env.VITE_BASE_PATH || '/ai-editor';
@@ -252,6 +252,9 @@ export default defineConfig((config) => {
             v3_lazyRouteDiscovery: true,
           },
         }),
+
+        // Disable Vite client injection when HMR is disabled
+        !HMR_ENABLED && disableViteClientPlugin(),
         UnoCSS(),
         tsconfigPaths(),
         chrome129IssuePlugin(),
@@ -408,6 +411,9 @@ export default defineConfig((config) => {
           v3_lazyRouteDiscovery: true,
         },
       }),
+
+      // Disable Vite client injection when HMR is disabled
+      !HMR_ENABLED && disableViteClientPlugin(),
       UnoCSS(),
       tsconfigPaths(),
       chrome129IssuePlugin(),
@@ -500,6 +506,29 @@ function chrome129IssuePlugin() {
 
             return;
           }
+        }
+
+        next();
+      });
+    },
+  };
+}
+
+function disableViteClientPlugin() {
+  return {
+    name: 'disable-vite-client-plugin',
+    transformIndexHtml(html: string) {
+      // Remove Vite client script injection when HMR is disabled
+      return html.replace(/<script[^>]*type="module"[^>]*src="[^"]*@vite\/client[^"]*"[^>]*><\/script>/gi, '');
+    },
+    configureServer(server: ViteDevServer) {
+      // Intercept requests to @vite/client and return empty response
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.includes('@vite/client')) {
+          res.writeHead(200, { 'Content-Type': 'application/javascript' });
+          res.end('// Vite client disabled');
+
+          return;
         }
 
         next();

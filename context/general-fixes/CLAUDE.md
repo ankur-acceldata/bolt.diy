@@ -171,10 +171,10 @@ The application supports deployment at custom base paths:
 
 ### HMR Control
 
-Hot Module Replacement can be disabled:
-- Set `HMR_ENABLED=false` or `VITE_HMR_ENABLED=false`
-- Use `pnpm run dev:no-hmr` command
-- Useful for testing production-like behavior
+Hot Module Replacement is **disabled by default**:
+- HMR is disabled by default for stability in cluster deployments
+- To enable HMR for local development, set `HMR_ENABLED=true` or `VITE_HMR_ENABLED=true` in your `.env.local`
+- Useful for local development when you want hot reloading
 
 ### HTTPS Support
 
