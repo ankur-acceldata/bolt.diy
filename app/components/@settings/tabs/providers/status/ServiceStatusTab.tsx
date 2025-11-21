@@ -137,7 +137,7 @@ const PROVIDER_STATUS_URLS: Record<ProviderName, ProviderConfig> = {
     statusUrl: 'https://health.aws.amazon.com/health/status',
     apiUrl: 'https://bedrock.us-east-1.amazonaws.com/models',
     headers: {
-      Authorization: 'Bearer $AWS_BEDROCK_CONFIG',
+      Authorization: 'Bearer $AMAZON_BEDROCK_API_KEY',
     },
     testModel: 'anthropic.claude-3-sonnet-20240229-v1:0',
   },
@@ -218,7 +218,7 @@ const ServiceStatusTab = () => {
         Mistral: 'MISTRAL_API_KEY',
         Perplexity: 'PERPLEXITY_API_KEY',
         Together: 'TOGETHER_API_KEY',
-        AmazonBedrock: 'AWS_BEDROCK_CONFIG',
+        AmazonBedrock: 'AMAZON_BEDROCK_API_KEY',
         Groq: 'GROQ_API_KEY',
         OpenRouter: 'OPEN_ROUTER_API_KEY',
         XAI: 'XAI_API_KEY',

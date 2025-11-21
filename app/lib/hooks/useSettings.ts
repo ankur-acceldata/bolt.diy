@@ -126,11 +126,39 @@ export function useSettings(): UseSettingsReturn {
   });
 
   useEffect(() => {
-    const active = Object.entries(providers)
-      .filter(([_key, provider]) => provider.settings.enabled)
-      .map(([_k, p]) => p);
+    // Fetch configured providers from the API to only show providers with API keys
+    const fetchConfiguredProviders = async () => {
+      try {
+        const response = await fetch('/api/detect-configured-providers', { cache: 'no-cache' });
 
-    setActiveProviders(active);
+        if (!response.ok) {
+          // Fallback to showing all enabled providers if detection fails
+          const active = Object.entries(providers)
+            .filter(([_key, provider]) => provider.settings.enabled)
+            .map(([_k, p]) => p);
+          setActiveProviders(active);
+
+          return;
+        }
+
+        const data = (await response.json()) as { configuredProviders: string[]; count: number };
+
+        // Only show providers that are both enabled AND have API keys configured
+        const active = Object.entries(providers)
+          .filter(([key, provider]) => provider.settings.enabled && data.configuredProviders.includes(key))
+          .map(([_k, p]) => p);
+
+        setActiveProviders(active);
+      } catch {
+        // Fallback to showing all enabled providers if detection fails
+        const active = Object.entries(providers)
+          .filter(([_key, provider]) => provider.settings.enabled)
+          .map(([_k, p]) => p);
+        setActiveProviders(active);
+      }
+    };
+
+    fetchConfiguredProviders();
   }, [providers]);
 
   const saveSettings = useCallback((newSettings: Partial<Settings>) => {

@@ -10,6 +10,7 @@
 
 import AnthropicProvider from './providers/anthropic';
 import GoogleProvider from './providers/google';
+import AmazonBedrockProvider from './providers/amazon-bedrock';
 
 /*
  * Commented out unused providers - uncomment to re-enable
@@ -27,13 +28,13 @@ import GoogleProvider from './providers/google';
  * import TogetherProvider from './providers/together';
  * import XAIProvider from './providers/xai';
  * import HyperbolicProvider from './providers/hyperbolic';
- * import AmazonBedrockProvider from './providers/amazon-bedrock';
  * import GithubProvider from './providers/github';
  */
 
 export {
   AnthropicProvider,
   GoogleProvider,
+  AmazonBedrockProvider,
 
   /*
    * Commented out unused providers - uncomment to re-enable
@@ -51,7 +52,6 @@ export {
    * XAIProvider,
    * TogetherProvider,
    * LMStudioProvider,
-   * AmazonBedrockProvider,
    * GithubProvider,
    */
 };
