@@ -165,6 +165,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const postMessageServiceRef = useRef<PostMessageService | null>(null);
     const modelsFetchedRef = useRef(false);
+    const fetchedProvidersRef = useRef<Set<string>>(new Set());
     const lastResponseBroadcastRef = useRef<{
       state: 'idle' | 'in-progress' | 'generated' | 'error';
       message?: string;
@@ -504,6 +505,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       // Only update models for the specific provider
       setModelList((prevModels) => {
         const otherModels = prevModels.filter((model) => model.provider !== providerName);
+
         return [...otherModels, ...providerModels];
       });
 
@@ -517,6 +519,79 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
       setIsModelLoading(undefined);
     };
+
+    // Fetch models when provider changes
+    useEffect(() => {
+      if (!provider) {
+        return;
+      }
+
+      // Check if we already have models for this provider in the list
+      const hasModelsForProvider = modelList.some((m) => m.provider === provider.name);
+
+      // Check if we've already fetched (or are fetching) for this provider
+      const alreadyFetched = fetchedProvidersRef.current.has(provider.name);
+
+      if (!hasModelsForProvider && !alreadyFetched) {
+        logger.info(`Provider changed to ${provider.name}, fetching models...`);
+
+        // Mark as fetching to prevent duplicate requests
+        fetchedProvidersRef.current.add(provider.name);
+
+        const fetchModels = async () => {
+          setIsModelLoading(provider.name);
+
+          let providerModels: ModelInfo[] = [];
+
+          try {
+            const response = await fetch(`/api/models/${encodeURIComponent(provider.name)}`);
+            const data = await response.json();
+            providerModels = (data as { modelList: ModelInfo[] }).modelList;
+            logger.info(`✅ Fetched ${providerModels.length} models for ${provider.name}`);
+          } catch (error) {
+            logger.error('❌ Error loading dynamic models for:', provider.name, error);
+
+            // Remove from fetched set on error so we can retry
+            fetchedProvidersRef.current.delete(provider.name);
+          }
+
+          // Only update models for the specific provider
+          setModelList((prevModels) => {
+            const otherModels = prevModels.filter((model) => model.provider !== provider.name);
+
+            return [...otherModels, ...providerModels];
+          });
+
+          // Auto-select the first (latest) model
+          if (providerModels.length > 0 && setModel) {
+            const latestModel = providerModels[0];
+            setModel(latestModel.name);
+            Cookies.set('selectedModel', latestModel.name, { expires: 30 });
+            logger.info(`Auto-selected latest model: ${latestModel.name} for provider: ${provider.name}`);
+          }
+
+          setIsModelLoading(undefined);
+        };
+
+        fetchModels();
+      } else if (hasModelsForProvider) {
+        // We have models, but make sure correct one is selected
+        const providerModels = modelList.filter((m) => m.provider === provider.name);
+
+        if (providerModels.length > 0 && setModel) {
+          // Check if current model belongs to current provider
+          const currentModelValid = providerModels.some((m) => m.name === model);
+
+          if (!currentModelValid) {
+            // Select first model for this provider
+            const firstModel = providerModels[0];
+            setModel(firstModel.name);
+            Cookies.set('selectedModel', firstModel.name, { expires: 30 });
+            logger.info(`Switched to first model of ${provider.name}: ${firstModel.name}`);
+          }
+        }
+      }
+    }, [provider?.name]); // Only depend on provider name
 
     const startListening = () => {
       if (recognition) {

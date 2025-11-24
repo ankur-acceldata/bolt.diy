@@ -181,15 +181,8 @@ export const ModelSelector = ({
           const selectedProvider = filteredProviders[focusedProviderIndex];
 
           if (setProvider) {
+            // Just set the provider - model selection will be handled by useEffect in BaseChat
             setProvider(selectedProvider);
-
-            // Get all models for this provider and pick the first one (should be latest due to our sorting)
-            const providerModels = modelList.filter((m) => m.provider === selectedProvider.name);
-            const firstModel = providerModels[0]; // First model should be the latest due to our custom sorting
-
-            if (firstModel && setModel) {
-              setModel(firstModel.name);
-            }
           }
 
           setIsProviderDropdownOpen(false);
@@ -242,7 +235,10 @@ export const ModelSelector = ({
     }
   }, [providerList, modelList, provider, setProvider, setModel]);
 
-  // Detect configured provider in background (non-blocking)
+  /*
+   * Detect configured provider in background (non-blocking)
+   * CRITICAL: This should ONLY run once on initial mount, not on every change
+   */
   useEffect(() => {
     if (providerList.length === 0 || hasDetectedProvider) {
       return;
@@ -256,20 +252,25 @@ export const ModelSelector = ({
           // Lock the provider dropdown if only one provider is configured
           setIsProviderLocked(!hasMultipleProviders);
 
-          // Update to detected provider (will override the default selection)
-          setProvider?.(detectedProvider);
+          /*
+           * ONLY set provider if no provider is currently selected
+           * This prevents overriding user's manual selection
+           */
+          if (!provider) {
+            setProvider?.(detectedProvider);
 
-          // Get all models for this provider and pick the first one
-          const providerModels = modelList.filter((m) => m.provider === detectedProvider.name);
-          const firstModel = providerModels[0];
+            // Get all models for this provider and pick the first one
+            const providerModels = modelList.filter((m) => m.provider === detectedProvider.name);
+            const firstModel = providerModels[0];
 
-          if (firstModel && setModel) {
-            setModel(firstModel.name);
+            if (firstModel && setModel) {
+              setModel(firstModel.name);
+            }
           }
         }
-      } catch {
+      } catch (error) {
         // Detection failed, but UI already has default provider selected
-        logger.debug('Provider detection failed, using default provider');
+        logger.warn('Provider detection failed:', error);
       } finally {
         setHasDetectedProvider(true);
       }
@@ -277,7 +278,7 @@ export const ModelSelector = ({
 
     // Run detection in background without blocking
     detectProvider();
-  }, [providerList, modelList, setProvider, setModel, hasDetectedProvider]);
+  }, [providerList, hasDetectedProvider]); // REMOVED modelList, setProvider, setModel from deps to prevent re-runs
 
   useEffect(() => {
     if (providerList.length === 0) {
@@ -310,9 +311,13 @@ export const ModelSelector = ({
   }
 
   return (
-    <div className="flex gap-2 flex-col sm:flex-row mb-2 max-w-[600px]">
+    <div className="flex gap-2 flex-col sm:flex-row mb-2 w-full">
       {/* Provider Combobox */}
-      <div className="relative flex w-full" onKeyDown={handleProviderKeyDown} ref={providerDropdownRef}>
+      <div
+        className="relative flex w-full sm:w-[170px] sm:flex-shrink-0"
+        onKeyDown={handleProviderKeyDown}
+        ref={providerDropdownRef}
+      >
         <div
           className={classNames(
             'w-full p-2 rounded-lg border border-bolt-elements-borderColor',
@@ -427,15 +432,8 @@ export const ModelSelector = ({
                       e.stopPropagation();
 
                       if (setProvider) {
+                        // Just set the provider - model selection will be handled by useEffect in BaseChat
                         setProvider(providerOption);
-
-                        // Get all models for this provider and pick the first one (should be latest due to our sorting)
-                        const providerModels = modelList.filter((m) => m.provider === providerOption.name);
-                        const firstModel = providerModels[0]; // First model should be the latest due to our custom sorting
-
-                        if (firstModel && setModel) {
-                          setModel(firstModel.name);
-                        }
                       }
 
                       setIsProviderDropdownOpen(false);
@@ -453,7 +451,7 @@ export const ModelSelector = ({
       </div>
 
       {/* Model Combobox */}
-      <div className="relative flex w-full min-w-[70%]" onKeyDown={handleModelKeyDown} ref={modelDropdownRef}>
+      <div className="relative flex w-full sm:flex-1" onKeyDown={handleModelKeyDown} ref={modelDropdownRef}>
         <div
           className={classNames(
             'w-full p-2 rounded-lg border border-bolt-elements-borderColor',

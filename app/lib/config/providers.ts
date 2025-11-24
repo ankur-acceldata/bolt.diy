@@ -18,15 +18,16 @@ export interface ModelFilter {
 }
 
 /**
- * Current configuration: Both Google and Anthropic show up to 5 models (latest versions)
+ * Current configuration: Google, Anthropic, and AmazonBedrock show up to 5 models (latest versions)
  * For Google: Shows the latest 5 model variants (prioritizing newer versions and capabilities)
  * For Anthropic: Shows the latest 5 model variants (prioritizing newer versions and capabilities)
  * For Anthropic: Ensures the latest 2 Sonnet models are always included
+ * For AmazonBedrock: Shows all configured models (static models from provider)
  * Excludes image generation, TTS, and other non-text models for both providers
  * Uses dynamic version priority calculation to automatically handle new model versions
  */
 export const PROVIDER_FILTER_CONFIG: ProviderFilterConfig = {
-  enabledProviders: ['Google', 'Anthropic'],
+  enabledProviders: ['Google', 'Anthropic', 'AmazonBedrock'],
   maxModelsPerProvider: 5,
   providerModelLimits: {
     Google: {
@@ -53,6 +54,10 @@ export const PROVIDER_FILTER_CONFIG: ProviderFilterConfig = {
         'claude-1',
         'claude-2.0', // Keep claude-2.1 as it might still be useful
       ],
+    },
+    AmazonBedrock: {
+      maxModels: 10, // Show all configured Bedrock models
+      excludeModels: [],
     },
   },
 };
